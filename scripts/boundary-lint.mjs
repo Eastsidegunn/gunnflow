@@ -36,7 +36,10 @@ const readNames = (file) => {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch (err) {
-    console.error(`boundary-lint: cannot read the names data file ${file} (${err instanceof Error ? err.message : String(err)})`);
+    // Never print a raw absolute path with a username.
+    const shown = file.startsWith(GUNNFLOW_HOME) ? `$GUNNFLOW_HOME${file.slice(GUNNFLOW_HOME.length)}`
+      : file.startsWith(homedir()) ? `~${file.slice(homedir().length)}` : file;
+    console.error(`boundary-lint: cannot read the names data file ${shown} (${err instanceof Error ? err.message : String(err)})`);
     process.exit(2);
   }
 };

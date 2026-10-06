@@ -111,7 +111,7 @@ for (const [name, impl] of [
       expect(impl.loadConfigFile(join(home, 'missing.json'))).toEqual({});
     });
 
-    it('display paths: $GUNNFLOW_HOME/… for a custom home, ./… in the repo, ~/… in the OS home, most specific first', () => {
+    it('display paths: $GUNNFLOW_HOME/… for a custom home, ./… in the repo, ~/… in the OS home, most specific first, …/<file> elsewhere', () => {
       const custom = join(sandbox, 'custom-home');
       const shown = (p: string, env: Record<string, string> = {}) => impl.displayPath(p, { repoRoot: repo, env, userHome });
       expect(shown(join(custom, 'config.json'), { GUNNFLOW_HOME: custom })).toBe(`$GUNNFLOW_HOME${sep}config.json`);
@@ -119,7 +119,9 @@ for (const [name, impl] of [
       expect(shown(join(userHome, 'gf', 'wiring'), { GUNNFLOW_HOME: '~/gf' })).toBe(`$GUNNFLOW_HOME${sep}wiring`);
       expect(shown(join(home, 'config.json'))).toBe(join('~', '.gunnflow', 'config.json'));
       expect(shown(join(repo, 'gunnflow.config.json'))).toBe(`.${sep}gunnflow.config.json`);
-      expect(shown('/srv/gf/config.json')).toBe('/srv/gf/config.json');
+      // Outside every known base: file name only, so no username can leak.
+      expect(shown('/srv/gf/config.json')).toBe(`…${sep}config.json`);
+      expect(shown('relative/config.json')).toBe('relative/config.json');
     });
   });
 }

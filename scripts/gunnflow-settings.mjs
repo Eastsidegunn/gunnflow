@@ -11,7 +11,7 @@
 //     boundary-names.local.json   extra names for pnpm boundary-lint
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /** The upstream choices the BFF can compose. */
 export const UPSTREAM_CHOICES = Object.freeze(['fake', 'direct']);
@@ -129,7 +129,8 @@ export function loadConfigFile(path, { required = false, shown = path } = {}) {
 /**
  * A path for logs and errors, never a raw absolute path with a username: under
  * a custom GUNNFLOW_HOME as `$GUNNFLOW_HOME/…`, under the repo as `./…`, under
- * the OS home as `~/…` (the most specific base wins); anything else as given.
+ * the OS home as `~/…` (the most specific base wins); any other absolute path
+ * as `…/<file name>`.
  */
 export function displayPath(path, { repoRoot, env = process.env, userHome = homedir() }) {
   const bases = [
@@ -142,7 +143,8 @@ export function displayPath(path, { repoRoot, env = process.env, userHome = home
     if (rel === '') return label;
     if (!rel.startsWith('..') && !isAbsolute(rel)) return `${label}${sep}${rel}`;
   }
-  return path;
+  // Outside every known base: the file name only, so no username can leak.
+  return isAbsolute(path) ? `…${sep}${basename(path)}` : path;
 }
 
 /**

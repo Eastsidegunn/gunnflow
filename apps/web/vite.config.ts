@@ -14,10 +14,12 @@ import { loadUserConfig } from '../../scripts/gunnflow-settings.mjs';
  */
 function configuredPreviewOrigin(): string | undefined {
   const fromEnv = process.env.VITE_PREVIEW_ORIGIN ?? process.env.GUNNFLOW_PREVIEW_ORIGIN;
-  if (fromEnv) return fromEnv;
-  if (process.env.VITEST) return undefined;
+  if (process.env.VITEST) return fromEnv;
+  // Validate the config file even when an env var supplies the value: an invalid
+  // file must stop the dev server or build, never be bypassed.
   const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-  return loadUserConfig({ repoRoot }).config.previewOrigin;
+  const fromFile = loadUserConfig({ repoRoot }).config.previewOrigin;
+  return fromEnv ?? fromFile;
 }
 const previewOrigin = configuredPreviewOrigin();
 
