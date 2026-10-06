@@ -4,8 +4,8 @@ Gunnflow is alpha software. There are no supported releases yet; security fixes 
 
 ## Reporting a vulnerability
 
-Please **do not open a public issue.** Once the repository is published, open a private security
-advisory on the repository ("Report a vulnerability" under the Security tab). Include steps to
+Please **do not open a public issue.** Report it privately: open a
+security advisory on the repository ("Report a vulnerability" under the Security tab). Include steps to
 reproduce, the affected component (web, BFF, preview origin, contract) and the impact you see.
 
 ## Design invariants (what is in scope)
