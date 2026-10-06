@@ -1,16 +1,19 @@
 /**
- * Machine-local person preferences (`~/.gunnflow/prefs.json`): ergonomics of
+ * Machine-local person preferences (`$GUNNFLOW_HOME/prefs.json`, default `~/.gunnflow/prefs.json`): ergonomics of
  * THIS person on THIS machine (zoom feel, default lens, density). Not wiring
  * config (no workspace vocabulary), not personal notes (no content) — and,
  * like both, never sent upstream. The BFF carries the JSON as-is; what the
  * fields mean is the web's business.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { gunnflowHome } from './home.js';
 
 export const PREFS_MAX_BYTES = 64 * 1024;
-export const DEFAULT_PREFS_FILE = join(homedir(), '.gunnflow', 'prefs.json');
+/** The default prefs file: `$GUNNFLOW_HOME/prefs.json` (`~/.gunnflow/prefs.json`). */
+export function defaultPrefsFile(home: string = gunnflowHome()): string {
+  return join(home, 'prefs.json');
+}
 
 export type PrefsRead = { ok: true; prefs: unknown | null } | { ok: false; reason: string };
 

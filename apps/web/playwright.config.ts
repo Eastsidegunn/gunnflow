@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
@@ -10,6 +11,14 @@ export const E2E_PERSONAL_DIR = join(tmpdir(), 'gunnflow-e2e-personal');
  * default (the settings scenario writes 90-user.json there and removes it again).
  */
 export const E2E_WIRING_DIR = join(tmpdir(), 'gunnflow-e2e-wiring');
+
+/**
+ * The Gunnflow home during e2e: a temporary directory, never the person's ~/.gunnflow — so a
+ * developer's own config.json, wiring/ and prefs.json there cannot leak into (or be written by) the
+ * suite. Created empty here; the BFF creates files inside it as scenarios need.
+ */
+export const E2E_HOME = join(tmpdir(), 'gunnflow-e2e-home');
+mkdirSync(E2E_HOME, { recursive: true });
 
 export default defineConfig({
   testDir: 'e2e',
@@ -29,13 +38,19 @@ export default defineConfig({
       reuseExistingServer: false,
       cwd: '../..',
       // Scenarios assert the built-in default wiring: the repo's wiring/ files stay out of e2e.
-      env: { GUNNFLOW_UPSTREAM: 'fake', GUNNFLOW_WIRING_DIR: E2E_WIRING_DIR, GUNNFLOW_PERSONAL_DIR: E2E_PERSONAL_DIR },
+      env: {
+        GUNNFLOW_HOME: E2E_HOME,
+        GUNNFLOW_UPSTREAM: 'fake',
+        GUNNFLOW_WIRING_DIR: E2E_WIRING_DIR,
+        GUNNFLOW_PERSONAL_DIR: E2E_PERSONAL_DIR,
+      },
     },
     {
       command: 'pnpm --filter @gunnflow/web dev',
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: !process.env.CI,
       cwd: '../..',
+      env: { GUNNFLOW_HOME: E2E_HOME },
     },
     // The direct path: the simulator's direct-wire reference server (:8791), a BFF
     // on `direct` (:8797, preview :8798) and a web instance proxying to it (:5174).
@@ -48,6 +63,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       cwd: '../..',
       env: {
+        GUNNFLOW_HOME: E2E_HOME,
         GUNNFLOW_UPSTREAM: 'direct',
         GUNNFLOW_UPSTREAM_URL: 'http://127.0.0.1:8791',
         GUNNFLOW_BFF_PORT: '8797',
@@ -62,7 +78,7 @@ export default defineConfig({
       url: 'http://127.0.0.1:5174',
       reuseExistingServer: !process.env.CI,
       cwd: '../..',
-      env: { GUNNFLOW_WEB_PORT: '5174', GUNNFLOW_BFF_PORT: '8797', VITE_PREVIEW_ORIGIN: 'http://127.0.0.1:8798' },
+      env: { GUNNFLOW_HOME: E2E_HOME, GUNNFLOW_WEB_PORT: '5174', GUNNFLOW_BFF_PORT: '8797', VITE_PREVIEW_ORIGIN: 'http://127.0.0.1:8798' },
     },
   ],
 });

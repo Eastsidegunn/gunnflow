@@ -5,8 +5,8 @@ Gunnflow is alpha software built in public. Issues and small pull requests are w
 ## Setup
 
 - Node.js 22+, pnpm 10 (`corepack enable` picks the version pinned in `package.json`).
-- `pnpm install`, then `pnpm dev` (web :5173, BFF :8787, isolated preview :8788). With no
-  `gunnflow.config.json`, the BFF runs the in-repo simulator.
+- `pnpm install`, then `pnpm dev` (web :5173, BFF :8787, isolated preview :8788). With no config
+  file (`~/.gunnflow/config.json` or `gunnflow.config.json`), the BFF runs the in-repo simulator.
 
 ## Before opening a pull request
 

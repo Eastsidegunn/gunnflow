@@ -12,7 +12,10 @@ interface BuiltinUpstream {
   createUpstream: UpstreamFactory;
 }
 
-export const UPSTREAM_CHOICES = ['fake', 'direct'] as const;
+import { UPSTREAM_CHOICES } from '../../../scripts/gunnflow-settings.mjs';
+
+// One list, shared with config validation.
+export { UPSTREAM_CHOICES };
 export type UpstreamChoice = (typeof UPSTREAM_CHOICES)[number];
 /** The simulator's package, reachable only through the `fake` choice. */
 export const SIMULATOR_MODULE = '@gunnflow-testing/fake-contracts';

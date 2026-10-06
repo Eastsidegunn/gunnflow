@@ -5,11 +5,14 @@
  * module has no path to the upstream port, and the upstream has none to it.
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { gunnflowHome } from './home.js';
 
 export const PERSONAL_MAX_BYTES = 1024 * 1024;
-export const DEFAULT_PERSONAL_DIR = join(homedir(), '.gunnflow', 'personal');
+/** The default personal-layer directory: `$GUNNFLOW_HOME/personal` (`~/.gunnflow/personal`). */
+export function defaultPersonalDir(home: string = gunnflowHome()): string {
+  return join(home, 'personal');
+}
 
 /** A file-name-safe workspace key from the upstream label (`fake`, `direct → http://host:port`). */
 export function workspaceKey(label: string): string {
