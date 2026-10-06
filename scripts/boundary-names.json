@@ -1,5 +1,5 @@
 {
-  "$comment": "Data for scripts/boundary-lint.mjs: backend names the core (apps/, packages/, testing/) must never spell, and cross-repo packages/paths it must never import. A gitignored boundary-names.local.json beside this file is merged when present. The lint code itself names no backend.",
+  "$comment": "Data for scripts/boundary-lint.mjs: backend names the core (apps/, packages/, testing/) must never spell, and cross-repo packages/paths it must never import. A $GUNNFLOW_HOME/boundary-names.local.json (default ~/.gunnflow/) is merged when present and BOUNDARY_NAMES_FILE is not set. The lint code itself names no backend.",
   "backendNames": [
     { "name": "Rhizome", "pattern": "rhizome", "flags": "i" },
     { "name": "JANUS", "pattern": "\\bjanus\\b", "flags": "i" }

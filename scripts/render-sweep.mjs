@@ -7,34 +7,47 @@
  * wiring configs, and reports every emitted term the union does not cover.
  *
  * Usage: node scripts/render-sweep.mjs [--url <backend base URL>] [--wiring <dir>]
+ * The config file is the BFF's, resolved and validated by the same code
+ * (scripts/gunnflow-settings.mjs): GUNNFLOW_CONFIG > <repo>/gunnflow.config.json >
+ * $GUNNFLOW_HOME/config.json > none. An invalid file is a setup error (exit 3).
  * The wire URL has no built-in default. Resolution order: `--url` >
- * env GUNNFLOW_SWEEP_URL > the `url` of gunnflow.config.json (or the file named
- * by GUNNFLOW_CONFIG) when its `upstream` is "direct" > otherwise exit 3.
+ * env GUNNFLOW_SWEEP_URL > the config file's `url` when its `upstream` is
+ * "direct" > otherwise exit 3.
+ * The wiring directory: `--wiring` (relative to the working directory) >
+ * GUNNFLOW_WIRING_DIR > the config file's `wiringDir` (both relative to the
+ * repo root) > $GUNNFLOW_HOME/wiring when it exists > <repo>/wiring.
  * Exit codes: 0 = clean, 1 = gaps found, 2 = wire unreachable, 3 = setup error.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { displayPath, gunnflowHome, loadUserConfig, resolveWiringDir } from './gunnflow-settings.mjs';
 
-const DEFAULT_WIRING = './wiring';
-const CONFIG_PATH = process.env.GUNNFLOW_CONFIG ?? new URL('../gunnflow.config.json', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const HOME = gunnflowHome();
 
-/** The wire URL from the config file, only when that file selects the direct upstream. */
-function configuredDirectUrl() {
-  if (!existsSync(CONFIG_PATH)) return undefined;
+/** A path for messages: never a raw absolute path with a username. */
+const shown = (p) => displayPath(p, { repoRoot: REPO_ROOT });
+
+/** The resolved config file, validated exactly as the BFF validates it ({} when there is none). */
+function readConfig() {
   try {
-    const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
-    return config?.upstream === 'direct' && typeof config.url === 'string' && config.url !== '' ? config.url : undefined;
+    return loadUserConfig({ repoRoot: REPO_ROOT }).config;
   } catch (error) {
-    console.error(`render sweep: cannot read ${CONFIG_PATH} (${error.message})`);
+    console.error(`render sweep: ${error.message}`);
     process.exit(3);
   }
 }
 
+/** The wire URL from the config, only when it selects the direct upstream. */
+function configuredDirectUrl(config) {
+  return config.upstream === 'direct' && typeof config.url === 'string' && config.url !== '' ? config.url : undefined;
+}
+
 function parseArgs(argv) {
-  const opts = { url: undefined, wiring: DEFAULT_WIRING };
+  const opts = { url: undefined, wiring: undefined };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const eq = arg.indexOf('=');
@@ -50,11 +63,20 @@ function parseArgs(argv) {
     }
     opts[name.slice(2)] = value;
   }
-  opts.url ??= process.env.GUNNFLOW_SWEEP_URL || configuredDirectUrl();
+  const config = readConfig();
+  opts.url ??= process.env.GUNNFLOW_SWEEP_URL || configuredDirectUrl(config);
+  opts.wiring =
+    opts.wiring !== undefined
+      ? path.resolve(process.cwd(), opts.wiring)
+      : resolveWiringDir({
+          explicit: process.env.GUNNFLOW_WIRING_DIR || config.wiringDir,
+          repoRoot: REPO_ROOT,
+          home: HOME,
+        });
   if (!opts.url) {
     console.error(
       'render sweep: no wire URL — pass --url <backend base URL> (or set GUNNFLOW_SWEEP_URL, ' +
-        'or a gunnflow.config.json with "upstream": "direct" and "url").',
+        'or a config file with "upstream": "direct" and "url").',
     );
     process.exit(3);
   }
@@ -110,7 +132,7 @@ async function loadWiringUnion(wiringDir, validateWiringConfig) {
   try {
     entries = (await readdir(wiringDir)).filter((name) => name.endsWith('.json')).sort();
   } catch (error) {
-    console.error(`render sweep: cannot read wiring directory ${wiringDir} (${error.message})`);
+    console.error(`render sweep: cannot read wiring directory ${shown(wiringDir)} (${error.message})`);
     process.exit(3);
   }
   const union = {
@@ -214,7 +236,7 @@ function reportGaps(label, gaps) {
 }
 
 const opts = parseArgs(process.argv.slice(2));
-const wiringDir = path.resolve(process.cwd(), opts.wiring);
+const wiringDir = opts.wiring;
 const validateWiringConfig = await loadValidator();
 const [nodes, { union, validFiles }] = await Promise.all([
   fetchNodes(opts.url),
@@ -251,7 +273,7 @@ for (const node of nodes) {
 const gapCount =
   gaps.kind.size + gaps.state.size + gaps.relation.size + gaps.cause.size + gaps.mediaType.size;
 console.log(
-  `render sweep: ${nodes.length} nodes from ${opts.url}, wiring union from ${validFiles.length} valid config file${validFiles.length === 1 ? '' : 's'} (${validFiles.join(', ') || 'none'})`,
+  `render sweep: ${nodes.length} nodes from ${opts.url}, wiring union from ${validFiles.length} valid config file${validFiles.length === 1 ? '' : 's'} (${validFiles.join(', ') || 'none'}) in ${shown(wiringDir)}`,
 );
 if (gapCount === 0) {
   console.log('render sweep clean');

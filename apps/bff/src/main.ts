@@ -1,8 +1,9 @@
 /** Composition root: the only place the upstream (fake or direct) is chosen and wired. */
 import { loadUpstream } from './composition.js';
-import { DEFAULT_CONFIG_PATH, REPO_ROOT, loadConfigFile, resolveSettings, wiringDirOf } from './config.js';
-import { DEFAULT_PERSONAL_DIR, workspaceKey } from './personalStore.js';
-import { DEFAULT_PREFS_FILE } from './prefsStore.js';
+import { REPO_ROOT, loadConfigFile, resolveSettings, wiringDirOf } from './config.js';
+import { displayPath, gunnflowHome, resolveConfigFile } from './home.js';
+import { defaultPersonalDir, workspaceKey } from './personalStore.js';
+import { defaultPrefsFile } from './prefsStore.js';
 import { join, resolve } from 'node:path';
 import { buildServer } from './server.js';
 import { DEFAULT_WEB_ORIGIN, buildPreviewServer } from './preview-server.js';
@@ -11,10 +12,22 @@ const refuse = (err: unknown): never => {
   console.error(`gunnflow bff refused to start: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 };
+// Your own settings live in the Gunnflow home (default ~/.gunnflow), outside the code folder.
+const home = gunnflowHome();
+const shown = (path: string): string => displayPath(path, { repoRoot: REPO_ROOT });
 // One config file (optional) holds the connection; env values win over it.
+const configFile = resolveConfigFile({ env: process.env, repoRoot: REPO_ROOT, home });
+console.log(
+  configFile
+    ? `config          ${shown(configFile.path)}  (${{ env: 'GUNNFLOW_CONFIG', repo: 'repository root', home: 'Gunnflow home' }[configFile.source]})`
+    : 'config          none  (built-in defaults: the simulator)',
+);
 const settings = (() => {
   try {
-    return resolveSettings(process.env, loadConfigFile(process.env.GUNNFLOW_CONFIG ?? DEFAULT_CONFIG_PATH));
+    const config = configFile
+      ? loadConfigFile(configFile.path, { required: configFile.source === 'env', shown: shown(configFile.path) })
+      : {};
+    return resolveSettings(process.env, config);
   } catch (err) {
     return refuse(err);
   }
@@ -24,16 +37,17 @@ const { upstream, fake, label } = loaded;
 
 // The personal layer lives next to nothing upstream: one local file per workspace.
 const personalFile = join(
-  settings.GUNNFLOW_PERSONAL_DIR ? resolve(REPO_ROOT, settings.GUNNFLOW_PERSONAL_DIR) : DEFAULT_PERSONAL_DIR,
+  settings.GUNNFLOW_PERSONAL_DIR ? resolve(REPO_ROOT, settings.GUNNFLOW_PERSONAL_DIR) : defaultPersonalDir(home),
   `${workspaceKey(label)}.json`,
 );
 // No mermaid renderer is built in: diagram surfaces state "unavailable" with the reason.
+const wiringDir = wiringDirOf(settings, home);
 const app = buildServer({
   upstream,
-  wiringDir: wiringDirOf(settings),
+  wiringDir,
   upstreamLabel: label,
   personalFile,
-  prefsFile: process.env.GUNNFLOW_PREFS_FILE ?? DEFAULT_PREFS_FILE,
+  prefsFile: process.env.GUNNFLOW_PREFS_FILE ?? defaultPrefsFile(home),
   loadFixture: fake ? (name) => fake.loadFixture(name as never) : undefined,
   burstExecution: fake ? (taskId, count) => fake.burstExecution(taskId, count) : undefined,
   burstPty: fake ? (sessionId, count) => fake.burstPty(sessionId, count) : undefined,
@@ -64,4 +78,5 @@ await app.listen({ port: BFF_PORT, host: BIND_HOST });
 await preview.listen({ port: PREVIEW_PORT, host: BIND_HOST });
 console.log(`gunnflow bff    http://${shownHost}:${BFF_PORT}  (upstream: ${label})`);
 console.log(`preview origin  http://${shownHost}:${PREVIEW_PORT}  (isolated, strict CSP)`);
-console.log(`personal layer  ${personalFile}  (local only)`);
+console.log(`wiring          ${shown(wiringDir)}`);
+console.log(`personal layer  ${shown(personalFile)}  (local only)`);

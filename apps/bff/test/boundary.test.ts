@@ -88,6 +88,25 @@ describe('boundary lint (A1–A3)', () => {
     }
   });
 
+  it('merges $GUNNFLOW_HOME/boundary-names.local.json, unless BOUNDARY_NAMES_FILE is set', () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'gunnflow-lint-'));
+    try {
+      const lint = installLint(sandbox);
+      mkdirSync(join(sandbox, 'apps', 'web', 'src'), { recursive: true });
+      writeFileSync(join(sandbox, 'apps', 'web', 'src', 'ok.ts'), '// talks to PrivateBackend directly\n');
+      const home = join(sandbox, 'home');
+      mkdirSync(home);
+      const env = { ...process.env, GUNNFLOW_HOME: home };
+      const run = (extra: Record<string, string> = {}) => execFileSync('node', [lint], { encoding: 'utf8', stdio: 'pipe', env: { ...env, ...extra } });
+      expect(run()).toContain('boundary-lint OK');
+      writeFileSync(join(home, 'boundary-names.local.json'), JSON.stringify({ backendNames: [{ name: 'Private', pattern: 'privatebackend', flags: 'i' }] }));
+      expect(() => run()).toThrow();
+      expect(run({ BOUNDARY_NAMES_FILE: join(sandbox, 'scripts', 'boundary-names.json') })).toContain('boundary-lint OK');
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
   it('allows apps using packages and the simulator, and the simulator using packages', () => {
     const sandbox = mkdtempSync(join(tmpdir(), 'gunnflow-lint-'));
     try {

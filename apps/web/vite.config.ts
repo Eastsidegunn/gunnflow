@@ -1,25 +1,23 @@
 /// <reference types="vitest/config" />
-import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
+import { loadUserConfig } from '../../scripts/gunnflow-settings.mjs';
 
 /**
  * The preview origin comes from env (VITE_PREVIEW_ORIGIN, GUNNFLOW_PREVIEW_ORIGIN)
- * or the repo's gunnflow.config.json. The BFF validates that file; the web only
- * reads its previewOrigin.
+ * or the config file the BFF uses (GUNNFLOW_CONFIG > the repo's
+ * gunnflow.config.json > $GUNNFLOW_HOME/config.json), loaded and validated by the
+ * same shared code: an invalid file stops the dev server or build with the reason,
+ * never a silent fallback. Unit tests (Vitest) read no config file at all — this
+ * config is evaluated before any test setup could isolate the home.
  */
 function configuredPreviewOrigin(): string | undefined {
   const fromEnv = process.env.VITE_PREVIEW_ORIGIN ?? process.env.GUNNFLOW_PREVIEW_ORIGIN;
   if (fromEnv) return fromEnv;
-  const path = process.env.GUNNFLOW_CONFIG ?? fileURLToPath(new URL('../../gunnflow.config.json', import.meta.url));
-  if (!existsSync(path)) return undefined;
-  try {
-    const value = (JSON.parse(readFileSync(path, 'utf8')) as { previewOrigin?: unknown }).previewOrigin;
-    return typeof value === 'string' ? value : undefined;
-  } catch {
-    return undefined;
-  }
+  if (process.env.VITEST) return undefined;
+  const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+  return loadUserConfig({ repoRoot }).config.previewOrigin;
 }
 const previewOrigin = configuredPreviewOrigin();
 
@@ -42,5 +40,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    // GUNNFLOW_HOME in a fresh temp dir: no test reaches a developer's real ~/.gunnflow.
+    setupFiles: ['test/setup-home.ts'],
   },
 });

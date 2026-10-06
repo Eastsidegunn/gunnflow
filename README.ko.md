@@ -54,13 +54,14 @@ Gunnflow는 소스에서 실행합니다. 워크스페이스 패키지(`@gunnflo
 | 8787 | BFF(전송만 담당: SSE fan-out + intent relay) |
 | 8788 | 에이전트 산출물용 격리 preview origin(별도 origin, 엄격한 CSP) |
 
-**Upstream 선택.** BFF는 저장소 루트의 선택적 `gunnflow.config.json`(git-ignore됨)을 읽습니다.
-환경 변수가 파일보다 우선합니다. 파일도 `GUNNFLOW_UPSTREAM`도 없으면 upstream은 저장소 안의
+**Upstream 선택.** BFF는 선택적 config 파일 — `~/.gunnflow/config.json` 또는 저장소 루트의
+git-ignore된 `gunnflow.config.json`(순서는 [설정](#설정) 참고) — 을 읽습니다. 환경 변수가 파일보다
+우선합니다. 파일도 `GUNNFLOW_UPSTREAM`도 없으면 upstream은 저장소 안의
 simulator인 `fake`입니다. 따라서 위 명령은 백엔드 없이 demo workspace를 보여 줍니다.
 
 direct wire를 말하는 백엔드를 연결하려면
-[`gunnflow.config.example.json`](gunnflow.config.example.json)을 `gunnflow.config.json`으로 복사하고
-백엔드 base URL을 채웁니다.
+[`gunnflow.config.example.json`](gunnflow.config.example.json)을 `~/.gunnflow/config.json`으로
+복사하고 백엔드 base URL을 채웁니다.
 
 ```json
 { "upstream": "direct", "url": "<backend base URL>" }
@@ -82,20 +83,47 @@ attention, fallback viewer가 사용됩니다.
 
 ## 설정
 
-설정은 선택적 `gunnflow.config.json`(둘째 열의 키)과 환경 변수에서 옵니다. **환경 변수가 파일보다
+설정은 선택적 config 파일(둘째 열의 키)과 환경 변수에서 옵니다. **환경 변수가 파일보다
 우선합니다.**
+
+**내 설정은 저장소 밖에 둡니다.** 연결 config, wiring, 개인 메모, 표시 환경설정처럼 사용자 자신의
+것은 모두 사용자별 홈 디렉토리 — 기본 `~/.gunnflow`(`GUNNFLOW_HOME`으로 변경) — 에 둡니다. 코드
+폴더보다 여기에 두기를 권합니다. 새로 clone해도 남고, 실수로 커밋될 일이 없습니다.
+
+```text
+~/.gunnflow/                    ($GUNNFLOW_HOME)
+  config.json                   연결 config(gunnflow.config.example.json과 같은 키)
+  wiring/                       내 wiring 파일(디렉토리가 있으면 사용)
+  personal/                     개인 층: 로컬 메모, 상류로 전송 안 함
+  prefs.json                    설정 화면이 쓰는 표시 환경설정
+  boundary-names.local.json     pnpm boundary-lint가 추가로 검사할 이름(선택)
+```
+
+어떤 config 파일을 쓰는가(먼저 해당하는 것). BFF, 웹 dev server/build, `pnpm render-sweep`는 같은
+코드(`scripts/gunnflow-settings.mjs`)로 파일을 찾고 검증합니다. 잘못된 파일은 무시되지 않고 이유와 함께
+실행을 멈추며, BFF는 시작할 때 어떤 파일을 읽었는지 기록합니다:
+
+1. `GUNNFLOW_CONFIG` — 명시 경로(파일이 없으면 시작을 거부)
+2. 저장소 루트의 `gunnflow.config.json`(하위 호환)
+3. `$GUNNFLOW_HOME/config.json`
+4. 없음 — 내장 기본값, 즉 simulator
+
+어떤 wiring 디렉토리를 쓰는가: 명시한 `GUNNFLOW_WIRING_DIR` 또는 config `wiringDir`(저장소 루트 기준
+상대 경로) > 존재하면 `$GUNNFLOW_HOME/wiring` > 저장소의 `wiring/`. 디렉토리 안 파일은 전과 같이
+이름 순으로 겹칩니다.
 
 | 환경 변수 | config 키 | 의미 | 기본값 |
 |---|---|---|---|
-| `GUNNFLOW_CONFIG` | — | config 파일 경로 | 저장소 루트의 `gunnflow.config.json` |
+| `GUNNFLOW_HOME` | — | Gunnflow 홈 디렉토리(앞의 `~`는 확장) | `~/.gunnflow` |
+| `GUNNFLOW_CONFIG` | — | config 파일 경로 | 위 순서 참고 |
 | `GUNNFLOW_UPSTREAM` | `upstream` | `fake`(저장소 안 simulator) 또는 `direct`(direct wire를 말하는 백엔드) | `fake` |
 | `GUNNFLOW_UPSTREAM_URL` | `url` | `direct`의 백엔드 base URL(`direct`이면 필수) | — |
-| `GUNNFLOW_WIRING_DIR` | `wiringDir` | wiring 설정 디렉토리(저장소 루트 기준 상대 경로) | `wiring` |
-| `GUNNFLOW_PERSONAL_DIR` | `personalDir` | 개인 층 디렉토리(로컬 메모, 상류로 전송 안 함) | `~/.gunnflow/personal` |
+| `GUNNFLOW_WIRING_DIR` | `wiringDir` | wiring 설정 디렉토리(저장소 루트 기준 상대 경로) | 있으면 `$GUNNFLOW_HOME/wiring`, 없으면 `wiring` |
+| `GUNNFLOW_PERSONAL_DIR` | `personalDir` | 개인 층 디렉토리(로컬 메모, 상류로 전송 안 함) | `$GUNNFLOW_HOME/personal` |
 | `GUNNFLOW_WEB_ORIGIN` | `webOrigin` | 웹 앱 origin — preview server가 cross-origin 읽기를 허락하는 유일한 origin | `http://127.0.0.1:5173` |
 | `GUNNFLOW_PREVIEW_ORIGIN` | `previewOrigin` | 브라우저가 접근하는 격리 preview server origin(웹 빌드도 읽음; `GUNNFLOW_PREVIEW_PORT`가 없으면 이 origin의 포트로 listen) | `http://127.0.0.1:8788` |
 | `VITE_PREVIEW_ORIGIN` | — | `GUNNFLOW_PREVIEW_ORIGIN`과 같되 웹 앱 전용(웹에서는 이것이 우선) | — |
-| `GUNNFLOW_PREFS_FILE` | — | 설정 화면이 쓰는 표시 환경설정 파일 | `~/.gunnflow/prefs.json` |
+| `GUNNFLOW_PREFS_FILE` | — | 설정 화면이 쓰는 표시 환경설정 파일 | `$GUNNFLOW_HOME/prefs.json` |
 | `GUNNFLOW_BIND_HOST` | — | BFF·preview server·Vite dev server의 listen 주소 | `127.0.0.1` |
 | `GUNNFLOW_BFF_PORT` | — | BFF 포트(웹 dev proxy도 따라감) | `8787` |
 | `GUNNFLOW_PREVIEW_PORT` | — | preview server 포트 | preview origin의 포트, 없으면 `8788` |
@@ -103,7 +131,7 @@ attention, fallback viewer가 사용됩니다.
 | `GUNNFLOW_SWEEP_URL` | — | `--url`이 없을 때 `pnpm render-sweep`가 쓸 wire URL | — |
 | `FAKE_DIRECT_PORT` | — | 테스트/개발 전용: 저장소 안 direct-wire reference server 포트 | `8791` |
 | `CI` | — | 테스트 전용: 설정되면 Playwright가 이미 실행 중인 서버를 재사용하지 않음 | 미설정 |
-| `BOUNDARY_NAMES_FILE` | — | 테스트 전용: `pnpm boundary-lint`의 대체 이름 데이터 파일 | `scripts/boundary-names.json` |
+| `BOUNDARY_NAMES_FILE` | — | 테스트 전용: `pnpm boundary-lint`의 대체 이름 데이터 파일(설정되면 `$GUNNFLOW_HOME/boundary-names.local.json`은 병합 안 함) | `scripts/boundary-names.json` |
 
 **Bind host.** 기본은 전부 loopback에서만 listen합니다. `GUNNFLOW_BIND_HOST`(예: 컨테이너 안에서
 `0.0.0.0`)는 세 서버 모두의 listen 주소를 바꾸지만, BFF에는 인증이 없으므로 **인증 없는 BFF를
@@ -121,13 +149,13 @@ pnpm render-sweep  # wiring/과 live wire의 어휘를 대조 감사(아래 참�
 ```
 
 `pnpm e2e`는 simulator에 고정된 자체 서버를 시작합니다. in-process(`fake`) 경로와 로컬
-direct-wire reference server 경로를 모두 사용하므로, 로컬 설정이나 실제 백엔드에는 접근하지
-않습니다.
+direct-wire reference server 경로를 모두 사용하고 `GUNNFLOW_HOME`을 임시 디렉토리로 지정하므로, 로컬
+설정이나 `~/.gunnflow`, 실제 백엔드에는 접근하지 않습니다.
 
 `pnpm render-sweep --url <backend base URL>`는 live wire에서 `/nodes`를 가져와 wiring 파일로
 매핑되지 않은 모든 상태, 관계, attention 원인, kind, artifact media type을 보고합니다(URL은
-`GUNNFLOW_SWEEP_URL`, 또는 `direct`를 고른 `gunnflow.config.json`의 `url`에서도 올 수 있고, 셋 다
-없으면 종료 코드 3; `--wiring <dir>`로 wiring 디렉토리 지정, 기본 `./wiring`). 종료 코드는 0(문제 없음),
+`GUNNFLOW_SWEEP_URL`, 또는 `direct`를 고른 config 파일(위 순서로 결정)의 `url`에서도 올 수 있고, 셋 다
+없으면 종료 코드 3; `--wiring <dir>`로 wiring 디렉토리 지정, 없으면 위 순서로 결정). 종료 코드는 0(문제 없음),
 1(누락), 2(wire 연결 불가), 3(설정 오류)입니다. contract build가 필요합니다:
 `pnpm --filter @gunnflow/contract build`.
 

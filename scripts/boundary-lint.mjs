@@ -6,10 +6,13 @@
 //
 // The backend names and cross-repo packages are DATA, not code:
 // scripts/boundary-names.json (override with BOUNDARY_NAMES_FILE). A
-// gitignored scripts/boundary-names.local.json, when present, adds names a
-// clone wants checked without publishing them. This file spells no backend name.
+// $GUNNFLOW_HOME/boundary-names.local.json (default ~/.gunnflow/), when present,
+// adds names a person wants checked without publishing them; it lives outside
+// the repository, so it can never be committed. This file spells no backend name.
+// (Self-contained on purpose: tests copy this file alone into sandboxes.)
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { homedir } from 'node:os';
+import { join, relative, resolve } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const SCAN_DIRS = ['apps', 'packages', 'testing'];
@@ -20,7 +23,15 @@ const SIMULATOR_BLIND_DIRS = ['packages/'];
 
 const NAMES_FILE = process.env.BOUNDARY_NAMES_FILE ?? new URL('./boundary-names.json', import.meta.url).pathname;
 // An explicit BOUNDARY_NAMES_FILE is exact (tests rely on that); only the default file merges the local one.
-const LOCAL_NAMES_FILE = process.env.BOUNDARY_NAMES_FILE ? null : new URL('./boundary-names.local.json', import.meta.url).pathname;
+// Same home resolution as scripts/gunnflow-settings.mjs (inlined: tests copy this file alone).
+const GUNNFLOW_HOME = (() => {
+  const set = process.env.GUNNFLOW_HOME;
+  if (!set) return join(homedir(), '.gunnflow');
+  if (set === '~') return homedir();
+  if (set.startsWith('~/')) return join(homedir(), set.slice(2));
+  return resolve(set);
+})();
+const LOCAL_NAMES_FILE = process.env.BOUNDARY_NAMES_FILE ? null : join(GUNNFLOW_HOME, 'boundary-names.local.json');
 const readNames = (file) => {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
