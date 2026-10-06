@@ -1,0 +1,25 @@
+{
+  "name": "@gunnflow/upstream-port",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The BFF's single upstream wiring port: the transport-shaped interface the built-in upstreams (simulator, direct wire) implement. Types only.",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'upstream-port: types only, no tests'",
+    "build": "echo 'upstream-port: types only, no build'"
+  },
+  "peerDependencies": {
+    "@gunnflow/contract": "workspace:^"
+  },
+  "devDependencies": {
+    "@gunnflow/contract": "workspace:*",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,741 @@
+/* Colour values live in theme/defaultTheme.ts (chrome) and are injected as
+   CSS variables before first render — this file only consumes them. */
+:root {
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, sans-serif;
+}
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--subtext); }
+/* M-15: hover/press colour changes only — fast01. */
+button { transition: background-color var(--duration-fast01) var(--ease-standard), border-color var(--duration-fast01) var(--ease-standard), color var(--duration-fast01) var(--ease-standard); }
+button:disabled { opacity: 0.45; cursor: default; }
+input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 11px;
+}
+
+.shell { height: 100%; display: flex; flex-direction: column; }
+.body { flex: 1; display: flex; min-height: 0; }
+
+/* Header: brand + search only (48px); actions live in the context menu. */
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  height: 48px; padding: 0 14px; box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-search {
+  width: min(420px, 40vw);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 7px;
+  padding: 6px 11px; font: inherit; color: var(--text);
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: -1px; }
+.toolbar .brand { font-weight: 700; margin-right: 8px; letter-spacing: 0.02em; }
+.toolbar .spacer, .status-strip .spacer { flex: 1; }
+.toolbar .search kbd {
+  font-size: 11px; color: var(--subtext);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 6px;
+}
+.toolbar .mode { font-weight: 700; letter-spacing: 0.06em; font-size: 12px; }
+.toolbar .mode.intervene { border-color: var(--gate); color: var(--gate); }
+.toolbar .armed { border-color: var(--pending); color: var(--pending); }
+
+/* Sidebar = lens */
+.sidebar {
+  width: 168px; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 12px 8px;
+}
+.sidebar ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sidebar button {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  background: transparent; border-color: transparent; text-align: left;
+}
+.sidebar button.active { background: var(--panel); border-color: var(--border); }
+.sidebar .count {
+  background: var(--gate); color: #14100a; border-radius: 10px;
+  font-size: 11px; font-weight: 700; padding: 0 7px;
+}
+.sidebar-footer { display: grid; gap: 4px; }
+.sidebar-footer button { background: transparent; border-color: transparent; color: var(--subtext); }
+
+/* Canvas dominates */
+.canvas-area { flex: 1; position: relative; min-width: 0; }
+.canvas-host, .canvas-host canvas { position: absolute; inset: 0; }
+.canvas-host canvas { touch-action: none; }
+
+/* The one node surface (S-01): entries and quick affordances live in the panel. */
+.generic-panel .state { color: var(--subtext); font-size: 11px; letter-spacing: 0.06em; margin: 2px 0; }
+.generic-panel .blocked-reason { color: var(--blocked); }
+.generic-panel .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.generic-panel .privileged { border-color: rgba(255, 93, 93, 0.5); color: var(--blocked); }
+
+/* Task Inspector (L1) — persistent right drawer; canvas stays alive beside it */
+.inspector {
+  width: 400px; flex-shrink: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+}
+.inspector-header {
+  display: flex; align-items: start; justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.inspector-header .breadcrumb { margin: 0 0 4px; color: var(--subtext); font-size: 12px; }
+.inspector-state {
+  margin: 0; font-weight: 700; letter-spacing: 0.06em; font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+}
+.inspector-state[data-state='running'] { color: var(--accent); }
+.inspector-state[data-state='blocked'] { color: var(--blocked); }
+.inspector-state[data-state='paused'], .inspector-state[data-state='waiting'] { color: var(--gate); }
+.pending-chip {
+  font-weight: 400; font-style: italic; font-size: 12px; color: var(--pending);
+}
+.inspector-stale {
+  margin: 0; padding: 8px 16px; font-size: 12px;
+  color: var(--gate); border-bottom: 1px solid var(--border);
+}
+.inspector-tabs { display: flex; gap: 2px; padding: 8px 12px 0; }
+.inspector-tabs button { background: transparent; border-color: transparent; color: var(--subtext); }
+.inspector-tabs button.active { color: var(--text); border-bottom: 2px solid var(--accent); border-radius: 0; }
+.inspector-body { overflow-y: auto; padding: 12px 16px 20px; min-height: 0; }
+.inspector-body section { margin-bottom: 18px; }
+.inspector-body h3 {
+  margin: 0 0 6px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext);
+}
+.inspector-body p { margin: 0 0 4px; }
+.blocked-panel {
+  border: 1px solid var(--blocked); border-radius: 10px; padding: 10px 12px;
+}
+.blocked-panel h3 { color: var(--blocked); }
+.session-row { color: var(--subtext); }
+.row-link {
+  display: block; width: 100%; text-align: left;
+  background: transparent; margin-bottom: 4px;
+}
+.inspector-actions .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.inspector-actions .privileged { border-color: rgba(255, 93, 93, 0.5); color: var(--blocked); }
+.instruct { display: grid; gap: 6px; margin-top: 12px; }
+.instruct label { font-size: 12px; color: var(--subtext); }
+.instruct textarea {
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 7px; padding: 7px 11px; resize: vertical;
+}
+.activity-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.activity-list li { display: grid; gap: 2px; }
+.activity-list li.human .activity-label { color: var(--pending); }
+.activity-meta { font-size: 11.5px; color: var(--subtext); }
+
+/* Human Gate surface — contextual panel or large overlay (brief §5) */
+.gate-surface.panel {
+  width: 400px; flex-shrink: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--gate);
+  background: var(--panel);
+}
+.gate-surface.overlay {
+  width: min(680px, 92vw); max-height: 88vh;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--gate); border-radius: 14px;
+}
+.gate-header {
+  display: flex; align-items: start; justify-content: space-between;
+  padding: 14px 18px 10px; border-bottom: 1px solid var(--border);
+}
+.gate-header h2 { margin: 2px 0 4px; font-size: 17px; color: var(--gate); }
+.gate-header .breadcrumb { margin: 0; color: var(--subtext); font-size: 12px; }
+.crumb-link {
+  background: transparent; border: none; padding: 0; color: var(--subtext);
+  text-decoration: underline; cursor: pointer; font-size: 12px;
+}
+.gate-state-line {
+  margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  display: flex; gap: 8px; align-items: center;
+}
+.gate-state-line[data-state='waiting'] { color: var(--gate); }
+.gate-state-line[data-state='approved'] { color: #4ade80; }
+.gate-state-line[data-state='rejected'] { color: var(--blocked); }
+.urgency { color: var(--blocked); font-weight: 700; }
+.risk-badge {
+  border: 1px solid var(--blocked); color: var(--blocked);
+  border-radius: 5px; padding: 0 6px; font-size: 11px; font-weight: 700;
+}
+.gate-banner { margin: 0; padding: 10px 18px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+.stale-banner { color: var(--gate); }
+.inactive-banner { color: var(--subtext); display: grid; gap: 8px; justify-items: start; }
+.readonly-banner { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--subtext); }
+.gate-body { overflow-y: auto; padding: 14px 18px 20px; min-height: 0; }
+.gate-body section { margin-bottom: 18px; }
+.gate-body h3 {
+  margin: 0 0 6px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext);
+}
+.gate-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 6px 0 0; }
+.gate-facts dt { color: var(--subtext); font-size: 12.5px; }
+.gate-facts dd { margin: 0; font-size: 13px; }
+.external-marker { color: var(--blocked); font-weight: 600; }
+[data-testid='gate-preview-frame'] {
+  width: 100%; height: 180px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg);
+}
+.audit-notice { color: var(--subtext); font-size: 12.5px; font-style: italic; }
+.gate-actions { margin-top: 10px; }
+.gate-actions .approve { border-color: #2f7d4f; color: #4ade80; }
+.privileged-approve { border-color: var(--blocked); color: var(--blocked); }
+.privileged-confirm {
+  margin-top: 12px; border: 1px solid var(--blocked); border-radius: 10px;
+  padding: 12px; display: grid; gap: 8px;
+}
+.privileged-confirm label { font-size: 12px; color: var(--subtext); }
+
+/* Execution Surface (L2) — full-width deep-dive workspace */
+.execution-surface {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+}
+.execution-header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.session-block { display: flex; align-items: center; gap: 10px; }
+.session-block select {
+  font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px;
+}
+.session-label { font-weight: 600; }
+.session-state { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; display: flex; gap: 6px; }
+.session-state[data-state='running'] { color: var(--accent); }
+.session-state[data-state='paused'] { color: var(--gate); }
+.session-state[data-state='killed'], .session-state[data-state='ended'] { color: var(--subtext); }
+.session-meta { color: var(--subtext); font-size: 12.5px; }
+.execution-header .live { color: #4ade80; font-size: 12px; }
+.execution-header .lost { color: var(--gate); font-size: 12px; font-weight: 700; }
+.execution-header .privileged { border-color: rgba(255, 93, 93, 0.5); color: var(--blocked); }
+.execution-body { flex: 1; display: flex; min-height: 0; }
+.execution-main { flex: 1; min-width: 0; overflow-y: auto; padding: 10px 14px; }
+.execution-main h3 {
+  margin: 12px 0 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtext);
+}
+.timeline-wrap { height: 100%; display: flex; flex-direction: column; position: relative; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; align-items: center; }
+.filter-bar button { font-size: 12px; padding: 2px 9px; color: var(--subtext); }
+.filter-bar button.active { color: var(--text); border-color: var(--accent); }
+.timeline { flex: 1; overflow-y: auto; min-height: 0; }
+.timeline-row {
+  display: grid; grid-template-columns: 84px 100px 1fr 64px 64px;
+  gap: 10px; align-items: center; width: 100%; height: 30px;
+  background: transparent; border: none; border-radius: 6px;
+  padding: 0 8px; text-align: left; font-size: 12.5px; cursor: pointer;
+}
+.timeline-row:hover { background: var(--panel); }
+.timeline-row .t-time { color: var(--faint, #5b6672); font-variant-numeric: tabular-nums; }
+.timeline-row .t-kind { color: var(--subtext); }
+.timeline-row .t-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-row[data-status='failed'] .t-label, .timeline-row[data-status='failed'] .t-status { color: var(--blocked); }
+.timeline-row[data-status='denied'] .t-status { color: var(--blocked); }
+.timeline-row[data-status='pending'] .t-status { color: var(--gate); }
+.timeline-row .t-dur { color: var(--subtext); text-align: right; }
+.new-events {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: #0b1420; border: none; font-weight: 700;
+}
+.message-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.message-list li { display: grid; gap: 2px; }
+.message-list li.human .msg-role { color: var(--pending); }
+.msg-role { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--subtext); }
+.message-list p { margin: 0; }
+.tools-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tools-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.tools-table tr[data-status='failed'] td { color: var(--blocked); }
+.file-list { list-style: none; margin: 0; padding: 0; }
+.file-change[data-change='create'] { color: #4ade80; }
+.file-change[data-change='delete'] { color: var(--blocked); }
+.file-change[data-change='modify'] { color: var(--gate); }
+.detail-pane {
+  width: 340px; flex-shrink: 0; overflow-y: auto;
+  border-left: 1px solid var(--border); padding: 12px 14px;
+  background: var(--panel);
+}
+.detail-pane header { display: flex; justify-content: space-between; align-items: start; }
+.detail-pane h3 { margin: 0 0 4px; font-size: 13px; }
+.detail-pane pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px; font-size: 11.5px; overflow-x: auto; white-space: pre-wrap;
+}
+.terminal-preview {
+  display: flex; align-items: center; gap: 14px;
+  border-top: 1px solid var(--border); padding: 8px 14px;
+  font-family: ui-monospace, monospace; font-size: 12px;
+}
+.terminal-lines { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.terminal-lines span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.terminal-lines [data-status='failed'] { color: var(--blocked); }
+
+/* Live Terminal / Intervention (Screen #4) — the PTY is the protagonist */
+.terminal-surface {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.terminal-surface .execution-header { font-family: system-ui, sans-serif; }
+.authority-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px;
+  color: var(--subtext);
+}
+.authority-badge.intervene { border-color: var(--gate); color: var(--gate); }
+.pty-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.pty-wrap > .hint { margin: 4px 14px 0; }
+.pty { flex: 1; overflow-y: auto; min-height: 0; padding: 8px 0; background: #0b0e12; }
+.pty-line {
+  display: flex; align-items: center; height: 22px;
+  font-size: 12.5px; line-height: 22px; white-space: pre;
+}
+.pty-line .gutter {
+  width: 34px; flex-shrink: 0; text-align: center;
+  background: transparent; border: none; padding: 0; cursor: pointer;
+  color: var(--subtext); font-size: 11px;
+}
+.pty-line .pty-text { overflow: hidden; text-overflow: ellipsis; }
+.pty-line[data-channel='stderr'] .pty-text { color: var(--blocked); }
+.pty-line[data-channel='control'] .pty-text { color: var(--gate); font-style: italic; }
+.pty-line.operator { background: rgba(154, 165, 255, 0.08); }
+.pty-line.operator .pty-text { color: var(--pending); }
+.pty-line.match { background: rgba(255, 176, 46, 0.15); }
+.pending-line .pty-text { color: var(--subtext); font-style: italic; }
+.pending-line[data-state='unconfirmed'] .pty-text { color: var(--gate); }
+.unconfirmed { color: var(--blocked); font-weight: 700; font-style: normal; }
+.pending-line .dismiss { background: transparent; border: none; color: var(--subtext); padding: 0 6px; }
+.terminal-guard {
+  margin: 0; padding: 6px 14px; font-size: 12px; color: var(--subtext);
+  border-top: 1px solid var(--border); font-family: system-ui, sans-serif;
+}
+.composer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-top: 1px solid var(--border);
+}
+.composer .prompt { color: var(--accent); font-weight: 700; }
+.composer input {
+  flex: 1; font-family: inherit; background: #0b0e12;
+}
+.composer input:disabled { opacity: 0.4; }
+.runtime-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 6px 14px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--subtext);
+  overflow-x: auto; white-space: nowrap;
+}
+.runtime-bar input {
+  font-size: 12px; padding: 3px 8px; min-width: 140px; font-family: inherit;
+}
+
+/* Bottom strip: a status line, not a panel */
+.status-strip {
+  display: flex; align-items: center; gap: 18px;
+  height: 36px; padding: 0 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px; color: var(--subtext);
+}
+.status-strip .live { color: #4ade80; }
+.status-strip .needs-you { color: var(--gate); }
+.status-strip .blocked { color: var(--blocked); }
+.status-strip .lost { color: var(--gate); }
+.status-strip .unreachable { color: var(--gate); font-weight: 600; }
+.status-strip button { background: transparent; border-color: transparent; color: var(--subtext); }
+.activity-tray {
+  border-top: 1px solid var(--border);
+  padding: 12px 14px; color: var(--subtext); font-size: 13px;
+}
+
+/* Empty / first run */
+.empty-state {
+  height: 100%; display: grid; place-content: center; gap: 14px; text-align: center;
+}
+.empty-state h1 { font-size: 22px; font-weight: 600; margin: 0; }
+.empty-state form { display: flex; gap: 8px; }
+.empty-state input { width: 300px; }
+.hint { color: var(--subtext); font-size: 12.5px; }
+
+/* Modals */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(5, 7, 9, 0.6);
+  display: grid; place-content: center; z-index: 20;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; width: 420px; display: grid; gap: 10px;
+}
+.modal h2 { margin: 0; font-size: 16px; }
+.privileged-note { color: var(--blocked); }
+
+/* Toasts (upstream rejections, verbatim) */
+.toasts { position: fixed; bottom: 52px; right: 16px; display: grid; gap: 8px; z-index: 30; }
+/* Notification centre (design decision 2026-10-02): a top-right toggle carrying the count; the list opens under it. */
+.notification-center { position: fixed; top: 8px; right: 14px; z-index: 40; }
+.notification-center > button { display: inline-flex; align-items: center; gap: 6px; }
+.notification-center > button.alerting { border-color: var(--gate); color: var(--gate); }
+.notification-center .count { background: var(--gate); color: #14100a; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 7px; }
+.notifications-panel {
+  position: absolute; right: 0; top: 40px; width: 320px; max-height: 60vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px;
+  animation: gf-enter-top var(--duration-moderate01) var(--ease-entrance) both;
+}
+.notification-row { min-width: 0; }
+.notification-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.notification-row button { flex-shrink: 0; }
+.notification-label { min-width: 0; flex: 1; font-size: 12.5px; color: var(--gate); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast {
+  background: var(--panel); border: 1px solid var(--blocked); border-radius: 10px;
+  padding: 10px 12px; width: 288px;
+  display: flex; gap: 10px; align-items: start;
+}
+.toast button { background: transparent; border: none; color: var(--subtext); padding: 0; }
+.toast-chrome { color: var(--subtext); font-style: italic; }
+
+/* Editor part (plain text only) */
+.editor-part textarea { width: 100%; font-family: ui-monospace, monospace; }
+.editor-base { white-space: pre-wrap; max-height: 200px; overflow: auto; font-size: 12px; }
+.editor-part .over { color: var(--blocked); }
+
+/* Accessible mirror of the canvas — visually hidden, fully reachable */
+.a11y-mirror {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); margin: -1px; padding: 0; list-style: none;
+}
+
+/* Stream part: instruments (cockpit-computed) vs claims (chunk bodies) */
+.stream-instruments { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 14px; font-size: 12px; color: var(--subtext); }
+.stream-instruments [data-testid='stream-upstream-gap'],
+.stream-instruments [data-testid='stream-computed-gap'],
+.stream-instruments [data-testid='stream-local-drop'] { color: var(--gate); }
+.pty-line.claim { border-left: 2px solid #2a3340; }
+.pty-line.stream-marker .pty-text { color: var(--gate); font-family: system-ui, sans-serif; }
+.pty-line .channel-label { color: var(--subtext); margin-right: 6px; }
+
+/* Generic node panel (assembly × capabilities) */
+.generic-panel {
+  position: absolute; left: 16px; bottom: 16px; width: 320px; max-height: 60%; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; z-index: 5;
+}
+.generic-panel header { display: flex; justify-content: space-between; align-items: center; }
+.generic-panel h2 { margin: 0; font-size: 15px; }
+.generic-action { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.generic-evidence { width: 100%; }
+.node-detail { margin: 8px 0; }
+.node-detail h3 { margin: 0 0 4px; font-size: 13px; }
+.node-detail-item { margin: 4px 0; }
+.node-detail-item .detail-text { margin: 2px 0; white-space: pre-wrap; font-size: 12px; }
+/* Grades: claim (upstream bytes, pinned) vs portal (live remote, unattested) */
+[data-grade='claim'] { border-left: 2px solid var(--accent); padding-left: 6px; }
+[data-grade='portal'] { border: 1px dashed var(--portal); padding: 4px 6px; }
+[data-grade='warranty']::before { content: 'instruments'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+.grade-label { font-size: 11px; color: var(--portal); margin: 0 0 4px; }
+.artifact-frame { width: 100%; min-height: 160px; border: 0; background: #fff; }
+img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
+/* Personal grade: the person's own local items (never sent). Its own hue, solid, never dashed. */
+/* --personal is injected from theme/defaultTheme.ts (chrome) with the rest. */
+[data-grade='personal'] { border-left: 3px solid var(--personal); padding-left: 8px; }
+.personal-label { color: var(--personal); }
+.personal-note textarea, .personal-panel textarea { width: 100%; box-sizing: border-box; background: rgba(244, 114, 182, 0.06); border-color: rgba(244, 114, 182, 0.4); }
+.personal-note h3 { display: flex; justify-content: space-between; align-items: baseline; }
+.personal-save { font-size: 11px; font-weight: 400; color: var(--subtext); }
+.personal-button { border-color: rgba(244, 114, 182, 0.5); color: var(--personal); }
+.personal-items { list-style: none; padding: 0; margin: 0; }
+.personal-items li { margin-bottom: 10px; }
+.personal-text { white-space: pre-wrap; font-size: 12px; margin: 4px 0; color: var(--text); }
+.personal-source { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.personal-panel input { width: 100%; box-sizing: border-box; }
+.personal-connect-banner { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 20; background: var(--panel); border: 1px solid var(--personal); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--personal); display: flex; gap: 10px; align-items: center; }
+/* Settings: an overlay panel over the cockpit — the canvas stays visible behind. */
+.settings-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(6, 9, 13, 0.62); display: flex; align-items: center; justify-content: center; }
+.settings-panel { position: relative; width: min(1240px, 94vw); height: min(860px, 90vh); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55); display: grid; grid-template-columns: 168px 1fr; overflow: hidden; }
+.settings-close { position: absolute; top: 10px; right: 12px; z-index: 2; width: 28px; height: 28px; padding: 0; background: transparent; border-color: transparent; color: var(--subtext); font-size: 14px; }
+.settings-close:hover { color: var(--text); border-color: var(--border); }
+.settings-rail { display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid var(--border); background: var(--panel); }
+.settings-rail h1 { font-size: 13px; margin: 2px 6px 10px; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.08em; }
+.settings-rail button { text-align: left; background: transparent; border-color: transparent; color: var(--subtext); padding: 6px 10px; border-radius: 6px; }
+.settings-rail button.active { color: var(--text); background: var(--bg); border-color: var(--border); }
+.settings-main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+/* Backend tabs: named from the wiring config files themselves. */
+.settings-srctabs { display: flex; gap: 4px; padding: 12px 44px 0 18px; border-bottom: 1px solid var(--border); }
+.settings-srctabs button { background: transparent; border: 1px solid transparent; border-bottom: none; color: var(--subtext); padding: 6px 14px; border-radius: 8px 8px 0 0; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.settings-srctabs button.active { color: var(--text); background: var(--panel); border-color: var(--border); }
+/* The scrollable body, with a scrollbar meant to be seen. */
+.settings-content { flex: 1; overflow-y: scroll; padding: 8px 18px 20px; }
+.settings-content::-webkit-scrollbar { width: 12px; }
+.settings-content::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 6px; border: 3px solid var(--bg); }
+.settings-content::-webkit-scrollbar-track { background: rgba(77, 163, 255, 0.10); }
+@supports not selector(::-webkit-scrollbar) { .settings-content { scrollbar-width: auto; scrollbar-color: var(--accent) rgba(77, 163, 255, 0.10); } }
+.settings-foot { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-top: 1px solid var(--border); background: var(--panel); }
+.settings-foot .spacer { flex: 1; }
+.settings-foot .primary { border-color: var(--accent); color: var(--accent); }
+.settings-status { font-size: 12px; color: var(--subtext); }
+.settings-status[data-state='failed'] { color: var(--blocked); }
+.settings-kind { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; margin: 12px 0; }
+.settings-kind h2 { font-size: 15px; margin: 4px 0 6px; font-family: ui-monospace, Menlo, monospace; }
+.settings-kind h3 { margin: 10px 0 4px; font-size: 11px; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.06em; }
+.settings-kind summary { cursor: pointer; color: var(--subtext); }
+.settings-row { display: grid; grid-template-columns: 200px 40px 1fr 170px; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.settings-row:last-child { border-bottom: none; }
+.settings-key { font-family: ui-monospace, Menlo, monospace; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+.settings-shared { font-family: system-ui, sans-serif; font-size: 10px; color: var(--pending); }
+.settings-preview { font-size: 18px; text-align: center; }
+.settings-pickers { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--subtext); }
+.picker-group { display: flex; gap: 3px; flex-wrap: wrap; }
+.glyph-pick { width: 24px; height: 24px; padding: 0; font-size: 12px; }
+/* Free glyph: any character or emoji, printed verbatim. */
+.glyph-free { width: 96px; height: 24px; padding: 0 8px; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; }
+.glyph-free.active { border-color: var(--accent); }
+/* Tone: the platform colour wheel + the resulting hex. */
+.tone-wheel { display: inline-flex; align-items: center; gap: 6px; }
+.tone-wheel input[type='color'] { width: 30px; height: 24px; padding: 1px 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.tone-wheel code { font-size: 11px; color: var(--subtext); font-variant-numeric: tabular-nums; }
+/* Segmented toggles for small closed choices. */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; background: transparent; color: var(--subtext); padding: 3px 10px; font-size: 12px; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.active { background: var(--accent); color: #0c1116; }
+.seg-label { display: inline-flex; align-items: center; gap: 6px; }
+.glyph-pick.active, .settings-pickers > button.active { border-color: var(--accent); }
+.settings-source { font-size: 11px; color: var(--subtext); }
+.settings-source[data-mine='yes'] { color: var(--accent); }
+.linklike { background: none; border: none; padding: 0; color: var(--subtext); text-decoration: underline; cursor: pointer; font-size: 11px; }
+.settings-entry:not(:disabled) { color: var(--text) !important; }
+.hint.warn { color: var(--gate); padding: 0 20px; }
+
+/* ---- Motion (ui-requirements §5.1–5.2) ------------------------------------
+   Durations/easings are theme tokens injected as CSS variables — no raw
+   numbers here (M-19). Entrances animate on mount; exits run on
+   [data-motion='exit'] while the presence helper keeps the node mounted.
+   Received values and attention are never animated (M-16/M-17). */
+@keyframes gf-fade-in { from { opacity: 0; } }
+@keyframes gf-fade-out { to { opacity: 0; } }
+@keyframes gf-rise-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes gf-drop-in { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes gf-slide-in { from { opacity: 0; transform: translateX(24px); } }
+@keyframes gf-slide-out { to { opacity: 0; transform: translateX(24px); } }
+/* "From outside": chrome surfaces enter from past their own edge (compositor-only, so free). */
+@keyframes gf-enter-right { from { transform: translateX(calc(100% + 24px)); } }
+@keyframes gf-leave-right { to { transform: translateX(calc(100% + 24px)); } }
+@keyframes gf-enter-left { from { transform: translateX(calc(-100% - 24px)); opacity: 0.4; } }
+@keyframes gf-enter-top { from { transform: translateY(-14px); opacity: 0; } }
+@keyframes gf-scale-in { from { opacity: 0; transform: scale(0.98); } }
+
+/* M-01/M-02: the node panel rises in, fades out; click-through while leaving. */
+.generic-panel[data-motion='enter'] { animation: gf-enter-left var(--duration-moderate02) var(--ease-entrance) both; }
+/* Content swap (another node picked while open): the panel stays, the content fades in. */
+.generic-panel .panel-swap { animation: gf-fade-in var(--duration-fast02) var(--ease-entrance) both; }
+.generic-panel[data-motion='exit'] { animation: gf-fade-out var(--duration-fast02) var(--ease-exit) both; pointer-events: none; }
+/* M-05/M-06/M-07: drawers slide in from the right and leave the way they came. */
+.inspector[data-motion='enter'], .gate-surface.panel[data-motion='enter'] { animation: gf-enter-right var(--duration-moderate02) var(--ease-entrance) both; }
+.inspector[data-motion='exit'], .gate-surface.panel[data-motion='exit'] { animation: gf-leave-right var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
+/* M-08: dim and panel start and end together. */
+.modal-backdrop[data-motion='enter'], .settings-overlay[data-motion='enter'] { animation: gf-fade-in var(--duration-moderate02) var(--ease-entrance) both; }
+.settings-overlay[data-motion='enter'] .settings-panel, .gate-surface.overlay[data-motion='enter'] { animation: gf-scale-in var(--duration-moderate02) var(--ease-entrance) both; }
+.modal-backdrop[data-motion='exit'], .settings-overlay[data-motion='exit'] { animation: gf-fade-out var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
+/* M-09: toasts come in from past the right edge; they never leave on their own. */
+.toast { animation: gf-enter-right var(--duration-moderate02) var(--ease-entrance) both; }
+
+/* M-18: reduced motion turns every entrance/exit off. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+}
+
+/* N-02: upstream unreachable for 5s+ — a pinned warning line until it recovers. */
+.unreachable-banner { background: rgba(255, 176, 46, 0.12); color: var(--gate); border-bottom: 1px solid var(--gate); padding: 5px 14px; font-size: 12.5px; }
+
+/* N-05: the send receipt lives at the button. */
+.send-receipt { font-size: 12px; }
+.send-receipt[data-state='sending'] { color: var(--pending); font-style: italic; }
+.send-receipt[data-state='confirmed'] { color: #6ee7a8; }
+.send-receipt[data-state='failed'] { color: var(--blocked); }
+
+
+/* D-08: keyboard focus is a white ring, distinct from selection blue. */
+:focus-visible { outline: 2px solid #ffffff; outline-offset: 1px; }
+
+/* D-06: inputs carry visible labels (placeholder is not a label). */
+.field-label { font-size: 11px; color: var(--subtext); }
+
+/* Radial canvas menu: a ring at the cursor; hold-drag highlights, release runs. */
+.radial-menu { position: fixed; z-index: 60; width: 2px; height: 2px; margin: -1px; pointer-events: none; }
+.radial-menu > * { pointer-events: auto; }
+.radial-hub { pointer-events: none !important; }
+.radial-menu[data-motion='enter'] { animation: gf-scale-in var(--duration-fast02) var(--ease-entrance) both; }
+.radial-menu[data-motion='exit'] { animation: gf-fade-out var(--duration-fast02) var(--ease-exit) both; pointer-events: none; }
+.radial-hub {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%);
+  max-width: 180px; text-align: center; font-size: 11.5px; color: var(--subtext);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 4px 10px;
+  pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.radial-hub:empty { display: none; }
+.radial-menu > button {
+  position: absolute; transform: translate(-50%, -50%);
+  max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+  padding: 5px 12px; font-size: 12.5px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.radial-menu > button.highlighted, .radial-menu > button:hover:not(:disabled), .radial-menu > button:focus-visible {
+  border-color: var(--accent); color: var(--text); background: var(--bg);
+}
+.radial-menu > button.danger { color: var(--blocked); }
+.radial-menu > button.danger.highlighted, .radial-menu > button.danger:hover:not(:disabled) { border-color: var(--blocked); }
+.radial-menu > button.context-disabled { color: var(--subtext); opacity: 0.7; }
+
+/* Rewire armed: the state lives on the canvas now that the toolbar has no toggle. */
+.rewire-banner {
+  position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 20;
+  background: var(--panel); border: 1px solid var(--pending); border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; color: var(--pending);
+}
+
+/* Personal panels and the notifications list share the same entrance family. */
+.personal-panel { animation: gf-enter-left var(--duration-moderate02) var(--ease-entrance) both; }
+
+/* ---- ② Stage (overview-to-work): the selected node's surface, beside the node.
+   Succeeds the bottom-left generic panel; .generic-panel styles above remain for
+   the personal panels that share them. */
+.node-stage {
+  /* An overlay over the canvas area: opening it never reflows the canvas, so a
+     double-click's two hits share one coordinate space; the canvas pans the
+     selected node clear of this region instead. */
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 6;
+  width: 40%; min-width: 360px; max-width: 620px; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  border-left: 1px solid var(--border); background: var(--panel);
+}
+.node-stage[data-motion='enter'] { animation: gf-enter-right var(--duration-moderate02) var(--ease-entrance) both; }
+.node-stage[data-motion='exit'] { animation: gf-leave-right var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
+.node-stage .stage-swap { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.stage-header {
+  display: flex; align-items: start; gap: 10px;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+}
+.stage-heading { flex: 1; min-width: 0; }
+.stage-header h2 { margin: 0; font-size: 15px; }
+.stage-header .hint { margin: 3px 0 0; }
+.stage-enter { border-color: var(--accent); color: var(--accent); font-weight: 600; white-space: nowrap; }
+.stage-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 20px; }
+.node-stage .state { color: var(--subtext); font-size: 11px; letter-spacing: 0.06em; margin: 2px 0; }
+.node-stage .blocked-reason { color: var(--blocked); }
+.node-stage .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.node-stage .privileged { border-color: rgba(255, 93, 93, 0.5); color: var(--blocked); }
+
+/* ---- ③ Work surface frame: the deep surface fills the body (no context strip — Esc is the only way back). */
+.work-surface { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.work-body { flex: 1; min-height: 0; display: flex; }
+/* The node-addressed deep surfaces take the room ③ gives them. */
+.work-body .inspector, .work-body .gate-surface.panel { width: auto; flex: 1; min-width: 0; border-left: none; }
+.work-body .execution-surface, .work-body .terminal-surface { flex: 1; }
+.work-assembly { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 28px; }
+.work-assembly h2 { margin: 0; font-size: 18px; }
+
+/* ---- Detail emphasis (wiring detail.emphasis — a config label match, no engine reading). */
+.node-detail-item[data-emphasis='config'] {
+  border-left: 3px solid var(--accent);
+  background: rgba(77, 163, 255, 0.06);
+  border-radius: 0 8px 8px 0; padding: 6px 8px 6px 8px;
+}
+.node-detail-item[data-emphasis='config'] > .field-label { color: var(--accent); }
+
+/* ---- 결정함 (decision inbox): top-right toggle + wide right drawer over the dimmed canvas. */
+.decision-inbox-toggle { position: fixed; top: 8px; right: 84px; z-index: 40; }
+.decision-inbox-toggle > button { display: inline-flex; align-items: center; gap: 6px; }
+.decision-inbox-toggle > button.alerting { border-color: var(--gate); color: var(--gate); }
+.decision-inbox-toggle .count, .inbox-header .count {
+  background: var(--gate); color: #14100a; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 7px;
+}
+.inbox-scrim { position: fixed; inset: 0; z-index: 50; background: rgba(5, 7, 9, 0.35); }
+.inbox-scrim[data-motion='enter'] { animation: gf-fade-in var(--duration-moderate01) var(--ease-entrance) both; }
+.inbox-scrim[data-motion='exit'] { animation: gf-fade-out var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
+.decision-inbox {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 60%; min-width: 560px;
+  display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--border);
+}
+.decision-inbox[data-motion='enter'] { animation: gf-enter-right var(--duration-moderate02) var(--ease-entrance) both; }
+.decision-inbox[data-motion='exit'] { animation: gf-leave-right var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
+.inbox-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+}
+.inbox-header .spacer { flex: 1; }
+.inbox-columns { flex: 1; min-height: 0; display: flex; }
+.inbox-queue {
+  width: 300px; flex-shrink: 0; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto; padding: 8px 0;
+}
+.inbox-queue .spacer { flex: 1; }
+.inbox-row {
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  background: transparent; border: none; border-left: 3px solid transparent; border-radius: 0;
+  padding: 10px 14px; text-align: left; cursor: pointer;
+}
+.inbox-row[data-selected='yes'] { background: var(--bg); border-left-color: var(--gate); }
+.inbox-row .inbox-row-main { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-row .inbox-row-meta { font-size: 11px; color: var(--subtext); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Folded ≠ hidden (§11): a decided row stays, dimmed, and expands back in full. */
+.inbox-row.decided { opacity: 0.55; }
+.inbox-decided-toggle {
+  margin-top: 10px; border: none; border-top: 1px solid var(--border); border-radius: 0;
+  background: transparent; color: var(--subtext); text-align: left; padding: 10px 14px; font-size: 12px;
+}
+.inbox-hints { padding: 10px 14px; margin: 0; font-size: 11px; }
+.inbox-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.inbox-detail-swap { display: flex; flex-direction: column; min-height: 0; flex: 1; animation: gf-fade-in var(--duration-fast02) var(--ease-entrance) both; }
+.inbox-detail-header {
+  display: flex; align-items: start; gap: 10px;
+  padding: 16px 24px 12px; border-bottom: 1px solid var(--border);
+}
+.inbox-detail-header > div { flex: 1; min-width: 0; }
+.inbox-detail-header h2 { margin: 0; font-size: 17px; }
+.inbox-detail-header button { border-color: var(--accent); color: var(--accent); white-space: nowrap; }
+.inbox-detail-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 24px 20px; }
+.inbox-detail .hint { margin-top: 4px; }
+
+/* The inbox decision bar: pinned under the scrolling detail; evidence renders stay bounded. */
+.inbox-actions { border-top: 1px solid var(--border); padding: 10px 24px 14px; max-height: 45%; overflow-y: auto; }
+.stage-foot { border-top: 1px solid var(--border); padding: 8px 16px; margin: 0; }
+
+/* Queue-row intent badge: the item's own decision intent, per PendingIntentState. */
+.inbox-badge { font-size: 10px; border-radius: 4px; padding: 0 5px; margin-left: 6px; border: 1px solid var(--border); }
+.inbox-badge[data-state='sending'] { color: var(--pending); border-color: var(--pending); font-style: italic; }
+.inbox-badge[data-state='unconfirmed'] { color: var(--gate); border-color: var(--gate); }
+.inbox-badge[data-state='rejected'] { color: var(--blocked); border-color: var(--blocked); }
+
+/* ---- ③ floating queue chip (design decision ④: 결정함 대기열이 ③에 동반된다). The ONE
+   floating element over the strip-less work surface, present only when a
+   decision-inbox queue was carried in. */
+.work-queue {
+  position: absolute; top: 10px; right: 16px; z-index: 30;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--subtext);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 4px 6px 4px 12px;
+  animation: gf-enter-top var(--duration-moderate01) var(--ease-entrance) both;
+}
+.work-queue button { padding: 2px 8px; font-size: 11px; }

@@ -1,0 +1,267 @@
+{
+  "version": "0.1.0",
+  "render": {
+    "queued": {
+      "glyph": "◌",
+      "tone": "#5b6672"
+    },
+    "running": {
+      "glyph": "▶",
+      "tone": "#4da3ff"
+    },
+    "waiting": {
+      "glyph": "◷",
+      "tone": "#ffb02e"
+    },
+    "paused": {
+      "glyph": "❙❙",
+      "tone": "#e8a33d"
+    },
+    "blocked": {
+      "glyph": "■",
+      "tone": "#ff5d5d"
+    },
+    "completed": {
+      "glyph": "✓",
+      "tone": "#6ee7a8"
+    },
+    "failed": {
+      "glyph": "✕",
+      "tone": "#ff5d5d"
+    },
+    "approved": {
+      "glyph": "✓",
+      "tone": "#6ee7a8"
+    },
+    "rejected": {
+      "glyph": "✕",
+      "tone": "#5b6672"
+    },
+    "superseded": {
+      "glyph": "○",
+      "tone": "#5b6672"
+    },
+    "changes_requested": {
+      "glyph": "↺",
+      "tone": "#ffb02e"
+    },
+    "active": {
+      "glyph": "▶",
+      "tone": "#4da3ff"
+    },
+    "cancelled": {
+      "glyph": "✕",
+      "tone": "#5b6672"
+    },
+    "unstated": {
+      "glyph": "○",
+      "tone": "#dde3ea"
+    }
+  },
+  "relations": {
+    "dependency": {
+      "style": "solid",
+      "arrange": "flow"
+    },
+    "spawn": {
+      "style": "muted",
+      "arrange": "flow"
+    },
+    "produces": {
+      "style": "bold",
+      "arrange": "flow"
+    },
+    "gate": {
+      "style": "double",
+      "arrange": "flow"
+    },
+    "member-of": {
+      "style": "muted",
+      "arrange": "contain"
+    },
+    "contains": {
+      "style": "muted",
+      "arrange": "contain",
+      "direction": "out"
+    }
+  },
+  "attention": [
+    {
+      "match": {
+        "cause": "needs_human"
+      },
+      "mechanism": "interrupt"
+    },
+    {
+      "match": {
+        "cause": "waiting_for_human"
+      },
+      "mechanism": "interrupt"
+    },
+    {
+      "match": {
+        "cause": "flagged"
+      },
+      "mechanism": "ambient"
+    }
+  ],
+  "viewers": {
+    "text/plain": "text",
+    "text/markdown": "markdown-source",
+    "image/svg+xml": "html-isolated",
+    "image/*": "image",
+    "application/octet-stream": "fallback"
+  },
+  "kinds": {
+    "workspace": {
+      "parts": [
+        {
+          "id": "mission-name",
+          "part": "text",
+          "action": "mission.create"
+        },
+        {
+          "id": "create-mission",
+          "part": "send",
+          "action": "mission.create",
+          "requires": [
+            "mission-name"
+          ]
+        }
+      ]
+    },
+    "goal": {
+      "parts": [
+        {
+          "id": "status",
+          "part": "glyph"
+        },
+        {
+          "id": "kind",
+          "part": "label",
+          "source": "kind"
+        }
+      ]
+    },
+    "mission": {
+      "parts": [
+        {
+          "id": "status",
+          "part": "glyph"
+        },
+        {
+          "id": "kind",
+          "part": "label",
+          "source": "kind"
+        }
+      ]
+    },
+    "task": {
+      "parts": [
+        {
+          "id": "status",
+          "part": "glyph"
+        },
+        {
+          "id": "state",
+          "part": "label",
+          "source": "state"
+        },
+        {
+          "id": "instruction",
+          "part": "text",
+          "action": "task.instruct"
+        },
+        {
+          "id": "send-instruction",
+          "part": "send",
+          "action": "task.instruct",
+          "requires": [
+            "instruction"
+          ]
+        },
+        {
+          "id": "pause",
+          "part": "send",
+          "action": "task.pause",
+          "requires": []
+        },
+        {
+          "id": "resume",
+          "part": "send",
+          "action": "task.resume",
+          "requires": []
+        },
+        {
+          "id": "session",
+          "part": "stream",
+          "source": {
+            "role": "session"
+          },
+          "retainItems": 200,
+          "retainBytes": 65536
+        }
+      ]
+    },
+    "gate": {
+      "parts": [
+        {
+          "id": "status",
+          "part": "glyph"
+        },
+        {
+          "id": "state",
+          "part": "label",
+          "source": "state"
+        }
+      ]
+    },
+    "deliverable": {
+      "parts": [
+        {
+          "id": "status",
+          "part": "glyph"
+        },
+        {
+          "id": "kind",
+          "part": "label",
+          "source": "kind"
+        },
+        {
+          "id": "artifact",
+          "part": "viewer",
+          "source": {
+            "artifact": 0
+          }
+        }
+      ]
+    }
+  },
+  "lenses": [
+    {
+      "id": "needs-you",
+      "label": "Needs you",
+      "match": {
+        "attention": true
+      }
+    },
+    {
+      "id": "running",
+      "label": "Running",
+      "match": {
+        "states": [
+          "running"
+        ]
+      }
+    },
+    {
+      "id": "blocked",
+      "label": "Blocked",
+      "match": {
+        "states": [
+          "blocked"
+        ]
+      }
+    }
+  ]
+}

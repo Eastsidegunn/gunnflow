@@ -1,0 +1,21 @@
+{
+  "name": "gunnflow",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Gunnflow — a backend-agnostic human cockpit: visualize, decide and steer node-relation systems whose truth lives in a backend.",
+  "license": "MIT",
+  "scripts": {
+    "boundary-lint": "node scripts/boundary-lint.mjs",
+    "render-sweep": "node scripts/render-sweep.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "verify": "pnpm boundary-lint && pnpm typecheck && pnpm test && pnpm build",
+    "dev": "pnpm -r --parallel dev",
+    "e2e": "pnpm --filter @gunnflow/web e2e"
+  },
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22"
+  }
+}
