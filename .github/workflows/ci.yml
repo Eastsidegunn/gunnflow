@@ -24,7 +24,30 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Also part of `pnpm verify`; its own step so a data finding is visible at a glance.
+      - name: Data scan (personal data and environment details)
+        run: pnpm data-scan
       - run: pnpm verify
+
+  # Secrets anywhere in history, on every push and pull request.
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history: a secret removed later is still leaked
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          # Required by the action for pull requests (it reads the PR's commits).
+          # No GITLEAKS_LICENSE: not needed for a repository on a personal account.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The workflow token is read-only, so the action cannot post PR comments; findings
+          # show in the job log and summary instead.
+          GITLEAKS_ENABLE_COMMENTS: 'false'
 
   # Separate job so its status is visible on its own; whether it is a required
   # check is a branch-protection setting.

@@ -10,7 +10,11 @@ Gunnflow is alpha software built in public. Issues and small pull requests are w
 
 ## Before opening a pull request
 
-- `pnpm verify` must pass (boundary-lint, typecheck, Vitest, build) — CI runs the same.
+- `pnpm verify` must pass (boundary-lint, data-scan, typecheck, Vitest, build) — CI runs the same.
+- No personal data or environment details in the tree: `pnpm data-scan` flags home paths with a
+  username, private/CGNAT IPv4 addresses, tailnet hosts and tracked data files (mark a deliberate
+  fixture line with `data-scan:allow`); patterns of your own can go in
+  `~/.gunnflow/data-scan.local.json` (array of `{ name, pattern, flags }`) without being published.
 - UI behaviour changes: run `pnpm e2e` (first `pnpm --filter @gunnflow/web exec playwright install chromium`),
   add or update a scenario in `apps/web/e2e/`, and attach a screenshot to the PR.
 - Keep each PR to one behaviour.
