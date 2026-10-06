@@ -1,0 +1,55 @@
+{
+  "name": "@gunnflow/contract",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "The Gunnflow backend contract: types, runtime validator, and the conformance suite backends run against themselves. No runtime dependencies.",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./conformance": "./src/conformance/index.ts",
+    "./wiring": "./src/wiring/index.ts"
+  },
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./conformance": {
+        "types": "./dist/conformance/index.d.ts",
+        "import": "./dist/conformance/index.js"
+      },
+      "./wiring": {
+        "types": "./dist/wiring/index.d.ts",
+        "import": "./dist/wiring/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "WIRE.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "peerDependencies": {
+    "vitest": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$comment": "Data for scripts/boundary-lint.mjs: backend names the core (apps/, packages/, testing/) must never spell, and cross-repo packages/paths it must never import. A gitignored boundary-names.local.json beside this file is merged when present. The lint code itself names no backend.",
+  "backendNames": [
+    { "name": "Rhizome", "pattern": "rhizome", "flags": "i" },
+    { "name": "JANUS", "pattern": "\\bjanus\\b", "flags": "i" }
+  ],
+  "forbiddenPackages": [],
+  "siblingRepos": ["Rhizome", "JANUS"]
+}
