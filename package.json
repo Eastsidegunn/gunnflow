@@ -6,11 +6,12 @@
   "license": "MIT",
   "scripts": {
     "boundary-lint": "node scripts/boundary-lint.mjs",
+    "data-scan": "node scripts/data-scan.mjs",
     "render-sweep": "node scripts/render-sweep.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
-    "verify": "pnpm boundary-lint && pnpm typecheck && pnpm test && pnpm build",
+    "verify": "pnpm boundary-lint && pnpm data-scan && pnpm typecheck && pnpm test && pnpm build",
     "dev": "pnpm -r --parallel dev",
     "e2e": "pnpm --filter @gunnflow/web e2e"
   },
