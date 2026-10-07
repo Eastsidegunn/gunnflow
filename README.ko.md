@@ -31,7 +31,7 @@
 server에 대해 end-to-end로 동작합니다. [`packages/contract/WIRE.md`](packages/contract/WIRE.md)를
 구현하는 백엔드는 `direct` upstream으로 연결할 수 있습니다. 이 저장소 밖에서 유지되는 백엔드
 adapter의 동작 여부는 여기서 검증할 수 없습니다. 계약 패키지 `@gunnflow/contract`는 현재
-**0.3.0**으로 버전 관리되며 minor 버전 사이에도 바뀔 수 있습니다. 아직 거친 부분이 있습니다.
+**0.3.1**으로 버전 관리되며 minor 버전 사이에도 바뀔 수 있습니다. 아직 거친 부분이 있습니다.
 
 ## 30초 만에 시작하기
 
