@@ -13,7 +13,8 @@
     "build": "pnpm -r build",
     "verify": "pnpm boundary-lint && pnpm data-scan && pnpm typecheck && pnpm test && pnpm build",
     "dev": "pnpm -r --parallel dev",
-    "e2e": "pnpm --filter @gunnflow/web e2e"
+    "e2e": "pnpm --filter @gunnflow/web e2e",
+    "contract:pack-check": "node scripts/contract-pack-check.mjs"
   },
   "packageManager": "pnpm@10.34.5",
   "engines": {

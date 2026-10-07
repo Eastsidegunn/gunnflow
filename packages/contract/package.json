@@ -1,10 +1,30 @@
 {
   "name": "@gunnflow/contract",
   "version": "0.3.1",
-  "private": true,
   "type": "module",
   "description": "The Gunnflow backend contract: types, runtime validator, and the conformance suite backends run against themselves. No runtime dependencies.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eastsidegunn/gunnflow.git",
+    "directory": "packages/contract"
+  },
+  "homepage": "https://github.com/Eastsidegunn/gunnflow/tree/main/packages/contract#readme",
+  "bugs": {
+    "url": "https://github.com/Eastsidegunn/gunnflow/issues"
+  },
+  "keywords": [
+    "gunnflow",
+    "contract",
+    "backend",
+    "conformance",
+    "agents",
+    "cockpit"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
@@ -13,6 +33,7 @@
     "./wiring": "./src/wiring/index.ts"
   },
   "publishConfig": {
+    "access": "public",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
