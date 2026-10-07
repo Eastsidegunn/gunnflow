@@ -263,5 +263,11 @@
         ]
       }
     }
-  ]
+  ],
+  "detail": {
+    "emphasis": [
+      "권고",
+      "recommendation"
+    ]
+  }
 }
