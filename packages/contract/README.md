@@ -10,7 +10,7 @@ Gunnflow가 소유하는 백엔드 계약. 타입, 런타임 validator, 어댑�
   ```sh
   pnpm --filter @gunnflow/contract build
   pnpm --filter @gunnflow/contract pack --pack-destination <dir>
-  npm install <dir>/gunnflow-contract-0.3.0.tgz   # 또는 "file:<경로>"
+  npm install <dir>/gunnflow-contract-0.3.1.tgz   # 또는 "file:<경로>"
   ```
   pack 시 `publishConfig`가 적용되어 exports가 빌드 산출물(`dist/`, `.d.ts` 포함)을 가리킨다.
 - **향후 publish**: 같은 `publishConfig`로 레지스트리에 올린다(현재 `private: true`).
@@ -34,7 +34,7 @@ import { CONTRACT_VERSION, validateIntent, lookupCapability, type Intent } from 
 import { defineConformanceSuite } from '@gunnflow/contract/conformance';
 
 defineConformanceSuite('my-backend', async () => ({
-  contractVersion: '0.3.0',
+  contractVersion: '0.3.1',
   nodes: () => myBackend.nodes(),            // { id, capabilities, artifacts, streams? }[]
   relay: (intent) => myBackend.relay(intent), // 전달 전에 validateIntent로 구조 검사할 것
   settle: () => myBackend.idle(),             // 선택: 비동기 반영 대기
@@ -78,4 +78,6 @@ sha256), stream seq의 연속성과 gap 귀속.
 
 > 0.2.0: adds the optional node-detail surface (`NodeDetail`, `validateNodeDetail`, `DIRECT_WIRE.detail`, WIRE.md §detail). Additive, but 0.x compatibility is minor-strict: consumers must re-pack and claim `contractVersion: '0.2.x'`.
 
+> 0.3.1: packaging only — the optional `vitest` peer (used by the conformance suite) now accepts `^3 || ^4 || ^5`. No contract change; consumers claiming `0.3.x` need nothing.
+>
 > 0.3.0: adds the optional execution surface (`ExecutionSnapshot`, `validateExecutionSnapshot`, `DIRECT_WIRE.execution`, WIRE.md §execution — GET + SSE full-snapshot republish). Additive, but 0.x compatibility is minor-strict: consumers must re-pack and claim `contractVersion: '0.3.x'`.

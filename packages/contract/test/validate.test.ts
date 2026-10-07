@@ -36,9 +36,9 @@ const node = {
 const intent = (action: string, extra: object = {}) => ({ nodeId: 'n', action, idempotencyKey: 'k', ...extra });
 
 describe('contract', () => {
-  it('exports a semver version — 0.3.0 adds the execution surface (consumers re-pack and claim 0.3.x)', () => {
+  it('exports a semver version — 0.3.x: execution surface (0.3.0), packaging-only peer widening (0.3.1)', () => {
     expect(CONTRACT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(CONTRACT_VERSION).toBe('0.3.0');
+    expect(CONTRACT_VERSION).toBe('0.3.1');
     expect(isCompatibleContractVersion('0.3.1', CONTRACT_VERSION)).toBe(true);
     expect(isCompatibleContractVersion('0.2.0', CONTRACT_VERSION)).toBe(false);
   });

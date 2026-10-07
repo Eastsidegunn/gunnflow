@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 aims to follow [Semantic Versioning](https://semver.org/). The contract package
 `@gunnflow/contract` is versioned separately; its version is noted where it changes.
 
+## [Unreleased]
+
+- `@gunnflow/contract` 0.3.1: the optional `vitest` peer (conformance suite) accepts `^3 || ^4 || ^5`. Packaging only — no contract change.
+
 ## [0.1.0] - Unreleased
 
 First public snapshot. Alpha: works end to end against the in-repo simulator
