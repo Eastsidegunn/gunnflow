@@ -272,7 +272,7 @@ export function DecisionInbox(props: {
         class="decision-inbox"
         data-motion={props.motion ?? 'enter'}
         data-testid="decision-inbox"
-        role="dialog"
+        role="complementary"
         aria-label="결정함"
         ref={(el) => onCleanup(manageFocus(el))}
       >

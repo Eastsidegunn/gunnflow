@@ -670,12 +670,14 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 .decision-inbox-toggle .count, .inbox-header .count {
   background: var(--gate); color: #14100a; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 7px;
 }
-.inbox-scrim { position: fixed; inset: 0; z-index: 50; background: rgba(5, 7, 9, 0.35); }
+/* Non-modal (S3): the dimmed canvas left of the drawer keeps taking pointer input; only the drawer catches it. */
+.inbox-scrim { position: fixed; inset: 0; z-index: 50; background: rgba(5, 7, 9, 0.35); pointer-events: none; }
 .inbox-scrim[data-motion='enter'] { animation: gf-fade-in var(--duration-moderate01) var(--ease-entrance) both; }
 .inbox-scrim[data-motion='exit'] { animation: gf-fade-out var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
 .decision-inbox {
   position: absolute; top: 0; right: 0; bottom: 0; width: 60%; min-width: 560px;
   display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--border);
+  pointer-events: auto;
 }
 .decision-inbox[data-motion='enter'] { animation: gf-enter-right var(--duration-moderate02) var(--ease-entrance) both; }
 .decision-inbox[data-motion='exit'] { animation: gf-leave-right var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }

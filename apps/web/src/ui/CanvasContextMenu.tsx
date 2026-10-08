@@ -16,6 +16,7 @@
  */
 import { For, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { NodeProjection } from '@gunnflow/contract';
+import { actionLabel } from '@gunnflow/contract/wiring';
 import type { WorkspaceStores } from '../state/stores.js';
 import { resolveParts, type ResolvedAction } from '../canvas/parts.js';
 import { actionGate, opensPanel } from '../state/genericActions.js';
@@ -40,6 +41,8 @@ export interface ContextMenuState {
 interface Item {
   id: string;
   label: string;
+  /** The raw action name behind a config label (shown in the tooltip). */
+  raw?: string;
   danger?: boolean;
   disabled?: boolean;
   reason?: string;
@@ -72,7 +75,8 @@ export function CanvasContextMenu(props: {
     const disabled = a.level !== 'enabled';
     return {
       id: `context-item-${a.action}`,
-      label: a.action,
+      label: actionLabel(wiring.config, a.action),
+      raw: a.action,
       danger: DANGER_NAME.test(a.action),
       disabled,
       reason: disabled ? ((gate as { reason?: string }).reason ?? 'disabled by upstream') : undefined,
@@ -263,7 +267,7 @@ export function CanvasContextMenu(props: {
               highlighted: highlight() === i(),
             }}
             disabled={item.disabled}
-            title={item.reason ?? item.label}
+            title={item.reason ?? (item.raw && item.raw !== item.label ? `${item.label} (${item.raw})` : item.label)}
             style={{
               left: `${Math.round(Math.cos(angleOf(i())) * geometry().radius)}px`,
               top: `${Math.round(Math.sin(angleOf(i())) * geometry().radius)}px`,

@@ -106,6 +106,7 @@ export function App() {
         // Perf/e2e entry for tasks without a workspace session link.
         openExecution: (taskId: string) => setExecutionTaskId(taskId),
         camera: () => stores.viewState.camera(),
+        selectedId: () => stores.selection.selectedId(),
       };
     }
     // Deep link: restore task selection + its work surface from the URL hash.
@@ -297,7 +298,10 @@ export function App() {
                 onArmRewire={() => setRewireArmed(true)}
                 onDisarmRewire={() => setRewireArmed(false)}
                 onOpenPersonalList={() => setPersonalOpen(true)}
-                onOpenNode={(id, _kind) => enterWork(id)}
+                onOpenNode={(id, _kind) => {
+                  // While the inbox is open the canvas is for looking (S3): no ③ from a canvas gesture.
+                  if (!inboxOpen()) enterWork(id);
+                }}
               />
             </Show>
             {/* The personal layer's panels yield to a selected node. */}
@@ -320,7 +324,8 @@ export function App() {
             {/* ② stage: an OVERLAY over the canvas (the canvas never reflows, so a
                 double-click's two hits see one coordinate space); the canvas pans
                 the selected node clear of it instead (CanvasViewport). */}
-            <Show when={stagePresence.held()}>
+            {/* While the inbox is open a canvas click only highlights (S3): no ② stage opens over it. */}
+            <Show when={!inboxOpen() && stagePresence.held()}>
               {(id) => (
                 <NodeStage
                   stores={stores}

@@ -123,8 +123,15 @@ test('action bar: config labels, primary first, required reason expands in place
   await expect(approve).toHaveText('Approve');
   await expect(approve).toHaveClass(/primary/);
   await expect(page.getByTestId('generic-text-gate.approve')).toHaveAttribute('placeholder', 'Approve 메모 (선택)');
-  // No label in the config: the raw action name.
-  await expect(page.getByTestId('generic-send-gate.reject')).toHaveText('gate.reject');
+  // No label in the config: the raw action name. Its optional reason is not the inline one,
+  // so the button opens an expand-in-place form (it never sends a text it does not show).
+  await expect(page.getByTestId('generic-open-gate.reject')).toHaveText('gate.reject');
+  await expect(page.getByTestId('generic-send-gate.reject')).toHaveCount(0);
+  await page.getByTestId('generic-open-gate.reject').click();
+  await expect(page.getByTestId('generic-text-gate.reject')).toHaveAttribute('placeholder', 'gate.reject 사유 (선택)');
+  // Optional: 보내기 runs with the field empty.
+  await expect(page.getByTestId('generic-send-gate.reject')).toBeEnabled();
+  await page.getByTestId('generic-cancel-gate.reject').click();
 
   // Required text: the button opens a multi-line field above the bar.
   const opener = page.getByTestId('generic-open-gate.requestChanges');
@@ -213,25 +220,121 @@ test('no declared action: the Korean notice instead of buttons', async ({ page }
   await expect(page.getByTestId('action-bar')).toHaveCount(0);
 });
 
-test('camera: the canvas frames the selection beside the drawer; closing restores the camera the person had', async ({ page }) => {
-  await open(page);
-  const camera = () => page.evaluate(() => (window as unknown as { __gunnflowDebug: { camera: () => { x: number; y: number; zoom: number } } }).__gunnflowDebug.camera());
-  // The person's own view first: a zoom (it also stops the automatic re-fit).
-  const host = page.getByTestId('canvas-host');
-  const box = (await host.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+type Debug = {
+  camera: () => { x: number; y: number; zoom: number };
+  selectedId: () => string | null;
+  nodeRect: (id: string) => { x: number; y: number; w: number; h: number } | undefined;
+};
+const camera = (page: Page) => page.evaluate(() => (window as unknown as { __gunnflowDebug: Debug }).__gunnflowDebug.camera());
+const canvasSelection = (page: Page) => page.evaluate(() => (window as unknown as { __gunnflowDebug: Debug }).__gunnflowDebug.selectedId());
+/** Where the canvas draws a node right now, in client coordinates. */
+const drawnCenter = (page: Page, id: string) =>
+  page.evaluate((nodeId) => {
+    const dbg = (window as unknown as { __gunnflowDebug: Debug }).__gunnflowDebug;
+    const r = dbg.nodeRect(nodeId);
+    if (!r) return null;
+    const cam = dbg.camera();
+    const host = document.querySelector('[data-testid="canvas-host"] canvas')!.getBoundingClientRect();
+    return { x: host.left + host.width / 2 + (r.x + r.w / 2 - cam.x) * cam.zoom, y: host.top + host.height / 2 + (r.y + r.h / 2 - cam.y) * cam.zoom };
+  }, id);
+/** The person's own view first: a wheel zoom (it also stops the automatic re-fit); returns the settled camera. */
+async function personZoom(page: Page) {
+  const box = (await page.getByTestId('canvas-host').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 4, box.y + box.height / 2);
   await page.mouse.wheel(0, 300);
   await page.waitForTimeout(400);
-  const before = await camera();
+  return camera(page);
+}
+
+test('non-modal: with the inbox open the canvas pans, zooms and highlights a clicked node; the inbox selection stays', async ({ page }) => {
+  await open(page);
+  await page.getByTestId('decision-inbox-toggle').click();
+  const inbox = page.getByTestId('decision-inbox');
+  await expect(inbox).toBeVisible();
+  await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
+  await expect(inbox).not.toHaveAttribute('aria-modal', 'true');
+  await page.waitForTimeout(600); // let the framing settle
+
+  // Wheel over the visible canvas zooms (the scrim no longer swallows it).
+  const host = (await page.getByTestId('canvas-host').boundingBox())!;
+  const drawerLeft = (await inbox.boundingBox())!.x;
+  const z0 = (await camera(page)).zoom;
+  await page.mouse.move(host.x + (drawerLeft - host.x) / 2, host.y + host.height / 2);
+  await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await camera(page)).zoom).not.toBe(z0);
+
+  // A click on a drawn node left of the drawer selects it on the canvas only.
+  const c = await drawnCenter(page, 't-research');
+  expect(c).not.toBeNull();
+  expect(c!.x).toBeLessThan(drawerLeft);
+  await page.mouse.click(c!.x, c!.y);
+  await expect.poll(() => canvasSelection(page)).toBe('t-research');
+  await expect(inbox).toBeVisible();
+  await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
+  await expect(page.getByTestId('inbox-detail-title')).toHaveText('Publish?');
+  // No stage and no ③ from that click.
+  await expect(page.getByTestId('node-stage')).toHaveCount(0);
+  await page.mouse.dblclick(c!.x, c!.y);
+  await expect(inbox).toBeVisible();
+  await expect(page.getByTestId('task-inspector')).toHaveCount(0);
+
+  // One Esc, one level: the inbox closes first.
+  await page.keyboard.press('Escape');
+  await expect(inbox).toBeHidden();
+});
+
+test('a text typed on another surface is never sent invisibly from the bar', async ({ page }) => {
+  await open(page);
+  // ② stage for the gate: the stacked controls show every text field.
+  await page.getByTestId('node-g-publish').dispatchEvent('click');
+  await expect(page.getByTestId('node-stage')).toBeVisible();
+  await page.getByTestId('generic-text-gate.reject').fill('typed on the stage');
+  await page.getByTestId('decision-inbox-toggle').click();
+  await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
+  // In the bar the reject reason is not shown, so nothing can send it: only an opener exists.
+  await expect(page.getByTestId('generic-send-gate.reject')).toHaveCount(0);
+  await page.getByTestId('generic-open-gate.reject').click();
+  // Opened, the composing text is on screen before any send.
+  await expect(page.getByTestId('generic-text-gate.reject')).toHaveValue('typed on the stage');
+  await expect(page.getByTestId('receipt-gate.reject')).toHaveCount(0);
+});
+
+test('reduced motion: open → close restores the exact camera; so does open → ③ → back', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open(page);
+  const before = await personZoom(page);
 
   await page.getByTestId('decision-inbox-toggle').click();
   await expect(page.getByTestId('decision-inbox')).toBeVisible();
-  await expect.poll(camera).not.toEqual(before);
+  await expect.poll(() => camera(page)).not.toEqual(before);
+  await page.getByTestId('inbox-close').click();
+  await expect(page.getByTestId('decision-inbox')).toBeHidden();
+  await expect.poll(() => camera(page)).toEqual(before);
+
+  // Open again, enter ③ from the inbox (the canvas unmounts), come back: the remount's fit must not win.
+  await page.getByTestId('decision-inbox-toggle').click();
+  await expect.poll(() => camera(page)).not.toEqual(before);
+  await page.getByTestId('inbox-enter').click();
+  await expect(page.getByTestId('decision-inbox')).toBeHidden();
+  await expect(page.getByTestId('canvas-host')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('canvas-host')).toBeVisible();
+  await page.waitForTimeout(800); // past the stage pan-aside delay
+  await expect.poll(() => camera(page)).toEqual(before);
+});
+
+test('camera: the canvas frames the selection beside the drawer; closing restores the camera the person had', async ({ page }) => {
+  await open(page);
+  const before = await personZoom(page);
+
+  await page.getByTestId('decision-inbox-toggle').click();
+  await expect(page.getByTestId('decision-inbox')).toBeVisible();
+  await expect.poll(() => camera(page)).not.toEqual(before);
   // Moving the selection frames again (both items share their mission box, so the frame may coincide).
   await page.getByTestId('inbox-row-c-silent').click();
   await expect(page.getByTestId('inbox-row-c-silent')).toHaveAttribute('data-selected', 'yes');
 
   await page.getByTestId('inbox-close').click();
   await expect(page.getByTestId('decision-inbox')).toBeHidden();
-  await expect.poll(camera).toEqual(before);
+  await expect.poll(() => camera(page)).toEqual(before);
 });

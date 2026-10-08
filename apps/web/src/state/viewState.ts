@@ -34,6 +34,8 @@ export function createViewState() {
     equals: (a, b) => a?.nodeId === b?.nodeId && (a === undefined) === (b === undefined),
   });
   const [inboxSavedCamera, setInboxSavedCamera] = createSignal<Camera | null>(null);
+  /** The inbox restored this camera on close: automatic fits leave it alone until the person moves the view. */
+  const [cameraHeld, setCameraHeld] = createSignal(false);
 
   return {
     camera,
@@ -46,17 +48,21 @@ export function createViewState() {
     /** The camera from before the inbox opened (restored on close); null when none is held. */
     inboxSavedCamera,
     setInboxSavedCamera,
+    cameraHeld,
+    setCameraHeld,
     /** An automatic camera move (framing, restore): view state, not a person's pan. */
     setCameraView(c: Camera) {
       setCamera(c);
     },
     panBy(dx: number, dy: number) {
       setUserMoved(true);
+      setCameraHeld(false);
       const c = camera();
       setCamera({ ...c, x: c.x - dx / c.zoom, y: c.y - dy / c.zoom });
     },
     zoomAt(factor: number, min = 0.15, max = 2.5) {
       setUserMoved(true);
+      setCameraHeld(false);
       const c = camera();
       const zoom = Math.min(max, Math.max(min, c.zoom * factor));
       setCamera({ ...c, zoom });

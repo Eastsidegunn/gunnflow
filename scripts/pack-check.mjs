@@ -5,8 +5,9 @@
 // must be inside. Per package:
 //   packages/contract       CONTRACT_VERSION equals the package version; WIRE.md and the
 //                           conformance / wiring entry points are inside.
-//   packages/upstream-port  the packed peer range for @gunnflow/contract is a caret range that
-//                           still admits the oldest contract consumers use (0.3.1).
+//   packages/upstream-port  the packed peer range for @gunnflow/contract is caret ranges (joined by ||)
+//                           admitting both the oldest contract consumers use (0.3.1) and the
+//                           contract version in this tree (packages/contract/package.json).
 // Every main/types/exports target must exist in the tarball, and each package's required
 // export entries must be present.
 //
@@ -18,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { rangeAdmits } from './peer-range.mjs';
 
 const PACKAGES = {
   'packages/contract': {
@@ -37,8 +39,13 @@ const PACKAGES = {
     exports: ['.'],
     check(_read, manifest, problems) {
       const range = manifest.peerDependencies?.['@gunnflow/contract'];
-      if (typeof range !== 'string' || !range) problems.push('no peer range for @gunnflow/contract');
-      else if (!caretAdmits(range, OLDEST_CONTRACT)) problems.push(`peer range ${range} for @gunnflow/contract must be a caret range admitting ${OLDEST_CONTRACT}`);
+      if (typeof range !== 'string' || !range) {
+        problems.push('no peer range for @gunnflow/contract');
+      } else {
+        for (const v of [OLDEST_CONTRACT, CURRENT_CONTRACT]) {
+          if (!rangeAdmits(range, v)) problems.push(`peer range ${range} for @gunnflow/contract must be caret ranges (joined by ||) admitting ${v}`);
+        }
+      }
       return `version ${manifest.version}, peer @gunnflow/contract ${range}`;
     },
   },
@@ -46,17 +53,8 @@ const PACKAGES = {
 
 /** The oldest contract version a published upstream-port must still install next to. */
 const OLDEST_CONTRACT = '0.3.1';
-/** `^M.m.p` admits `v` (0.x caret: same major and minor, patch >= p; 1+: same major, >=). */
-function caretAdmits(range, v) {
-  const r = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
-  const x = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
-  if (!r || !x) return false;
-  const [rM, rm, rp] = r.slice(1).map(Number);
-  const [xM, xm, xp] = x.slice(1).map(Number);
-  if (rM !== xM) return false;
-  if (rM === 0) return rm === xm && xp >= rp;
-  return xm > rm || (xm === rm && xp >= rp);
-}
+/** The contract version in this tree: a published upstream-port must also install next to it. */
+const CURRENT_CONTRACT = JSON.parse(readFileSync(new URL('../packages/contract/package.json', import.meta.url), 'utf8')).version;
 
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');

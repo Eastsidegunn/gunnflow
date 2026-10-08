@@ -20,6 +20,50 @@ import {
 } from '../src/state/decisionInbox.js';
 import { copiedStatement, joinRaw, lineCount, markFor, tokenizeCopyText, utf8Bytes, type CopyLine } from '../src/state/copyText.js';
 import { asideCamera, frameIds, lerpCamera, unionRect } from '../src/state/inboxCamera.js';
+import { shownDecision, textModeFor } from '../src/state/genericActions.js';
+import { buildScene } from '../src/canvas/genericScene.js';
+
+describe('action bar text slots (F5): nothing is relayed that the control does not show', () => {
+  it('stacked surfaces: a field per text slot; the bar: inline only for the optional primary, else expand', () => {
+    const m = (o: Partial<Parameters<typeof textModeFor>[0]>) => textModeFor({ hasText: true, bar: true, required: false, primary: false, ...o });
+    expect(m({ hasText: false })).toBe('none');
+    expect(m({ bar: false })).toBe('field');
+    expect(m({ bar: false, required: true })).toBe('field');
+    expect(m({ primary: true })).toBe('inline');
+    expect(m({ primary: true, required: true })).toBe('expand');
+    expect(m({ required: true })).toBe('expand');
+    // The case that used to send directly: an optional, non-primary text slot opens a form now.
+    expect(m({})).toBe('expand');
+  });
+
+  it('a composing text from another surface leaves only while its field is on screen', () => {
+    const typedElsewhere = { text: 'typed on the stage', option: 'x' };
+    expect(shownDecision(typedElsewhere, 'expand', false)).toEqual({ option: 'x' });
+    expect(shownDecision(typedElsewhere, 'none', false)).toEqual({ option: 'x' });
+    expect(shownDecision(typedElsewhere, 'expand', true)).toEqual(typedElsewhere);
+    expect(shownDecision(typedElsewhere, 'inline', false)).toEqual(typedElsewhere);
+    expect(shownDecision(typedElsewhere, 'field', false)).toEqual(typedElsewhere);
+    expect(shownDecision({}, 'expand', false)).toEqual({});
+  });
+});
+
+describe('action labels on the canvas (F4)', () => {
+  it('scene nodes carry the config label per action, raw name when unlabelled', () => {
+    const cfg: WiringConfig = {
+      version: V,
+      actions: { 'gate.approve': { label: 'Approve' } },
+      kinds: { gate: { parts: [{ id: 'approve', part: 'send', action: 'gate.approve', requires: [] }] } },
+    };
+    const n = node('g', [], {
+      capabilities: [
+        { action: 'gate.approve', level: 'enabled' },
+        { action: 'gate.reject', level: 'enabled' },
+      ],
+    });
+    const scene = buildScene([n], cfg, new Map(), new Map(), new Map());
+    expect(scene.nodes.get('g')!.actionLabels).toEqual({ 'gate.approve': 'Approve', 'gate.reject': 'gate.reject' });
+  });
+});
 
 const V = WIRING_SCHEMA_VERSION;
 const node = (id: string, causes: (string | { cause: string; since?: string })[], over: Partial<NodeProjection> = {}): NodeProjection => ({
@@ -73,14 +117,66 @@ describe('display groups (wiring attention[].group)', () => {
     expect(groupRows([], { version: V })).toBeNull();
   });
 
-  it('a row joins the earliest grouped rule matching any of its causes (multi-cause nodes)', () => {
-    expect(rowGroup({ causes: ['c-check', 'c-todo'] }, GROUPED)).toBe('B'); // B's rule comes before C's
-    expect(rowGroup({ causes: ['c-check-2', 'c-decide-2'] }, GROUPED)).toBe('A');
-    // An ungrouped rule earlier in the list does not stop a later grouped match.
-    expect(rowGroup({ causes: ['c-plain', 'c-check'] }, GROUPED)).toBe('C');
-    expect(rowGroup({ causes: ['c-plain'] }, GROUPED)).toBeNull();
-    expect(rowGroup({ causes: ['unknown'] }, GROUPED)).toBeNull();
-    expect(rowGroup({ causes: [] }, GROUPED)).toBeNull();
+  it('a row joins the earliest grouped rule of its strongest mechanism matching one of its causes', () => {
+    const row = (causes: string[]) => inboxRows([node('x', causes)], GROUPED)[0]!;
+    expect(rowGroup(row(['c-check', 'c-todo']), GROUPED)).toBe('B');
+    expect(rowGroup(row(['c-check-2', 'c-decide-2']), GROUPED)).toBe('A');
+    expect(rowGroup(row(['c-decide-2', 'c-decide']), GROUPED)).toBe('A');
+    expect(rowGroup(row(['c-check-2', 'c-check']), GROUPED)).toBe('C');
+    // An interrupt row never joins a group through an ambient rule: no grouped
+    // interrupt rule matches here, so it goes to the default group.
+    expect(rowGroup(row(['c-plain', 'c-check']), GROUPED)).toBeNull();
+    expect(rowGroup(row(['c-plain']), GROUPED)).toBeNull();
+    expect(rowGroup(row(['unknown']), GROUPED)).toBeNull();
+    expect(rowGroup({ causes: [], mechanism: 'ambient' }, GROUPED)).toBeNull();
+  });
+
+  it('reverse-order mixed causes: an ambient grouped rule listed FIRST still cannot take an interrupt row', () => {
+    const cfg: WiringConfig = {
+      version: V,
+      attention: [
+        { match: { cause: 'quiet' }, mechanism: 'ambient', group: 'Check' },
+        { match: { cause: 'loud' }, mechanism: 'interrupt', group: 'Decide' },
+      ],
+    };
+    const rows = inboxRows([node('m', ['quiet', 'loud']), node('q', ['quiet'])], cfg);
+    expect(rows[0]!.mechanism).toBe('interrupt');
+    expect(rowGroup(rows[0]!, cfg)).toBe('Decide');
+    const groups = groupRows(rows, cfg)!;
+    expect(groups.map((g) => [g.name, g.mechanism, g.rows.map((r) => r.id)])).toEqual([
+      ['Check', 'ambient', ['q']],
+      ['Decide', 'interrupt', ['m']],
+    ]);
+    // The interrupt row's group starts open; the ambient one starts folded.
+    expect(groups.map(groupStartsOpen)).toEqual([false, true]);
+    // The interrupt cause's rule is ungrouped and only the ambient cause is grouped: default group, open.
+    const cfg2: WiringConfig = {
+      version: V,
+      attention: [
+        { match: { cause: 'quiet' }, mechanism: 'ambient', group: 'Check' },
+        { match: { cause: 'loud' }, mechanism: 'interrupt' },
+      ],
+    };
+    const g2 = groupRows(inboxRows([node('m', ['quiet', 'loud'])], cfg2), cfg2)!;
+    expect(g2.map((g) => [g.name, g.mechanism, g.rows.map((r) => r.id)])).toEqual([
+      ['Check', 'ambient', []],
+      [null, 'interrupt', ['m']],
+    ]);
+    expect(groupStartsOpen(g2[1]!)).toBe(true);
+  });
+
+  it('a group mechanism follows its actual rows: interrupt rules with only ambient rows fold', () => {
+    const cfg: WiringConfig = {
+      version: V,
+      attention: [
+        { match: { cause: 'loud' }, mechanism: 'interrupt', group: 'Mixed' },
+        { match: { cause: 'quiet' }, mechanism: 'ambient', group: 'Mixed' },
+      ],
+    };
+    expect(groupRows(inboxRows([node('q', ['quiet'])], cfg), cfg)![0]!.mechanism).toBe('ambient');
+    expect(groupRows(inboxRows([node('q', ['quiet']), node('l', ['loud'])], cfg), cfg)![0]!.mechanism).toBe('interrupt');
+    // Empty: the rules' mechanism.
+    expect(groupRows([], cfg)![0]!.mechanism).toBe('interrupt');
   });
 
   it('groups in config order, zero-count groups kept, received order inside, default group last', () => {

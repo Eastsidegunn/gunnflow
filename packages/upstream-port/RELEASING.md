@@ -20,7 +20,7 @@ applies `publishConfig` (the built `dist/` entry points).
    The last command prints the tarball path, e.g.
    `packages/upstream-port/gunnflow-upstream-port-0.1.0.tgz`, and refuses a tarball whose manifest
    is private, points at sources, lacks `dist/`, `README.md` or `LICENSE`, or has no
-   `@gunnflow/contract` peer range.
+   `@gunnflow/contract` peer range that admits both 0.3.1 and the current contract version.
 4. **Publish.** When the contract changes in the same release, publish the contract tarball first
    (see [../contract/RELEASING.md](../contract/RELEASING.md)), then:
 

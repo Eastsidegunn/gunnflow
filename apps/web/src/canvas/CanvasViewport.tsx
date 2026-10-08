@@ -288,11 +288,19 @@ export function CanvasViewport(props: CanvasViewportProps) {
     panTimer = undefined;
     cancelAnimationFrame(panRaf);
   };
+  // A camera held by an inbox restore is not panned on remount (back from ③).
+  let skipFirstPan = untrack(viewState.cameraHeld);
   createEffect(() => {
     const id = selection.selectedId();
     cancelStagePan();
+    if (skipFirstPan) {
+      skipFirstPan = false;
+      return;
+    }
     if (!id) return;
     panTimer = setTimeout(() => {
+      // While the inbox is open no stage stands over the canvas, and its framing owns the camera.
+      if (viewState.inboxFrame() !== undefined) return;
       const r = nodeRect(id);
       const rect = canvas.getBoundingClientRect();
       if (!r || rect.width === 0) return;
@@ -367,24 +375,46 @@ export function CanvasViewport(props: CanvasViewportProps) {
     if (visibleWidth < 160) return;
     moveCamera(asideCamera(bounds, { width: rect.width, height: rect.height, visibleWidth }));
   };
+  /** The deferred framing pass (one frame after a selection change); a gesture, a newer selection, close or unmount cancel it. */
+  let frameRaf = 0;
+  const cancelFraming = () => {
+    cancelAnimationFrame(frameRaf);
+    frameRaf = 0;
+  };
+  /** A person's gesture owns the camera: pending framing and any running tween yield. */
+  const yieldCamera = () => {
+    cancelFraming();
+    cancelCameraTween();
+  };
   createEffect(() => {
     const frame = viewState.inboxFrame();
+    cancelFraming();
     if (frame) {
       // The camera from before the inbox opened lives in view state, so it is
       // restored even when the canvas was away (③) at the moment of closing.
-      if (!untrack(viewState.inboxSavedCamera)) viewState.setInboxSavedCamera(untrack(viewState.camera));
+      if (!untrack(viewState.inboxSavedCamera)) {
+        viewState.setInboxSavedCamera(untrack(viewState.camera));
+        viewState.setCameraHeld(false);
+      }
       const id = frame.nodeId;
       // After the drawer has laid out (one frame), never inside the reactive pass.
-      if (id) requestAnimationFrame(() => untrack(() => viewState.inboxFrame()?.nodeId === id && frameAside(id)));
+      if (id) frameRaf = requestAnimationFrame(() => {
+        frameRaf = 0;
+        untrack(() => viewState.inboxFrame()?.nodeId === id && frameAside(id));
+      });
     } else {
       const back = untrack(viewState.inboxSavedCamera);
       if (!back) return;
       viewState.setInboxSavedCamera(null);
+      // Held: a later remount (back from ③) keeps this camera instead of re-fitting.
+      viewState.setCameraHeld(true);
+      cancelStagePan();
       moveCamera(back);
     }
   });
   onCleanup(() => {
     const landing = tweenTarget;
+    cancelFraming();
     cancelCameraTween();
     if (landing) viewState.setCameraView(landing);
   });
@@ -531,7 +561,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
   const onPointerDown = (e: PointerEvent) => {
     // A fresh gesture owns the camera: a scheduled stage pan-aside (or inbox framing) yields.
     cancelStagePan();
-    cancelCameraTween();
+    yieldCamera();
     // Right press: the radial menu holds the gesture; nothing else starts.
     if (e.button === 2) {
       e.preventDefault();
@@ -757,7 +787,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    cancelCameraTween();
+    yieldCamera();
     { const z = props.stores.prefs.prefs().zoomSensitivity; viewState.zoomAt(e.deltaY < 0 ? z : 1 / z); }
   };
 
@@ -768,20 +798,28 @@ export function CanvasViewport(props: CanvasViewportProps) {
     if (rect && rect.width > 0) viewState.fitBounds(bounds, rect.width, rect.height);
     else viewState.centerOn(bounds.x + bounds.w / 2, bounds.y + bounds.h / 2);
   };
-  onMount(fit);
+  /**
+   * The automatic fits (mount, first snapshot, first layered pass) leave a
+   * held camera alone: one the inbox restored on close (결정함 F2) survives
+   * the remount after ③, until the person moves the view themselves.
+   */
+  const autoFit = () => {
+    if (!untrack(viewState.cameraHeld)) fit();
+  };
+  onMount(autoFit);
   // The first layered pass replaces the first layout: frame it again then — unless the user has already moved the view.
   let refitted = false;
   createEffect(() => {
     if (!refitted && layoutState.source() === 'layered') {
       refitted = true;
-      if (!viewState.userMoved()) fit();
+      if (!viewState.userMoved()) autoFit();
     }
   });
   let fitted = false;
   createEffect(() => {
     if (!fitted && projectionStore.hasSnapshot()) {
       fitted = true;
-      fit();
+      autoFit();
     }
   });
 

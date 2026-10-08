@@ -48,7 +48,8 @@ export function loadWiring(offered: unknown = DEFAULT_WIRING, log: (msg: string)
  * its rules come first in its own order and the base's other causes follow
  * (each cause is matched once, so only group order and multi-cause grouping
  * can tell the difference).
- * Detail merges per list: each list a later file states replaces that list.
+ * Detail merges per list: each list a later file states replaces that list;
+ * a `detail` stating no list at all (`{}`) replaces the base detail whole.
  * The version is the base's (each file is checked for compatibility on its own).
  */
 export function mergeWiring(base: WiringConfig, over: WiringConfig): WiringConfig {
@@ -94,7 +95,10 @@ export function mergeWiring(base: WiringConfig, over: WiringConfig): WiringConfi
   if (base.lenses || over.lenses) merged.lenses = lenses;
   if (actions) merged.actions = actions;
   // Detail merges per list; each stated list replaces as a whole (a later file states the full list).
-  if (base.detail || over.detail) merged.detail = { ...(base.detail ?? {}), ...(over.detail ?? {}) };
+  // A `detail` that states no list keeps its old meaning: it replaces (clears) the base's whole.
+  const statesList = over.detail !== undefined && Object.keys(over.detail).length > 0;
+  if (over.detail && !statesList) merged.detail = over.detail;
+  else if (base.detail || over.detail) merged.detail = { ...(base.detail ?? {}), ...(over.detail ?? {}) };
   return merged;
 }
 

@@ -7,6 +7,7 @@
  */
 import { WORKSPACE_ROOT_KIND, type NodeProjection } from '@gunnflow/contract';
 import {
+  actionLabel,
   attentionMechanism,
   configLenses,
   relationArrangeFor,
@@ -38,6 +39,8 @@ export interface SceneNode {
   /** The received relations, verbatim (lens `within` clauses read them). */
   relations: readonly { type: string; target: string }[];
   parts: ResolvedParts;
+  /** Display label per action name (wiring `actions`, else the raw name). */
+  actionLabels: Readonly<Record<string, string>>;
 }
 
 export interface SceneEdge {
@@ -94,6 +97,7 @@ function sceneNode(n: NodeProjection, config: WiringConfig): SceneNode {
         : { mechanism: mechanisms.includes('interrupt') ? 'interrupt' : 'ambient', causes },
     relations: n.relations,
     parts,
+    actionLabels: Object.fromEntries(parts.actions.map((a) => [a.action, actionLabel(config, a.action)])),
   };
 }
 

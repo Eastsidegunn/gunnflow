@@ -22,6 +22,32 @@ export function openGate(action: ResolvedAction): ActionGate {
   return { runnable: true };
 }
 
+/**
+ * Where an action's text input lives. Stacked surfaces: one field per action
+ * ('field'). The decision inbox's bar: the primary action's OPTIONAL text sits
+ * inline; every other text slot (required or optional) is an expand-in-place
+ * form whose button opens it rather than sending. 'none': no text slot.
+ */
+export type TextMode = 'field' | 'expand' | 'inline' | 'none';
+export function textModeFor(o: { hasText: boolean; bar: boolean; required: boolean; primary: boolean }): TextMode {
+  if (!o.hasText) return 'none';
+  if (!o.bar) return 'field';
+  if (o.primary && !o.required) return 'inline';
+  return 'expand';
+}
+
+/**
+ * What a send may relay: never a text the control is not showing. A text the
+ * person typed elsewhere stays in its composing entry, but leaves this control
+ * only while its field is on screen.
+ */
+export function shownDecision<D extends { text?: string }>(decision: D, mode: TextMode, expanded: boolean): D {
+  const shown = mode === 'field' || mode === 'inline' || (mode === 'expand' && expanded);
+  if (shown || decision.text === undefined) return decision;
+  const { text: _hidden, ...rest } = decision;
+  return rest as D;
+}
+
 /** Actions that open a panel (they need input, evidence or an editor) rather than relaying on click. */
 export function opensPanel(action: ResolvedAction): boolean {
   if (action.kind === 'fallback') return !action.usable;

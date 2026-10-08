@@ -159,18 +159,30 @@ export function configGroups(config: WiringConfig): InboxGroupDecl[] {
   return out;
 }
 
-/** The group a row joins: the earliest grouped rule matching any of its causes; null = the default group. */
-export function rowGroup(row: Pick<InboxRow, 'causes'>, config: WiringConfig): string | null {
+/**
+ * The group a row joins: among the grouped rules of the row's strongest
+ * mechanism (interrupt before ambient) that match one of its causes, the
+ * earliest; null = the default group. A row carrying an interrupt cause
+ * therefore never lands in a group through an ambient rule.
+ */
+export function rowGroup(row: Pick<InboxRow, 'causes' | 'mechanism'>, config: WiringConfig): string | null {
   for (const rule of config.attention ?? []) {
-    if (rule.group !== undefined && row.causes.includes(rule.match.cause)) return rule.group;
+    if (rule.group !== undefined && rule.mechanism === row.mechanism && row.causes.includes(rule.match.cause)) return rule.group;
   }
   return null;
+}
+
+/** A group's mechanism from its actual rows (interrupt if any is); an empty group keeps its rules' mechanism. */
+function rowsMechanism(rows: readonly InboxRow[], fallback: AttentionMechanism): AttentionMechanism {
+  if (rows.length === 0) return fallback;
+  return rows.some((r) => r.mechanism === 'interrupt') ? 'interrupt' : 'ambient';
 }
 
 /**
  * Rows split into display groups: config groups in first-appearance order
  * (zero-count groups included), then the default group when it has rows.
- * Received order is kept inside each group (no sorting). Null when the config
+ * Received order is kept inside each group (no sorting). A group's mechanism
+ * (fold start, emphasis) follows its actual rows. Null when the config
  * defines no groups — the single-list inbox applies unchanged.
  */
 export function groupRows(rows: readonly InboxRow[], config: WiringConfig): InboxGroup[] | null {
@@ -184,9 +196,8 @@ export function groupRows(rows: readonly InboxRow[], config: WiringConfig): Inbo
     if (g) g.rows.push(row);
     else rest.push(row);
   }
-  if (rest.length > 0) {
-    groups.push({ name: null, mechanism: rest.some((r) => r.mechanism === 'interrupt') ? 'interrupt' : 'ambient', rows: rest });
-  }
+  for (const g of groups) g.mechanism = rowsMechanism(g.rows, g.mechanism);
+  if (rest.length > 0) groups.push({ name: null, mechanism: rowsMechanism(rest, 'ambient'), rows: rest });
   return groups;
 }
 

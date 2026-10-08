@@ -10,7 +10,7 @@ import { actionLabel, detailCollapsed, detailCopyable, detailEmphasis } from '@g
 import type { WorkspaceStores } from '../state/stores.js';
 import type { Intent } from '../model/types.js';
 import type { ResolvedAction, ResolvedParts } from '../canvas/parts.js';
-import { actionGate, openGate } from '../state/genericActions.js';
+import { actionGate, openGate, shownDecision, textModeFor, type TextMode } from '../state/genericActions.js';
 import { copiedStatement, tokenizeCopyText } from '../state/copyText.js';
 import type { DisplayToken } from '../state/editorLogic.js';
 import { isUndecided, type ComposingEntry, type Draft } from '../state/pendingIntents.js';
@@ -204,10 +204,11 @@ export function CopyBox(props: { text: string; testId: string }) {
  * attestation states exactly the renders made here. Buttons print the
  * wiring's action label (`actions[name].label`), else the raw action name.
  *
- * layout 'bar' (결정함 F5): one horizontal bar, the first action primary. An
- * action whose capability REQUIRES text opens a multi-line field above the
- * bar (보내기 / 취소); the primary action's OPTIONAL text sits inline in the
- * bar; other optional inputs are not collected there (the click sends).
+ * layout 'bar' (결정함 F5): one horizontal bar, the first action primary. The
+ * primary action's OPTIONAL text sits inline in the bar; every other text slot
+ * (required or optional) opens an expand-in-place form above the bar
+ * (field + 보내기 / 취소; an optional field may stay empty). A send never
+ * relays a text the control is not showing.
  */
 export function NodeActions(props: {
   stores: WorkspaceStores;
@@ -280,12 +281,7 @@ export function NodeActions(props: {
     const hasChoice = () => inputs().some((i) => i.part === 'selector');
     const requiredText = () => cap()?.decision?.input?.required === true;
     /** Where this action's text input lives: the stacked field, the bar's expanding field, inline in the bar, or nowhere. */
-    const textMode = (): 'field' | 'expand' | 'inline' | 'none' => {
-      if (!hasText()) return 'none';
-      if (!bar) return 'field';
-      if (requiredText()) return 'expand';
-      return p.primary ? 'inline' : 'none';
-    };
+    const textMode = (): TextMode => textModeFor({ hasText: hasText(), bar, required: requiredText(), primary: p.primary });
     const isExpanded = () => expanded() === a().action;
 
     const setDecision = (patch: { option?: string; text?: string }) => {
@@ -306,7 +302,8 @@ export function NodeActions(props: {
     const reason = () => (gate().runnable ? null : (gate() as { reason: string }).reason);
 
     const send = () => {
-      const d = decision();
+      // Never relay a text this control is not showing (it may have been typed on another surface).
+      const d = shownDecision(decision(), textMode(), isExpanded());
       const slots: Pick<Intent, 'decision'> = Object.keys(d).length > 0 ? { decision: d } : {};
       const draft = { nodeId: p.node.id, action: a().action, ...slots };
       // Only the display tokens travel; the store re-reads what is required from the current capability.
@@ -396,8 +393,8 @@ export function NodeActions(props: {
             <textarea
               rows={3}
               data-testid={`generic-text-${a().action}`}
-              aria-label={`${label()} 사유`}
-              placeholder={`${label()} 사유`}
+              aria-label={`${label()} 사유${requiredText() ? "" : " (선택)"}`}
+              placeholder={`${label()} 사유${requiredText() ? "" : " (선택)"}`}
               value={decision().text ?? ''}
               onInput={(e) => setDecision({ text: e.currentTarget.value })}
               ref={(el) => queueMicrotask(() => el.focus())}

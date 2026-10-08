@@ -1,6 +1,6 @@
 // WP-K: the wiring directory's files merge over the default in file-name order.
 import { describe, expect, it } from 'vitest';
-import { WIRING_SCHEMA_VERSION, type WiringConfig } from '@gunnflow/contract/wiring';
+import { WIRING_SCHEMA_VERSION, detailEmphasis, type WiringConfig } from '@gunnflow/contract/wiring';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
 import { createWiringState, loadWiringFiles, mergeWiring, type WiringFileEntry } from '../src/wiring/loadWiring.js';
 import { configGroups } from '../src/state/decisionInbox.js';
@@ -36,6 +36,16 @@ describe('mergeWiring', () => {
     expect(both.detail).toEqual({ emphasis: DEFAULT_WIRING.detail!.emphasis, copyable: ['command'] });
     expect(mergeWiring(both, { version: V, detail: { copyable: ['명령'] } }).detail!.copyable).toEqual(['명령']);
     expect(mergeWiring({ version: V }, { version: V }).detail).toBeUndefined();
+  });
+
+  it('detail: {} keeps its old meaning — it replaces (clears) the base detail whole', () => {
+    const base = mergeWiring(DEFAULT_WIRING, { version: V, detail: { copyable: ['command'], collapsed: ['digest'] } });
+    expect(base.detail).toEqual({ emphasis: DEFAULT_WIRING.detail!.emphasis, copyable: ['command'], collapsed: ['digest'] });
+    const cleared = mergeWiring(base, { version: V, detail: {} });
+    expect(cleared.detail).toEqual({});
+    expect(detailEmphasis(cleared)).toEqual([]);
+    // Stating one list is the per-list path again.
+    expect(mergeWiring(cleared, { version: V, detail: { emphasis: ['x'] } }).detail).toEqual({ emphasis: ['x'] });
   });
 
   it('actions merge per key like the other tables', () => {

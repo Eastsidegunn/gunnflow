@@ -258,7 +258,7 @@ function drawGenericNode(ctx: CanvasRenderingContext2D, box: NodeBox, node: Scen
     let x = box.x + 12;
     for (const a of chips) {
       const usable = a.level === 'enabled' && (a.kind === 'assembled' ? !a.blocked : a.usable);
-      const label = (usable ? '' : '⊘ ') + a.action;
+      const label = (usable ? '' : '⊘ ') + (Object.hasOwn(node.actionLabels, a.action) ? node.actionLabels[a.action]! : a.action);
       ctx.fillStyle = usable ? C.running : C.faint;
       ctx.font = DEFAULT_THEME.fonts.small;
       const text = clip(ctx, label, box.x + box.w - 12 - x);
