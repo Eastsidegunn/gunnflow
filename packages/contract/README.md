@@ -31,7 +31,7 @@ job.
 import { defineConformanceSuite } from '@gunnflow/contract/conformance';
 
 defineConformanceSuite('my-backend', async () => ({
-  contractVersion: '0.3.1',
+  contractVersion: '0.3.2',
   nodes: () => myBackend.nodes(),            // { id, capabilities, artifacts, streams? }[]
   relay: (intent) => myBackend.relay(intent), // check structure with validateIntent before acting
   settle: () => myBackend.idle(),             // optional: wait for asynchronous effects
@@ -73,6 +73,9 @@ the digest of the artifact the backend stores. `digestOfBody(body)` is the refer
 `CONTRACT_VERSION` is semver. While in 0.x, a different minor is treated as incompatible (the suite
 checks that major.minor match), so a consumer claims `contractVersion: '<major>.<minor>.x'`.
 
+- **0.3.2** — a live artifact URL carrying userinfo credentials (`https://user:pass@host/…`) is
+  refused by `artifactRefProblem` / `nodeProblem`. Consumers claiming `0.3.x` need nothing;
+  compliant backends are unaffected.
 - **0.3.1** — packaging only: the optional `vitest` peer accepts `^3 || ^4 || ^5`. First version
   published to npm. No contract change; consumers claiming `0.3.x` need nothing.
 - **0.3.0** — adds the optional execution surface (`ExecutionSnapshot`, `validateExecutionSnapshot`,

@@ -36,9 +36,9 @@ const node = {
 const intent = (action: string, extra: object = {}) => ({ nodeId: 'n', action, idempotencyKey: 'k', ...extra });
 
 describe('contract', () => {
-  it('exports a semver version — 0.3.x: execution surface (0.3.0), packaging-only peer widening (0.3.1)', () => {
+  it('exports a semver version — 0.3.x: execution surface (0.3.0), packaging-only peer widening (0.3.1), credential-free live urls (0.3.2)', () => {
     expect(CONTRACT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(CONTRACT_VERSION).toBe('0.3.1');
+    expect(CONTRACT_VERSION).toBe('0.3.2');
     expect(isCompatibleContractVersion('0.3.1', CONTRACT_VERSION)).toBe(true);
     expect(isCompatibleContractVersion('0.2.0', CONTRACT_VERSION)).toBe(false);
   });
@@ -115,6 +115,21 @@ describe('closed nested shapes and node structure', () => {
     expect(artifactRefProblem(live('javascript:alert(1)'))).toContain('scheme');
     expect(artifactRefProblem(live('file:///etc/passwd'))).toContain('scheme');
     expect(artifactRefProblem(live('https://x', { token: 't' }))).toContain('unknown live access key');
+  });
+
+  it('a live access url never carries userinfo credentials, and the problem never echoes them', () => {
+    const live = (url: string) => ({ id: 'a', mediaType: 't', access: { kind: 'live', url } });
+    expect(artifactRefProblem(live('https://h.example/x'))).toBeNull();
+    for (const url of ['https://alice:s3cret@h.example/x', 'https://alice@h.example/x', 'https://:s3cret@h.example/x']) {
+      const p = artifactRefProblem(live(url));
+      expect(p).toBe('live access url must not carry credentials');
+      expect(p).not.toContain('alice');
+      expect(p).not.toContain('s3cret');
+      expect(p).not.toContain('h.example');
+    }
+    // nodeProblem refuses the whole node through the same rule.
+    expect(nodeProblem(node({ artifacts: [{ id: 'a', mediaType: 'text/plain', access: { kind: 'live', url: 'https://alice:s3cret@h.example/x' } }] })))
+      .toContain('must not carry credentials');
   });
 
   it('a well-formed node passes; structure, duplicates and dangling references fail', () => {

@@ -54,6 +54,7 @@ interface ExecutionSnapshot { sessions: ExecutionSession[]; events: ExecutionEve
   보유하지 않으면 `404`. "현재 버전" 개념은 없다 — 주소가 곧 버전이다.
 - BFF의 격리 origin이 bytes를 다시 해시해 digest와 대조한다. 제공하지 않으면(모든 요청 404)
   산출물 뷰어만 비활성이고 나머지는 동작한다.
+- projection의 `access: { kind: 'live', url }`은 http(s) URL이어야 하며 userinfo 자격증명(`user:pass@`)을 담으면 안 된다 — 담긴 노드는 `nodeProblem`이 거부한다.
 
 ## GET /detail/:nodeId (선택)
 

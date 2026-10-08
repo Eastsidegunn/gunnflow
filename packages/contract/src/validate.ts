@@ -197,13 +197,16 @@ export function artifactRefProblem(v: unknown): string | null {
     const extraLive = unknownKey(a, ['kind', 'url']);
     if (extraLive) return `unknown live access key '${extraLive}'`;
     if (typeof a.url !== 'string') return 'live access needs a url';
-    let protocol: string;
+    let url: URL;
     try {
-      protocol = new URL(a.url).protocol;
+      url = new URL(a.url);
     } catch {
       return 'live access url is not a URL';
     }
-    return protocol === 'http:' || protocol === 'https:' ? null : `live access url scheme ${protocol} is not http(s)`;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return `live access url scheme ${url.protocol} is not http(s)`;
+    // Never echo the URL or its userinfo: the problem text reaches logs and the screen.
+    if (url.username || url.password) return 'live access url must not carry credentials';
+    return null;
   }
   return "artifact.access.kind must be 'snapshot' or 'live'";
 }
