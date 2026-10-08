@@ -39,8 +39,8 @@ import { computeSpatialTiers, computeTiers, spatialNeighbors, type LensVerdict, 
 import { computeFocusAlpha } from '../state/focus.js';
 import type { WorkspaceStores } from '../state/stores.js';
 import type { Camera } from '../state/viewState.js';
-import { asideCamera, frameIds, lerpCamera, unionRect } from '../state/inboxCamera.js';
-import { relationArrangeFor } from '@gunnflow/contract/wiring';
+import { asideCamera, lerpCamera } from '../state/inboxCamera.js';
+import { finalFrameBounds } from './inboxFrame.js';
 
 export interface CanvasViewportProps {
   stores: WorkspaceStores;
@@ -371,9 +371,11 @@ export function CanvasViewport(props: CanvasViewportProps) {
     if (rect.width === 0) return;
     const nodes = projectionStore.genericNodes()?.nodes ?? [];
     const config = props.stores.wiring.config;
-    const ids = frameIds(nodes, id, topoGraph()?.parentOf, (type) => relationArrangeFor(config, type) === 'contain');
-    const bounds = unionRect(ids.flatMap((x) => (nodeRect(x) ? [nodeRect(x)!] : [])));
-    if (!bounds || !nodeRect(id)) return;
+    // The FINAL geometry (transition targets), not the rects mid-animation.
+    const bounds = finalFrameBounds(nodes, config, id, viewState.positions(), layoutState.positions(), targets(), topoGraph()?.parentOf, {
+      packContainers: props.stores.prefs.prefs().packContainers,
+    });
+    if (!bounds) return;
     // The drawer's laid-out left edge (offsetLeft ignores its entrance transform).
     const drawer = document.querySelector<HTMLElement>('[data-testid="decision-inbox"]');
     const drawerLeft = drawer ? drawer.offsetLeft : window.innerWidth * 0.4;

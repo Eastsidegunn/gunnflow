@@ -295,18 +295,16 @@ async function aim(page: Page, id: string) {
   return centerOf(b);
 }
 /**
- * With the inbox open on g-publish, a node the framing put in view. If the
- * layout moved after the first framing, re-select to frame the current layout.
+ * With the inbox open on g-publish, a node the framing put in view — with no
+ * help: the canvas frames on open and again when a relayout lands (the frame
+ * is computed from the final layout, so it holds once geometry is still).
  */
 async function framedTarget(page: Page): Promise<string> {
-  let target = await visibleTarget(page);
-  if (target === null) {
-    await page.getByTestId('inbox-row-c-silent').click();
-    await page.getByTestId('inbox-row-g-publish').click();
-    await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
-    target = await visibleTarget(page);
-  }
-  expect(target, 'a node of the framed mission is drawn left of the drawer').not.toBeNull();
+  const target = await visibleTarget(page);
+  expect(target, "the automatic frame puts a node of the selected item's mission left of the drawer").not.toBeNull();
+  // The selected item itself is in view too.
+  const g = await drawnBox(page, 'g-publish');
+  expect(g !== null && inside(g, await visibleArea(page), 0), 'g-publish drawn inside the visible canvas').toBe(true);
   return target!;
 }
 /** The person's own view first: a wheel zoom (it also stops the automatic re-fit); returns the settled camera. */

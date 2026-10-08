@@ -20,8 +20,10 @@ import {
 } from '../src/state/decisionInbox.js';
 import { copiedStatement, joinRaw, lineCount, markFor, tokenizeCopyText, utf8Bytes, type CopyLine } from '../src/state/copyText.js';
 import { asideCamera, frameIds, lerpCamera, unionRect } from '../src/state/inboxCamera.js';
-import { hiddenDraft, shownDecision, textModeFor } from '../src/state/genericActions.js';
+import { hiddenDraft, needsDraftRecovery, shownDecision, textModeFor } from '../src/state/genericActions.js';
 import { buildScene } from '../src/canvas/genericScene.js';
+import { finalFrameBounds } from '../src/canvas/inboxFrame.js';
+import { layoutGraphOf } from '../src/canvas/layoutGraph.js';
 
 describe('action bar text slots (F5): nothing is relayed that the control does not show', () => {
   it('stacked surfaces: a field per text slot; the bar: inline only for the optional primary, else expand', () => {
@@ -52,6 +54,28 @@ describe('action bar text slots (F5): nothing is relayed that the control does n
     expect(hiddenDraft({ text: ' ' }, 'none', false)).toBe(' ');
   });
 
+  it('draft recovery: a typed draft the person cannot reach is always shown and discardable', () => {
+    const r = (o: Partial<Parameters<typeof needsDraftRecovery>[0]>) =>
+      needsDraftRecovery({ text: 'typed', mode: 'expand', expanded: false, canOpen: true, ...o });
+    // Enabled expand, form closed: the opener can open it — no block (the opener carries the draft mark).
+    expect(r({})).toBe(false);
+    // Disabled expand (capability turned disabled), form closed: the opener cannot open — block.
+    expect(r({ canOpen: false })).toBe(true);
+    // Form open: the draft is in the field on screen — no block, even when the action is disabled.
+    expect(r({ expanded: true })).toBe(false);
+    expect(r({ expanded: true, canOpen: false })).toBe(false);
+    // No field any more (slot removed): block, whatever the opener state.
+    expect(r({ mode: 'none' })).toBe(true);
+    expect(r({ mode: 'none', canOpen: false })).toBe(true);
+    // Shown in a field / inline: no block.
+    expect(r({ mode: 'field', canOpen: false })).toBe(false);
+    expect(r({ mode: 'inline', canOpen: false })).toBe(false);
+    // Nothing typed: nothing to recover.
+    expect(r({ text: undefined, canOpen: false })).toBe(false);
+    expect(r({ text: '', mode: 'none' })).toBe(false);
+    expect(r({ text: ' ', mode: 'none' })).toBe(true);
+  });
+
   it('sanitizing drops only an EMPTY hidden text; a typed one is never stripped (the send is refused instead)', () => {
     const typed = { text: 'keep me', option: 'x' };
     expect(shownDecision(typed, 'none', false)).toEqual(typed);
@@ -59,6 +83,42 @@ describe('action bar text slots (F5): nothing is relayed that the control does n
     expect(shownDecision({ text: '', option: 'x' }, 'none', false)).toEqual({ option: 'x' });
     expect(shownDecision({ text: '' }, 'expand', true)).toEqual({ text: '' });
     expect(shownDecision({}, 'none', false)).toEqual({});
+  });
+});
+
+describe('inbox-aside frame from the FINAL layout (F2)', () => {
+  it('frames where the nodes land (transition targets), not where the animation currently draws them', () => {
+    const cfg: WiringConfig = { version: V, relations: { 'member-of': { style: 'muted', arrange: 'contain' }, gate: { style: 'double' } } };
+    const member = { type: 'member-of', target: 'm' };
+    const nodes: NodeProjection[] = [
+      node('m', [], { kind: 'mission' }),
+      node('a', [], { kind: 'task', relations: [member] }),
+      node('b', [], { kind: 'task', relations: [member] }),
+      node('g', ['w'], { relations: [member, { type: 'gate', target: 'a' }] }),
+      node('far', [], { kind: 'task' }),
+    ];
+    const size = { w: 180, h: 64 };
+    // The interim layout (what the animation still shows one frame in) vs. the layered result's targets.
+    const interim = new Map([['a', { x: 0, y: 0 }], ['b', { x: 0, y: 100 }], ['g', { x: 0, y: 200 }], ['far', { x: 0, y: 400 }]]);
+    const targets = new Map([
+      ['a', { x: 2000, y: 1000, ...size }],
+      ['b', { x: 2300, y: 1000, ...size }],
+      ['g', { x: 2600, y: 1000, ...size }],
+      ['far', { x: -5000, y: -5000, ...size }],
+    ]);
+    const parentOf = layoutGraphOf(nodes, cfg).parentOf;
+    const b = finalFrameBounds(nodes, cfg, 'g', new Map(), interim, targets, parentOf)!;
+    expect(b).not.toBeNull();
+    // The frame covers the landed container (a, b, g at x 2000..2780) and nothing of the interim spot or the far node.
+    expect(b.x).toBeGreaterThan(1500);
+    expect(b.x).toBeLessThanOrEqual(2000);
+    expect(b.x + b.w).toBeGreaterThanOrEqual(2780);
+    expect(b.y).toBeGreaterThan(500);
+    expect(b.y + b.h).toBeGreaterThanOrEqual(1064);
+    // Without targets the same call frames the interim positions — the input decides, nothing else.
+    const interimFrame = finalFrameBounds(nodes, cfg, 'g', new Map(), interim, new Map(), parentOf)!;
+    expect(interimFrame.x).toBeLessThan(500);
+    expect(finalFrameBounds(nodes, cfg, 'missing', new Map(), interim, targets, parentOf)).toBeNull();
   });
 });
 

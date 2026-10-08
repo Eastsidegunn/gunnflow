@@ -10,7 +10,7 @@ import { actionLabel, detailCollapsed, detailCopyable, detailEmphasis } from '@g
 import type { WorkspaceStores } from '../state/stores.js';
 import type { Intent } from '../model/types.js';
 import type { ResolvedAction, ResolvedParts } from '../canvas/parts.js';
-import { actionGate, hiddenDraft, openGate, shownDecision, textModeFor, type TextMode } from '../state/genericActions.js';
+import { actionGate, hiddenDraft, needsDraftRecovery, openGate, shownDecision, textModeFor, type TextMode } from '../state/genericActions.js';
 import { copiedStatement, tokenizeCopyText } from '../state/copyText.js';
 import type { DisplayToken } from '../state/editorLogic.js';
 import { isUndecided, type ComposingEntry, type Draft } from '../state/pendingIntents.js';
@@ -303,6 +303,8 @@ export function NodeActions(props: {
 
     /** A typed text this control is not showing: its direct send is blocked until the person keeps (opens) or discards it. */
     const hidden = () => hiddenDraft(decision(), textMode(), isExpanded());
+    const recovery = () =>
+      needsDraftRecovery({ text: decision().text, mode: textMode(), expanded: isExpanded(), canOpen: openGate(a()).runnable });
     const discardHidden = () => {
       const current = composing();
       if (!current) return;
@@ -427,11 +429,16 @@ export function NodeActions(props: {
             </div>
           </div>
         </Show>
-        {/* A draft with no field to show it in (the slot went away): shown verbatim, send blocked until discarded. */}
-        <Show when={textMode() === 'none' && hidden()}>
+        {/* A draft the person cannot reach right now (no field any more, or a closed form whose opener
+            cannot open): always shown verbatim and always discardable; it is never sent from here. */}
+        <Show when={recovery() && hidden()}>
           {(text) => (
             <div class="hidden-draft bar-wide" data-testid={`hidden-draft-${a().action}`}>
-              <p class="hint">이 행동에는 지금 입력란이 없지만, 전에 쓴 초안이 남아 있습니다. 버려야 보낼 수 있습니다.</p>
+              <p class="hint">
+                {textMode() === 'none'
+                  ? '이 행동에는 지금 입력란이 없지만, 전에 쓴 초안이 남아 있습니다. 버려야 보낼 수 있습니다.'
+                  : '이 행동에 쓴 초안이 남아 있지만 지금은 열거나 보낼 수 없습니다. 초안은 그대로 둡니다 — 필요 없으면 버리세요.'}
+              </p>
               <pre class="detail-text">{text()}</pre>
               <button data-testid={`hidden-draft-discard-${a().action}`} onClick={discardHidden}>
                 초안 버리기

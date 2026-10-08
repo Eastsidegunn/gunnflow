@@ -50,6 +50,22 @@ export function hiddenDraft(decision: { text?: string }, mode: TextMode, expande
 }
 
 /**
+ * Whether the draft-recovery block must stand: a non-empty composing text
+ * exists and the person cannot reach it through the control right now — no
+ * field for it any more ('none'), or its form is closed and the opener cannot
+ * open (e.g. the capability turned disabled). The block shows the draft
+ * verbatim and always offers an explicit discard; sending stays impossible
+ * while the action cannot run. A draft in a field on screen, or behind an
+ * opener that can open, needs no block.
+ */
+export function needsDraftRecovery(o: { text: string | undefined; mode: TextMode; expanded: boolean; canOpen: boolean }): boolean {
+  if (o.text === undefined || o.text === '') return false;
+  if (o.mode === 'none') return true;
+  if (o.mode === 'expand' && !o.expanded) return !o.canOpen;
+  return false;
+}
+
+/**
  * What a send may relay: the decision as shown. Only an EMPTY hidden text is
  * dropped (nothing typed is lost); a non-empty hidden text is never stripped
  * here — callers refuse the send while `hiddenDraft` is non-null.
