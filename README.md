@@ -188,7 +188,7 @@ apps/web                 SolidJS + Vite cockpit (canvas rendering, DOM chrome)
 apps/bff                 Fastify BFF + isolated preview server
 packages/contract        @gunnflow/contract — types, runtime validators, digest rules,
                          conformance suite, wiring config schema
-packages/upstream-port   the BFF's wiring port types
+packages/upstream-port   @gunnflow/upstream-port — the BFF's wiring port interface
 testing/fake-contracts   simulator: a reference fake backend that passes conformance
 scripts/                 boundary-lint (layering + no backend names in core), render-sweep
 wiring/                  your wiring config files (data only; nothing shipped)

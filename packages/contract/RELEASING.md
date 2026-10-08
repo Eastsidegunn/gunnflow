@@ -15,10 +15,10 @@ consumers get, so it is what gets published.
    ```sh
    pnpm install --frozen-lockfile
    pnpm --filter @gunnflow/contract build
-   node scripts/contract-pack-check.mjs --keep
+   node scripts/pack-check.mjs packages/contract --keep
    ```
 
-   The last command prints the tarball path, e.g. `packages/contract/gunnflow-contract-0.3.1.tgz`,
+   The last command prints the tarball path, e.g. `packages/contract/gunnflow-contract-0.3.2.tgz`,
    and refuses a tarball whose manifest is private, points at sources, lacks `dist/`, `WIRE.md`,
    `README.md` or `LICENSE`, or whose `CONTRACT_VERSION` differs from the package version.
 4. **Publish** the checked tarball (npm asks for the one-time password when 2FA is on):
@@ -32,3 +32,6 @@ consumers get, so it is what gets published.
    `npm install @gunnflow/contract` resolves `main` to `dist/index.js`.
 
 The `@gunnflow` scope is an npm organization; publishing needs an account with publish rights on it.
+
+When `@gunnflow/upstream-port` changes in the same release, publish the contract first: the
+port's peer range names the contract line. See [../upstream-port/RELEASING.md](../upstream-port/RELEASING.md).

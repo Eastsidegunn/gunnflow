@@ -28,8 +28,9 @@ jobs:
       - name: Data scan (personal data and environment details)
         run: pnpm data-scan
       - run: pnpm verify
-      # The contract tarball as it would be published (built entry points, version, files).
+      # The publishable tarballs as they would be published (built entry points, version, files).
       - run: pnpm contract:pack-check
+      - run: pnpm upstream-port:pack-check
 
   # Secrets anywhere in history, on every push and pull request.
   gitleaks:

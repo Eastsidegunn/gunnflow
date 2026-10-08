@@ -14,7 +14,8 @@
     "verify": "pnpm boundary-lint && pnpm data-scan && pnpm typecheck && pnpm test && pnpm build",
     "dev": "pnpm -r --parallel dev",
     "e2e": "pnpm --filter @gunnflow/web e2e",
-    "contract:pack-check": "node scripts/contract-pack-check.mjs"
+    "contract:pack-check": "node scripts/pack-check.mjs packages/contract",
+    "upstream-port:pack-check": "node scripts/pack-check.mjs packages/upstream-port"
   },
   "packageManager": "pnpm@10.34.5",
   "engines": {

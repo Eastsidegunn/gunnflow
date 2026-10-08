@@ -1,22 +1,57 @@
 {
   "name": "@gunnflow/upstream-port",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "The BFF's single upstream wiring port: the transport-shaped interface the built-in upstreams (simulator, direct wire) implement. Types only.",
+  "description": "The Gunnflow BFF's single upstream wiring port: the transport-shaped interface an in-process upstream implements, plus a small error class for an unsupported detail surface.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eastsidegunn/gunnflow.git",
+    "directory": "packages/upstream-port"
+  },
+  "homepage": "https://github.com/Eastsidegunn/gunnflow/tree/main/packages/upstream-port#readme",
+  "bugs": {
+    "url": "https://github.com/Eastsidegunn/gunnflow/issues"
+  },
+  "keywords": [
+    "gunnflow",
+    "upstream",
+    "port",
+    "backend",
+    "bff",
+    "cockpit"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "echo 'upstream-port: types only, no tests'",
-    "build": "echo 'upstream-port: types only, no build'"
+    "test": "echo 'upstream-port: no tests (interface plus one error class; exercised by apps/bff)'",
+    "build": "tsc -p tsconfig.build.json"
   },
   "peerDependencies": {
-    "@gunnflow/contract": "workspace:^"
+    "@gunnflow/contract": "^0.3.1"
   },
   "devDependencies": {
     "@gunnflow/contract": "workspace:*",

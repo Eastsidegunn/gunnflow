@@ -181,7 +181,7 @@ apps/web                 SolidJS + Vite cockpit(canvas 렌더링, DOM chrome)
 apps/bff                 Fastify BFF + 격리 preview server
 packages/contract        @gunnflow/contract — 타입, runtime validator, digest 규칙,
                          conformance suite, wiring 설정 스키마
-packages/upstream-port   BFF의 wiring port 타입
+packages/upstream-port   @gunnflow/upstream-port — BFF의 wiring port 인터페이스
 testing/fake-contracts   conformance를 통과하는 reference fake backend simulator
 scripts/                 boundary-lint(레이어링 + core의 백엔드명 금지), render-sweep
 wiring/                  사용자 wiring 설정 파일(데이터만; 기본 탑재 없음)
