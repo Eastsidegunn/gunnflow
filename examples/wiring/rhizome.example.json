@@ -219,6 +219,41 @@
           "id": "state",
           "part": "label",
           "source": "state"
+        },
+        {
+          "id": "reason",
+          "part": "text",
+          "action": "gate.approve"
+        },
+        {
+          "id": "approve",
+          "part": "send",
+          "action": "gate.approve",
+          "requires": []
+        },
+        {
+          "id": "reject-reason",
+          "part": "text",
+          "action": "gate.reject"
+        },
+        {
+          "id": "reject",
+          "part": "send",
+          "action": "gate.reject",
+          "requires": []
+        },
+        {
+          "id": "changes",
+          "part": "text",
+          "action": "gate.requestChanges"
+        },
+        {
+          "id": "request-changes",
+          "part": "send",
+          "action": "gate.requestChanges",
+          "requires": [
+            "changes"
+          ]
         }
       ]
     },
