@@ -15,7 +15,7 @@
 //
 // Requires a prior build (`pnpm build`).
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -71,10 +71,14 @@ const name = `pack-check ${target}`;
 const pkgDir = new URL(`../${target}/`, import.meta.url).pathname;
 const outDir = keep ? pkgDir : mkdtempSync(join(tmpdir(), 'pack-check-'));
 
+// The exact file this pack produces — never another tarball left in the directory by an
+// earlier version (--keep packs into the package directory).
+const source = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+const tarball = `${source.name.replace(/^@/, '').replace('/', '-')}-${source.version}.tgz`;
+rmSync(join(outDir, tarball), { force: true });
 execFileSync('pnpm', ['pack', '--pack-destination', outDir], { cwd: pkgDir, stdio: ['ignore', 'ignore', 'inherit'] });
-const tarball = readdirSync(outDir).find((f) => spec.tarball.test(f));
-if (!tarball) {
-  console.error(`${name}: no tarball produced`);
+if (!spec.tarball.test(tarball) || !existsSync(join(outDir, tarball))) {
+  console.error(`${name}: expected tarball ${tarball} was not produced`);
   process.exit(1);
 }
 const path = join(outDir, tarball);
