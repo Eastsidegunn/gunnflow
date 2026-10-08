@@ -6,6 +6,10 @@ import {
   WIRING_SCHEMA_VERSION,
   attentionMechanism,
   coveredActions,
+  actionLabel,
+  attentionGroup,
+  detailCollapsed,
+  detailCopyable,
   detailEmphasis,
   renderFor,
   validateWiringConfig,
@@ -168,7 +172,7 @@ describe('wiring config validator', () => {
 
 describe('wiring config defences', () => {
   it('refuses prototype-reaching keys in every table and never looks them up', () => {
-    for (const table of ['render', 'relations', 'viewers', 'kinds']) {
+    for (const table of ['render', 'relations', 'viewers', 'kinds', 'actions']) {
       for (const key of ['__proto__', 'constructor', 'prototype']) {
         const raw = JSON.parse(`{"version":"${WIRING_SCHEMA_VERSION}","${table}":{"${key}":{}}}`);
         expect(problemsOf(raw).join(), `${table}.${key}`).toContain(`forbidden key '${key}'`);
@@ -176,6 +180,9 @@ describe('wiring config defences', () => {
     }
     expect(renderFor({ version: WIRING_SCHEMA_VERSION }, 'constructor')).toBeUndefined();
     expect(renderFor({ version: WIRING_SCHEMA_VERSION, render: {} }, 'toString')).toBeUndefined();
+    expect(actionLabel({ version: WIRING_SCHEMA_VERSION }, 'constructor')).toBe('constructor');
+    expect(actionLabel({ version: WIRING_SCHEMA_VERSION, actions: {} }, 'toString')).toBe('toString');
+    expect(actionLabel({ version: WIRING_SCHEMA_VERSION, actions: {} }, '__proto__')).toBe('__proto__');
   });
 
   it('size ceilings hold at the boundary', () => {
@@ -240,5 +247,108 @@ describe('lenses as config data', () => {
     expect(problemsOf(lens({ match: { within: { ...base, relations: [] } } })).join()).toContain('relations');
     expect(problemsOf(lens({ match: { within: { ...base, direction: 'up' } } })).join()).toContain('direction');
     expect(problemsOf(lens({ match: { within: { ...base, transitive: false } } })).join()).toContain("unknown key 'transitive'");
+  });
+});
+
+describe('wiring 0.4.0 presentation fields (attention group, action labels, detail collapsed/copyable)', () => {
+  const v = WIRING_SCHEMA_VERSION;
+
+  it('accepts every new field; configs without them stay valid', () => {
+    const cfg: WiringConfig = {
+      version: v,
+      attention: [
+        { match: { cause: 'a' }, mechanism: 'interrupt', group: '결정' },
+        { match: { cause: 'b' }, mechanism: 'ambient', group: 'check ✓' },
+        { match: { cause: 'c' }, mechanism: 'ambient' },
+      ],
+      actions: { 'gate.approve': { label: '승인' }, x: { label: 'Do it' } },
+      detail: { emphasis: ['권고'], collapsed: ['digest'], copyable: ['명령', 'command'] },
+    };
+    expect(validateWiringConfig(cfg)).toEqual({ ok: true, config: cfg });
+    expect(validateWiringConfig(valid).ok).toBe(true);
+    // Every detail list is optional on its own, including emphasis.
+    expect(problemsOf({ version: v, detail: {} })).toEqual([]);
+    expect(problemsOf({ version: v, detail: { copyable: ['명령'] } })).toEqual([]);
+    expect(problemsOf({ version: v, detail: { collapsed: ['digest'] } })).toEqual([]);
+    expect(problemsOf({ version: v, actions: {} })).toEqual([]);
+  });
+
+  it('lookups: group of the first matching rule; label else raw name; detail lists else empty', () => {
+    const cfg: WiringConfig = {
+      version: v,
+      attention: [
+        { match: { cause: 'a' }, mechanism: 'interrupt', group: 'G1' },
+        { match: { cause: 'c' }, mechanism: 'ambient' },
+      ],
+      actions: { 'gate.approve': { label: '승인' } },
+      detail: { collapsed: ['digest'], copyable: ['명령'] },
+    };
+    expect(attentionGroup(cfg, 'a')).toBe('G1');
+    expect(attentionGroup(cfg, 'c')).toBeUndefined();
+    expect(attentionGroup(cfg, 'unknown')).toBeUndefined();
+    expect(attentionGroup({ version: v }, 'a')).toBeUndefined();
+    expect(actionLabel(cfg, 'gate.approve')).toBe('승인');
+    expect(actionLabel(cfg, 'gate.reject')).toBe('gate.reject');
+    expect(actionLabel({ version: v }, 'gate.approve')).toBe('gate.approve');
+    expect(detailCollapsed(cfg)).toEqual(['digest']);
+    expect(detailCopyable(cfg)).toEqual(['명령']);
+    expect(detailEmphasis(cfg)).toEqual([]);
+    expect(detailCollapsed({ version: v })).toEqual([]);
+    expect(detailCopyable({ version: v })).toEqual([]);
+  });
+
+  it('attention group: a non-blank printable string', () => {
+    const rule = (group: unknown) => ({ version: v, attention: [{ match: { cause: 'a' }, mechanism: 'ambient', group }] });
+    for (const bad of ['', '   ', 3, null, ['x'], { name: 'x' }, true]) {
+      expect(problemsOf(rule(bad)).join(), JSON.stringify(bad)).toContain('config.attention[0].group');
+    }
+    for (const ctl of ['a\u0000b', 'a\nb', 'a\u202eb', 'a\u2066b', 'a\u0085b']) {
+      expect(problemsOf(rule(ctl)).join(), JSON.stringify(ctl)).toContain('control or bidi');
+    }
+    expect(problemsOf(rule('a'.repeat(WIRING_LIMITS.string)))).toEqual([]);
+    expect(problemsOf(rule('a'.repeat(WIRING_LIMITS.string + 1))).join()).toContain('longer than');
+    expect(problemsOf(rule('${x}')).join()).toContain('expression-like');
+    expect(problemsOf({ version: v, attention: [{ match: { cause: 'a' }, mechanism: 'ambient', groups: 'x' }] }).join()).toContain("unknown key 'groups'");
+  });
+
+  it('actions: a closed { label } table with table limits', () => {
+    const at = (entry: unknown) => problemsOf({ version: v, actions: { 'gate.approve': entry } }).join();
+    expect(at({ label: '' })).toContain("config.actions.gate.approve.label");
+    expect(at({ label: ' ' })).toContain('non-blank');
+    expect(at({ label: 3 })).toContain('non-blank');
+    expect(at({})).toContain('non-blank');
+    expect(at({ label: 'ok', icon: 'x' })).toContain("unknown key 'icon'");
+    expect(at('승인')).toContain('must be { label }');
+    expect(at(['승인'])).toContain('must be { label }');
+    expect(at({ label: 'a\u202eb' })).toContain('control or bidi');
+    expect(problemsOf({ version: v, actions: ['x'] }).join()).toContain('config.actions: must be an object');
+    expect(problemsOf({ version: v, actions: { '': { label: 'x' } } }).join()).toContain('empty key');
+    const table = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`a${i}`, { label: `L${i}` }]));
+    expect(problemsOf({ version: v, actions: table(WIRING_LIMITS.tableEntries) })).toEqual([]);
+    expect(problemsOf({ version: v, actions: table(WIRING_LIMITS.tableEntries + 1) }).join()).toContain('entries');
+  });
+
+  it('detail lists: arrays of non-empty labels, capped, closed shape', () => {
+    for (const key of ['emphasis', 'collapsed', 'copyable']) {
+      const at = (list: unknown) => problemsOf({ version: v, detail: { [key]: list } }).join();
+      expect(problemsOf({ version: v, detail: { [key]: ['x', '명령'] } }), key).toEqual([]);
+      expect(at('x'), key).toContain(`config.detail.${key}: must be an array`);
+      expect(at({ x: 1 }), key).toContain('must be an array');
+      expect(at(['']), key).toContain(`config.detail.${key}[0]`);
+      expect(at([1]), key).toContain(`config.detail.${key}[0]`);
+      expect(problemsOf({ version: v, detail: { [key]: Array.from({ length: WIRING_LIMITS.detailEmphasis }, (_, i) => `l${i}`) } }), key).toEqual([]);
+      expect(at(Array.from({ length: WIRING_LIMITS.detailEmphasis + 1 }, (_, i) => `l${i}`)), key).toContain(`more than ${WIRING_LIMITS.detailEmphasis}`);
+    }
+    expect(problemsOf({ version: v, detail: { hidden: ['x'] } }).join()).toContain("unknown key 'hidden'");
+    expect(problemsOf({ version: v, detail: ['x'] }).join()).toContain('must be { emphasis?, collapsed?, copyable? }');
+  });
+
+  it('prototype-reaching keys stay refused in the new shapes', () => {
+    for (const key of ['__proto__', 'constructor', 'prototype']) {
+      const raw = JSON.parse(`{"version":"${v}","actions":{"${key}":{"label":"x"}}}`);
+      expect(problemsOf(raw).join(), key).toContain(`forbidden key '${key}'`);
+      const det = JSON.parse(`{"version":"${v}","detail":{"${key}":["x"]}}`);
+      expect(problemsOf(det).join(), key).toContain(`forbidden key '${key}'`);
+    }
   });
 });

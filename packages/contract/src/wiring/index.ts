@@ -110,18 +110,43 @@ export interface WiringConfig {
   /** glyph: a short literal printed verbatim; tone: a '#rrggbb' colour. */
   render?: Record<string, { glyph: string; tone: string }>;
   relations?: Record<string, { style: EdgeStyleId; arrange?: ArrangeId; direction?: ContainDirection }>;
-  /** First match wins; an unmatched cause is ambient (engine invariant). */
-  attention?: { match: { cause: string }; mechanism: AttentionMechanism }[];
+  /**
+   * First match wins; an unmatched cause is ambient (engine invariant).
+   * `group` is a display group name (a literal the screen prints, never
+   * interpreted): surfaces that list attention count and show it per group.
+   */
+  attention?: AttentionRule[];
   viewers?: Record<string, ViewerId>;
   kinds?: Record<string, { parts: PartDecl[] }>;
   lenses?: LensDecl[];
   /**
-   * Detail presentation: labels (upstream vocabulary, verbatim) whose items
-   * the detail view emphasizes. Config data, like render — the engine never
-   * interprets the label, it only matches it.
+   * Display label per action name (upstream vocabulary, verbatim key). A
+   * button prints the label instead of the raw name; an action without an
+   * entry shows its raw name. Presentation only — it grants nothing.
    */
-  detail?: { emphasis: string[] };
+  actions?: Record<string, { label: string }>;
+  /**
+   * Detail presentation, all by verbatim label match (the engine never
+   * interprets a label): `emphasis` — items the detail view emphasizes;
+   * `collapsed` — items shown folded by default (folded, never hidden);
+   * `copyable` — text items shown as exact-bytes copy boxes.
+   */
+  detail?: DetailPresentation;
 }
+
+export interface AttentionRule {
+  match: { cause: string };
+  mechanism: AttentionMechanism;
+  group?: string;
+}
+
+export interface DetailPresentation {
+  emphasis?: string[];
+  collapsed?: string[];
+  copyable?: string[];
+}
+/** The detail presentation lists (each optional, same shape and ceiling). */
+export const DETAIL_LISTS = ['emphasis', 'collapsed', 'copyable'] as const;
 
 export type WiringValidation = { ok: true; config: WiringConfig } | { ok: false; problems: string[] };
 
@@ -149,6 +174,7 @@ export const WIRING_LIMITS = {
   kinds: 128,
   partsPerKind: 32,
   requires: 16,
+  /** Per detail list (emphasis, collapsed, copyable). */
   detailEmphasis: 32,
   /** Bytes per config file; a file within the other limits stays well below it. */
   fileBytes: 256 * 1024,
@@ -197,6 +223,11 @@ export function validateWiringConfig(value: unknown): WiringValidation {
   const nonEmptyString = (v: unknown, path: string) => {
     if (typeof v !== 'string' || v === '') p(path, 'must be a non-empty string');
   };
+  /** A literal the screen prints as a name (group, action label): non-blank, no control/bidi characters. */
+  const printable = (v: unknown, path: string) => {
+    if (typeof v !== 'string' || v.trim() === '') p(path, 'must be a non-blank string');
+    else if (GLYPH_FORBIDDEN.test(v)) p(path, 'must not contain control or bidi characters');
+  };
   const record = (
     v: unknown,
     path: string,
@@ -215,7 +246,7 @@ export function validateWiringConfig(value: unknown): WiringValidation {
   };
 
   if (!isRecord(value)) return { ok: false, problems: ['config: must be an object'] };
-  closed(value, ['version', 'render', 'relations', 'attention', 'viewers', 'kinds', 'lenses', 'detail'], 'config');
+  closed(value, ['version', 'render', 'relations', 'attention', 'viewers', 'kinds', 'lenses', 'actions', 'detail'], 'config');
 
   if (typeof value.version !== 'string' || !parseSemver(value.version)) {
     p('config.version', 'must be a semver string');
@@ -254,9 +285,10 @@ export function validateWiringConfig(value: unknown): WiringValidation {
       const seen = new Set<string>();
       value.attention.forEach((rule, i) => {
         const at = `config.attention[${i}]`;
-        if (!isRecord(rule)) return p(at, 'must be { match, mechanism }');
-        closed(rule, ['match', 'mechanism'], at);
+        if (!isRecord(rule)) return p(at, 'must be { match, mechanism, group? }');
+        closed(rule, ['match', 'mechanism', 'group'], at);
         oneOf(rule.mechanism, ATTENTION_MECHANISMS, `${at}.mechanism`);
+        if (rule.group !== undefined) printable(rule.group, `${at}.group`);
         if (!isRecord(rule.match)) return p(`${at}.match`, 'must be { cause }');
         closed(rule.match, ['cause'], `${at}.match`);
         nonEmptyString(rule.match.cause, `${at}.match.cause`);
@@ -328,16 +360,25 @@ export function validateWiringConfig(value: unknown): WiringValidation {
     }
   }
 
+  record(value.actions, 'config.actions', (_k, x, at) => {
+    if (!isRecord(x)) return p(at, 'must be { label }');
+    closed(x, ['label'], at);
+    printable(x.label, `${at}.label`);
+  });
+
   if (value.detail !== undefined) {
     const at = 'config.detail';
     if (!isRecord(value.detail)) {
-      p(at, 'must be { emphasis }');
+      p(at, 'must be { emphasis?, collapsed?, copyable? }');
     } else {
-      closed(value.detail, ['emphasis'], at);
-      const em = value.detail.emphasis;
-      if (!Array.isArray(em)) p(`${at}.emphasis`, 'must be an array of labels');
-      else if (em.length > WIRING_LIMITS.detailEmphasis) p(`${at}.emphasis`, `more than ${WIRING_LIMITS.detailEmphasis} entries`);
-      else em.forEach((x, i) => nonEmptyString(x, `${at}.emphasis[${i}]`));
+      closed(value.detail, DETAIL_LISTS, at);
+      for (const key of DETAIL_LISTS) {
+        const list = value.detail[key];
+        if (list === undefined) continue;
+        if (!Array.isArray(list)) p(`${at}.${key}`, 'must be an array of labels');
+        else if (list.length > WIRING_LIMITS.detailEmphasis) p(`${at}.${key}`, `more than ${WIRING_LIMITS.detailEmphasis} entries`);
+        else list.forEach((x, i) => nonEmptyString(x, `${at}.${key}[${i}]`));
+      }
     }
   }
 
@@ -471,10 +512,28 @@ export function configLenses(config: WiringConfig): LensDecl[] {
 export function detailEmphasis(config: WiringConfig): readonly string[] {
   return config.detail?.emphasis ?? [];
 }
+/** Labels whose detail items start folded (verbatim match); empty when unconfigured. */
+export function detailCollapsed(config: WiringConfig): readonly string[] {
+  return config.detail?.collapsed ?? [];
+}
+/** Labels whose text items render as exact-bytes copy boxes (verbatim match); empty when unconfigured. */
+export function detailCopyable(config: WiringConfig): readonly string[] {
+  return config.detail?.copyable ?? [];
+}
 
 /** Attention mechanism for a cause: first matching rule, else ambient (engine invariant). */
 export function attentionMechanism(config: WiringConfig, cause: string): AttentionMechanism {
   return config.attention?.find((r) => r.match.cause === cause)?.mechanism ?? 'ambient';
+}
+
+/** Display group of a cause: the first matching rule's group; undefined when unmatched or ungrouped. */
+export function attentionGroup(config: WiringConfig, cause: string): string | undefined {
+  return config.attention?.find((r) => r.match.cause === cause)?.group;
+}
+
+/** Display label for an action: the config's literal, else the raw action name (own-property lookup). */
+export function actionLabel(config: WiringConfig, action: string): string {
+  return own(config.actions, action)?.label ?? action;
 }
 
 /** Own-property lookups for the tables (never the prototype chain). */

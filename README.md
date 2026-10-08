@@ -32,7 +32,7 @@ judge and steer — whatever backend is behind it.
 the reference direct-wire server. Any backend that implements
 [`packages/contract/WIRE.md`](packages/contract/WIRE.md) can connect through the `direct` upstream.
 A backend adapter maintained outside this repository is not verifiable here. The contract package
-`@gunnflow/contract` is versioned (currently **0.3.2**) and may still change between minor
+`@gunnflow/contract` is versioned (currently **0.4.0**) and may still change between minor
 versions. Expect rough edges.
 
 ## 30-second start
