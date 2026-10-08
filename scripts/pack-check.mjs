@@ -5,8 +5,10 @@
 // must be inside. Per package:
 //   packages/contract       CONTRACT_VERSION equals the package version; WIRE.md and the
 //                           conformance / wiring entry points are inside.
-//   packages/upstream-port  the packed manifest names a peer range for @gunnflow/contract
-//                           (no workspace: protocol left).
+//   packages/upstream-port  the packed peer range for @gunnflow/contract is a caret range that
+//                           still admits the oldest contract consumers use (0.3.1).
+// Every main/types/exports target must exist in the tarball, and each package's required
+// export entries must be present.
 //
 //   node scripts/pack-check.mjs packages/contract           # check only (tarball removed)
 //   node scripts/pack-check.mjs packages/upstream-port --keep   # keep the tarball, print its path
@@ -21,6 +23,7 @@ const PACKAGES = {
   'packages/contract': {
     tarball: /^gunnflow-contract-.*\.tgz$/,
     files: ['dist/conformance/index.js', 'dist/wiring/index.js', 'WIRE.md'],
+    exports: ['.', './conformance', './wiring'],
     check(read, manifest, problems) {
       const m = read('package/dist/version.js').match(/CONTRACT_VERSION\s*=\s*['"]([^'"]+)['"]/);
       if (!m) problems.push('dist/version.js has no CONTRACT_VERSION');
@@ -31,19 +34,35 @@ const PACKAGES = {
   'packages/upstream-port': {
     tarball: /^gunnflow-upstream-port-.*\.tgz$/,
     files: [],
+    exports: ['.'],
     check(_read, manifest, problems) {
       const range = manifest.peerDependencies?.['@gunnflow/contract'];
       if (typeof range !== 'string' || !range) problems.push('no peer range for @gunnflow/contract');
-      else if (range.startsWith('workspace:')) problems.push(`peer range for @gunnflow/contract left as ${range}`);
+      else if (!caretAdmits(range, OLDEST_CONTRACT)) problems.push(`peer range ${range} for @gunnflow/contract must be a caret range admitting ${OLDEST_CONTRACT}`);
       return `version ${manifest.version}, peer @gunnflow/contract ${range}`;
     },
   },
 };
 
+/** The oldest contract version a published upstream-port must still install next to. */
+const OLDEST_CONTRACT = '0.3.1';
+/** `^M.m.p` admits `v` (0.x caret: same major and minor, patch >= p; 1+: same major, >=). */
+function caretAdmits(range, v) {
+  const r = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+  const x = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
+  if (!r || !x) return false;
+  const [rM, rm, rp] = r.slice(1).map(Number);
+  const [xM, xm, xp] = x.slice(1).map(Number);
+  if (rM !== xM) return false;
+  if (rM === 0) return rm === xm && xp >= rp;
+  return xm > rm || (xm === rm && xp >= rp);
+}
+
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
-const target = args.find((a) => !a.startsWith('--'))?.replace(/\/+$/, '');
-const spec = target && PACKAGES[target];
+const positional = args.filter((a) => a !== '--keep');
+const target = positional[0]?.replace(/\/+$/, '');
+const spec = positional.length === 1 && !target.startsWith('-') && PACKAGES[target];
 if (!spec) {
   console.error(`usage: node scripts/pack-check.mjs <${Object.keys(PACKAGES).join('|')}> [--keep]`);
   process.exit(2);
@@ -68,11 +87,22 @@ const pointsAtDist = (v) => typeof v === 'string' && (v.startsWith('./dist/') ||
 if (manifest.private) problems.push('manifest is private');
 if (!pointsAtDist(manifest.main)) problems.push(`main points at ${manifest.main}, not dist/`);
 if (!pointsAtDist(manifest.types)) problems.push(`types points at ${manifest.types}, not dist/`);
+const inTarball = (rel) => list.includes(`package/${rel.replace(/^\.\//, '')}`);
+const targetExists = (label, rel) => {
+  if (typeof rel === 'string' && pointsAtDist(rel) && !inTarball(rel)) problems.push(`${label} target ${rel} is not in the tarball`);
+};
+targetExists('main', manifest.main);
+targetExists('types', manifest.types);
 for (const [entry, t] of Object.entries(manifest.exports ?? {})) {
   const imp = typeof t === 'string' ? t : t?.import;
   const types = typeof t === 'string' ? null : t?.types;
   if (!pointsAtDist(imp)) problems.push(`exports["${entry}"] import points at ${imp}`);
   if (types !== null && !pointsAtDist(types)) problems.push(`exports["${entry}"] types points at ${types}`);
+  targetExists(`exports["${entry}"] import`, imp);
+  if (types !== null) targetExists(`exports["${entry}"] types`, types);
+}
+for (const entry of spec.exports) {
+  if (!manifest.exports || !(entry in manifest.exports)) problems.push(`missing export entry "${entry}"`);
 }
 for (const need of ['dist/index.js', 'dist/index.d.ts', 'README.md', 'LICENSE', ...spec.files]) {
   if (!list.includes(`package/${need}`)) problems.push(`missing ${need}`);
