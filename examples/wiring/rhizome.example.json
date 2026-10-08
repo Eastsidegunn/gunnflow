@@ -108,7 +108,7 @@
       "match": {
         "cause": "approval_unverified"
       },
-      "mechanism": "interrupt"
+      "mechanism": "ambient"
     }
   ],
   "viewers": {
