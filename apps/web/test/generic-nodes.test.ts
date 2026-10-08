@@ -10,6 +10,21 @@ import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
 import { EMPTY_WIRING, loadWiring } from '../src/wiring/loadWiring.js';
 
 describe('generic node intake', () => {
+  it('a node whose live artifact URL carries credentials is listed invalid and never shown', () => {
+    const node = (url: string) => ({
+      id: 'n1', kind: 'deliverable', state: { value: 'ready' }, relations: [], capabilities: [], attention: [],
+      artifacts: [{ id: 'a1', mediaType: 'text/html', access: { kind: 'live', url } }],
+    });
+    const clean = normalizeNodes({ nodes: [node('https://preview.example/a')] })!;
+    expect(clean.nodes.map((n) => n.id)).toEqual(['n1']);
+    const leaked = normalizeNodes({ nodes: [node('https://alice:s3cret@preview.example/a')] })!;
+    expect(leaked.nodes).toEqual([]);
+    expect(leaked.invalid).toHaveLength(1);
+    expect(leaked.invalid[0]!.problem).toContain('must not carry credentials');
+    expect(leaked.invalid[0]!.problem).not.toContain('s3cret');
+    expect(leaked.invalid[0]!.problem).not.toContain('alice');
+  });
+
   it('the simulator envelope carries nodes; the domain projection never contains them', () => {
     const body = createFakeUpstream('normal').snapshot().body;
     const domain = normalizeProjection(body);
