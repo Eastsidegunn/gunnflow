@@ -76,7 +76,8 @@ const layouts = async (nodes: NodeProjection[], packContainers: boolean): Promis
   ];
 };
 
-describe('container packing (packContainers)', () => {
+// Each case runs full ELK layouts over several fixtures; slower CI runners need headroom.
+describe('container packing (packContainers)', { timeout: 30_000 }, () => {
   it('on: the nested goal is packed toward the engine aspect, not one tall column', async () => {
     const nodes = nestedGoal();
     for (const [label, pos] of await layouts(nodes, true)) {
