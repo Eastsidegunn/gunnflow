@@ -6,7 +6,7 @@ ships no backend vocabulary; without wiring files it shows every emitted term un
 
 | File | Backend |
 | --- | --- |
-| `rhizome.example.json` | Vocabulary mapping for a Rhizome direct-wire backend (states, relations, attention causes, node assemblies, lenses). |
+| `rhizome.example.json` | Vocabulary mapping for a Rhizome direct-wire backend (states, relations, attention causes and groups, node assemblies, lenses, action labels, detail presentation). |
 
 ## Using an example
 

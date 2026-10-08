@@ -406,11 +406,53 @@ export function gatesFixture(): FakeWorkspaceProjection {
   };
 }
 
+/** The exact command text of the hands-on request in the inbox fixture (two lines). */
+export const FAKE_CHORE_COMMAND = 'fake-cli login\nfake-cli publish ./dist/fake-pkg.tgz --access public';
+
+/**
+ * Decision inbox v2 — the blocked state plus hands-on requests: one a person
+ * can report on (done with an optional note, cannot with a required reason)
+ * and one that declares no action at all.
+ */
+export function inboxFixture(): FakeWorkspaceProjection {
+  const base = blockedFixture();
+  return {
+    ...base,
+    revision: 35,
+    chores: [
+      {
+        kind: 'chore',
+        id: 'c-publish',
+        missionId: 'm1',
+        name: 'Publish the package by hand',
+        state: 'waiting',
+        requestedAt: NOW - 1_200_000,
+        why: 'The agent cannot log in to the registry.',
+        where: 'Your own terminal, in the project folder.',
+        command: FAKE_CHORE_COMMAND,
+        afterwards: 'Report done (a short note is optional).',
+        reportable: true,
+      },
+      {
+        kind: 'chore',
+        id: 'c-silent',
+        missionId: 'm1',
+        name: 'Look at the shared drive',
+        state: 'waiting',
+        requestedAt: NOW - 3_600_000,
+        why: 'Nothing to report back here yet.',
+        reportable: false,
+      },
+    ],
+  };
+}
+
 export const FIXTURES = {
   empty: emptyFixture,
   normal: normalFixture,
   attention: attentionFixture,
   blocked: blockedFixture,
+  inbox: inboxFixture,
   gates: gatesFixture,
   large: () => largeFixture(),
 } as const;

@@ -25,6 +25,15 @@ export function createViewState() {
    * Until the P4 sort UI lands, nothing writes it.
    */
   const [sortKey, setSortKey] = createSignal<string | null>(null);
+  /**
+   * 결정함 F2: while the decision inbox is open, the item the canvas frames
+   * beside it (null: open, nothing selected); undefined while it is closed.
+   * View state only — the canvas restores the earlier camera on close.
+   */
+  const [inboxFrame, setInboxFrame] = createSignal<{ nodeId: string | null } | undefined>(undefined, {
+    equals: (a, b) => a?.nodeId === b?.nodeId && (a === undefined) === (b === undefined),
+  });
+  const [inboxSavedCamera, setInboxSavedCamera] = createSignal<Camera | null>(null);
 
   return {
     camera,
@@ -32,6 +41,15 @@ export function createViewState() {
     userMoved,
     sortKey,
     setSortKey,
+    inboxFrame,
+    setInboxFrame,
+    /** The camera from before the inbox opened (restored on close); null when none is held. */
+    inboxSavedCamera,
+    setInboxSavedCamera,
+    /** An automatic camera move (framing, restore): view state, not a person's pan. */
+    setCameraView(c: Camera) {
+      setCamera(c);
+    },
     panBy(dx: number, dy: number) {
       setUserMoved(true);
       const c = camera();

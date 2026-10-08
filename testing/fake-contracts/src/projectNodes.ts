@@ -169,5 +169,26 @@ export function projectNodes(p: FakeWorkspaceProjection): NodeProjection[] {
     attention: [],
     artifacts: d.artifacts ?? [],
   }));
-  return [...root, ...missions, ...tasks, ...gates, ...deliverables];
+  const chores: NodeProjection[] = (p.chores ?? []).map((c) => ({
+    id: c.id,
+    kind: CHORE_KIND,
+    label: c.name,
+    state: { value: c.state },
+    relations: membership(c.missionId),
+    capabilities: declared[c.id] ?? (c.reportable && c.state === 'waiting' ? CHORE_CAPABILITIES : []),
+    attention:
+      c.state === 'waiting' ? [{ cause: NEEDS_HANDS, ...(c.requestedAt ? { since: iso(c.requestedAt) } : {}) }] : [],
+    artifacts: [],
+  }));
+  return [...root, ...missions, ...tasks, ...gates, ...deliverables, ...chores];
 }
+
+/** Node kind of a hands-on request (the simulator's word). */
+export const CHORE_KIND = 'chore';
+/** Attention cause for a hands-on request waiting on a person. */
+export const NEEDS_HANDS = 'needs_hands';
+/** Report actions: done carries an optional note; cannot requires the reason. */
+const CHORE_CAPABILITIES: Capability[] = [
+  { action: 'chore.done', level: 'enabled', decision: { input: { required: false } } },
+  { action: 'chore.cannot', level: 'enabled', decision: { input: { required: true } } },
+];

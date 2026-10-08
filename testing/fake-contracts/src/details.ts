@@ -28,6 +28,16 @@ function detailItems(p: FakeWorkspaceProjection, nodeId: string): DetailItem[] |
       { label: 'recommendation', text: 'Approve after reviewing the evidence.' },
     ];
   }
+  // A hands-on request restates its texts under the simulator's own labels, in this order.
+  const chore = p.chores?.find((c) => c.id === nodeId);
+  if (chore) {
+    const items: DetailItem[] = [];
+    if (chore.why !== undefined) items.push({ label: 'why', text: chore.why });
+    if (chore.where !== undefined) items.push({ label: 'where', text: chore.where });
+    if (chore.command !== undefined) items.push({ label: 'command', text: chore.command });
+    if (chore.afterwards !== undefined) items.push({ label: 'afterwards', text: chore.afterwards });
+    return items.length > 0 ? items : undefined;
+  }
   // The build task carries a progress slot the projection does not.
   if (nodeId === 't-build' && p.tasks.some((t) => t.id === nodeId)) {
     return [{ label: 'progress', text: '41/42 tests' }];

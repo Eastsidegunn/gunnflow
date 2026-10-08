@@ -739,3 +739,91 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
   animation: gf-enter-top var(--duration-moderate01) var(--ease-entrance) both;
 }
 .work-queue button { padding: 2px 8px; font-size: 11px; }
+
+/* ---- 결정함 v2 (2026-10-08) ------------------------------------------------ */
+/* F1: per-group counts — interrupt groups with items stand out, the rest stay muted. */
+.group-counts { display: inline-flex; align-items: baseline; gap: 0; font-size: 12px; }
+.group-count { color: var(--subtext); white-space: nowrap; }
+.group-count[data-mechanism='interrupt']:not([data-count='0']) { color: var(--gate); font-weight: 700; }
+.group-sep { color: var(--subtext); opacity: 0.6; white-space: pre; }
+.decision-inbox-toggle > button.alerting .group-count:not([data-mechanism='interrupt']),
+.decision-inbox-toggle > button.alerting .group-sep { color: var(--subtext); }
+.inbox-group-summary { font-size: 12px; }
+.inbox-group { display: flex; flex-direction: column; }
+.inbox-group-toggle {
+  border: none; border-radius: 0; background: transparent; text-align: left;
+  padding: 9px 14px 5px; font-size: 12px; color: var(--subtext); letter-spacing: 0.02em;
+}
+.inbox-group-toggle[data-mechanism='interrupt'] { color: var(--text); font-weight: 600; }
+.inbox-group + .inbox-group { border-top: 1px solid var(--border); }
+.inbox-group-empty { padding: 2px 14px 8px; margin: 0; font-size: 11.5px; }
+.inbox-since { color: var(--subtext); }
+
+/* F3: readable detail — proportional reading font, ~65ch lines, received whitespace kept, no markup. */
+.node-detail-claim[data-grade='claim'] { border-left: 2px solid var(--accent); padding-left: 14px; }
+/* Inside the claim block the block's stripe speaks for every item. */
+.node-detail-claim .node-detail-item[data-grade='claim'] { border-left: none; padding-left: 0; }
+.node-detail-claim .node-detail-item[data-emphasis='config'] { border-left: 3px solid var(--accent); padding-left: 10px; }
+.node-detail-claim .node-detail-item { margin: 0 0 14px; }
+.detail-heading { display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: var(--subtext); margin-bottom: 3px; }
+.node-detail-item .detail-text {
+  margin: 0; max-width: 65ch; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 14px/1.65 system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; color: var(--text);
+}
+/* F6: a folded item is one line that opens in place (folded, never hidden). */
+.detail-fold {
+  border: none; background: transparent; padding: 2px 0; font-size: 12px; color: var(--subtext); text-align: left;
+}
+.detail-fold:hover:not(:disabled) { color: var(--text); }
+
+/* F10: exact-bytes copy box. Markers are drawn by CSS beside the raw characters (never part of the text). */
+.copy-box[data-grade='claim'] { border-left: none; padding-left: 0; max-width: 100%; }
+.copy-box-frame {
+  position: relative; display: flex; align-items: stretch;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 0;
+}
+.copy-gutter, .copy-code { font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.copy-gutter {
+  display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0;
+  padding: 0 10px; color: var(--subtext); opacity: 0.6; user-select: none; border-right: 1px solid var(--border);
+}
+.copy-code { flex: 1; min-width: 0; display: block; white-space: pre; overflow-x: auto; padding: 0 96px 0 12px; color: var(--text); tab-size: 4; }
+.copy-mark { unicode-bidi: isolate; }
+.copy-mark::before {
+  content: attr(data-mark); color: var(--subtext); opacity: 0.75; font-size: 0.85em;
+  user-select: none; pointer-events: none;
+}
+.copy-mark[data-cls='eol']::before { opacity: 0.45; }
+.copy-mark[data-cls='control']::before, .copy-mark[data-cls='zero-width']::before, .copy-mark[data-cls='bidi']::before {
+  color: var(--blocked); opacity: 1; border: 1px solid currentColor; border-radius: 3px; padding: 0 2px; margin: 0 1px; font-size: 0.75em;
+}
+.copy-mark[data-cls='trailing-space'] { background: rgba(255, 93, 93, 0.18); }
+.copy-mark[data-cls='trailing-space']::before { content: none; }
+/* Characters with no width of their own keep none (the marker shows them). */
+.copy-mark[data-cls='control'] .copy-raw, .copy-mark[data-cls='zero-width'] .copy-raw, .copy-mark[data-cls='bidi'] .copy-raw { font-size: 0; }
+.copy-button { position: absolute; top: 6px; right: 6px; font-size: 11.5px; padding: 3px 9px; }
+.copy-button[data-state='copied'] { color: #6ee7a8; border-color: #6ee7a8; }
+.copy-failed { color: var(--blocked); font-size: 12px; margin: 6px 0 0; }
+.copy-note { font-size: 11px; margin: 6px 0 0; }
+
+/* F5: the horizontal action bar pinned under the reading pane. Each control's parts join the bar;
+   evidence and an open reason field span the bar above the buttons, notes below. */
+.action-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.action-bar > .generic-action { display: contents; }
+.action-bar .bar-wide { order: -2; flex-basis: 100%; }
+.action-bar .bar-expand { order: -1; flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.action-bar .bar-note { order: 1; flex-basis: 100%; }
+.bar-expand textarea {
+  font: 14px/1.5 system-ui, -apple-system, sans-serif; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 7px; padding: 8px 11px; resize: vertical; min-height: 64px;
+}
+.bar-expand-buttons { display: flex; gap: 8px; }
+.bar-inline-text { flex: 1 1 220px; min-width: 160px; }
+.action-bar button.primary { background: var(--accent); border-color: var(--accent); color: #0b1118; font-weight: 600; }
+.action-bar button.primary:hover:not(:disabled) { border-color: var(--text); }
+
+/* F7: no declared action — a clear, neutral notice (not an error, not a hint). */
+.no-actions {
+  margin: 0; padding: 8px 12px; font-size: 13px; color: var(--text);
+  background: rgba(148, 160, 174, 0.08); border: 1px solid var(--border); border-radius: 8px;
+}

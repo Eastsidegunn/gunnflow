@@ -11,9 +11,14 @@ config만 쓴다. 위치는 `gunnflow.config.json`의 `wiringDir` 또는 env `GU
 
 병합 규칙:
 
-- `render` · `relations` · `viewers` · `kinds`: 키 단위 덮어쓰기 — 뒤 파일의 같은 키가 항목 전체를 대체, 새 키는 추가.
+- `render` · `relations` · `viewers` · `kinds` · `actions`: 키 단위 덮어쓰기 — 뒤 파일의 같은 키가 항목 전체를 대체, 새 키는 추가.
+  (`actions`는 행동 이름별 표시 라벨 `{ "label": "…" }` — 없으면 버튼에 원문 이름.)
 - `attention`: cause 단위 — 같은 cause는 뒤 파일 규칙이 그 자리에서 교체, 새 cause는 뒤에 추가(첫 일치 우선 유지).
-- `detail`: 통째로 대체 — 뒤 파일의 `detail.emphasis`(상세 항목에서 강조할 label 목록, 원문 일치)가 전체 목록을 새로 말한다.
+  `group`(표시 무리 이름, 선택)을 말하지 않은 교체 규칙은 앞 규칙의 `group`을 이어받는다.
+  단 `group`을 하나라도 말하는 파일은 무리 순서를 말한 것으로 본다: 그 파일의 규칙이 그 순서대로 앞에 서고,
+  그 파일이 말하지 않은 앞 파일의 cause가 뒤를 잇는다(결정함·토글의 무리 순서 = 병합 결과에 처음 나온 순서).
+- `detail`: 목록 단위 대체 — 뒤 파일이 말한 `emphasis`(강조) · `collapsed`(기본 접힘) · `copyable`(바이트 그대로
+  복사 상자) 목록이 그 목록 전체를 새로 말한다(label 원문 일치). 말하지 않은 목록은 앞 파일 것이 남는다.
 - 파일마다 `validateWiringConfig`로 따로 검사하고, 불합격 파일은 건너뛴다(사유는 화면 디버그 요약과 콘솔에 남는다).
 - 병합 결과를 다시 전체 검사한다. 불합격이면 기본 config로 돌아가고 사유를 표시한다.
 

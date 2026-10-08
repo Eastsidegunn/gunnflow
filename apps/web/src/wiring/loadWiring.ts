@@ -6,7 +6,7 @@
  * are kept with their reasons for the debug summary.
  */
 import { createSignal } from 'solid-js';
-import { WIRING_SCHEMA_VERSION, validateWiringConfig, type WiringConfig } from '@gunnflow/contract/wiring';
+import { WIRING_SCHEMA_VERSION, validateWiringConfig, type AttentionRule, type WiringConfig } from '@gunnflow/contract/wiring';
 import { DEFAULT_WIRING } from './defaultWiring.js';
 
 export const EMPTY_WIRING: WiringConfig = { version: WIRING_SCHEMA_VERSION };
@@ -38,21 +38,40 @@ export function loadWiring(offered: unknown = DEFAULT_WIRING, log: (msg: string)
 }
 
 /**
- * Layers `over` onto `base`. Tables (render, relations, viewers, kinds)
- * override per key — a later file's entry replaces the whole entry, new keys
- * are added. Attention merges per cause — a later rule for a known cause
- * replaces it in place, a new cause is appended — so "first match wins"
- * keeps its meaning. The version is the base's (each file is checked for
- * compatibility on its own).
+ * Layers `over` onto `base`. Tables (render, relations, viewers, kinds,
+ * actions) override per key — a later file's entry replaces the whole entry,
+ * new keys are added. Attention merges per cause — a later rule for a known
+ * cause replaces it in place, a new cause is appended — so "first match wins"
+ * keeps its meaning; a replacing rule that states no `group` keeps the
+ * replaced rule's group (changing a mechanism does not ungroup a cause).
+ * Exception: a file that names any display group states the group order, so
+ * its rules come first in its own order and the base's other causes follow
+ * (each cause is matched once, so only group order and multi-cause grouping
+ * can tell the difference).
+ * Detail merges per list: each list a later file states replaces that list.
+ * The version is the base's (each file is checked for compatibility on its own).
  */
 export function mergeWiring(base: WiringConfig, over: WiringConfig): WiringConfig {
   const table = <T>(a: Record<string, T> | undefined, b: Record<string, T> | undefined) =>
     a || b ? { ...(a ?? {}), ...(b ?? {}) } : undefined;
-  const attention = [...(base.attention ?? [])];
-  for (const rule of over.attention ?? []) {
-    const at = attention.findIndex((r) => r.match.cause === rule.match.cause);
-    if (at >= 0) attention[at] = rule;
-    else attention.push(rule);
+  const baseRules = base.attention ?? [];
+  const overRules = over.attention ?? [];
+  const inherit = (rule: AttentionRule): AttentionRule => {
+    const prev = baseRules.find((r) => r.match.cause === rule.match.cause);
+    return rule.group === undefined && prev?.group !== undefined ? { ...rule, group: prev.group } : rule;
+  };
+  let attention: AttentionRule[];
+  if (overRules.some((r) => r.group !== undefined)) {
+    // A file that names groups states their order: its rules lead, the causes it does not mention follow.
+    const mentioned = new Set(overRules.map((r) => r.match.cause));
+    attention = [...overRules.map(inherit), ...baseRules.filter((r) => !mentioned.has(r.match.cause))];
+  } else {
+    attention = [...baseRules];
+    for (const rule of overRules) {
+      const at = attention.findIndex((r) => r.match.cause === rule.match.cause);
+      if (at >= 0) attention[at] = inherit(rule);
+      else attention.push(rule);
+    }
   }
   // Lenses merge like attention: a later file's lens of a known id replaces it in place, a new id is appended.
   const lenses = [...(base.lenses ?? [])];
@@ -66,15 +85,16 @@ export function mergeWiring(base: WiringConfig, over: WiringConfig): WiringConfi
   const relations = table(base.relations, over.relations);
   const viewers = table(base.viewers, over.viewers);
   const kinds = table(base.kinds, over.kinds);
+  const actions = table(base.actions, over.actions);
   if (render) merged.render = render;
   if (relations) merged.relations = relations;
   if (base.attention || over.attention) merged.attention = attention;
   if (viewers) merged.viewers = viewers;
   if (kinds) merged.kinds = kinds;
   if (base.lenses || over.lenses) merged.lenses = lenses;
-  // Detail emphasis replaces as a whole: a later file states the full list.
-  const detail = over.detail ?? base.detail;
-  if (detail) merged.detail = detail;
+  if (actions) merged.actions = actions;
+  // Detail merges per list; each stated list replaces as a whole (a later file states the full list).
+  if (base.detail || over.detail) merged.detail = { ...(base.detail ?? {}), ...(over.detail ?? {}) };
   return merged;
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { WIRING_SCHEMA_VERSION, type WiringConfig } from '@gunnflow/contract/wiring';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
 import { createWiringState, loadWiringFiles, mergeWiring, type WiringFileEntry } from '../src/wiring/loadWiring.js';
+import { configGroups } from '../src/state/decisionInbox.js';
 
 const V = WIRING_SCHEMA_VERSION;
 const quiet = () => undefined;
@@ -28,9 +29,59 @@ describe('mergeWiring', () => {
     expect(m.version).toBe(DEFAULT_WIRING.version);
   });
 
-  it('detail replaces whole: the later file states the full emphasis list; absence keeps the base', () => {
+  it('detail merges per list: a stated list replaces that list whole; absence keeps the base', () => {
     expect(mergeWiring(DEFAULT_WIRING, { version: V }).detail).toEqual(DEFAULT_WIRING.detail);
     expect(mergeWiring(DEFAULT_WIRING, { version: V, detail: { emphasis: ['권고'] } }).detail).toEqual({ emphasis: ['권고'] });
+    const both = mergeWiring(DEFAULT_WIRING, { version: V, detail: { copyable: ['command'] } });
+    expect(both.detail).toEqual({ emphasis: DEFAULT_WIRING.detail!.emphasis, copyable: ['command'] });
+    expect(mergeWiring(both, { version: V, detail: { copyable: ['명령'] } }).detail!.copyable).toEqual(['명령']);
+    expect(mergeWiring({ version: V }, { version: V }).detail).toBeUndefined();
+  });
+
+  it('actions merge per key like the other tables', () => {
+    const a = mergeWiring(DEFAULT_WIRING, { version: V, actions: { 'x.go': { label: 'Go' }, 'x.stop': { label: 'Stop' } } });
+    const b = mergeWiring(a, { version: V, actions: { 'x.go': { label: '가기' } } });
+    expect(b.actions).toEqual({ 'x.go': { label: '가기' }, 'x.stop': { label: 'Stop' } });
+    expect(mergeWiring(DEFAULT_WIRING, { version: V }).actions).toBeUndefined();
+  });
+
+  it('a file that names groups states their order: its rules lead, the base\'s other causes follow', () => {
+    const over: WiringConfig = {
+      version: V,
+      attention: [
+        { match: { cause: 'decide' }, mechanism: 'interrupt', group: 'A' },
+        { match: { cause: 'waiting_for_human' }, mechanism: 'interrupt', group: 'A' },
+        { match: { cause: 'todo' }, mechanism: 'interrupt', group: 'B' },
+        { match: { cause: 'flagged' }, mechanism: 'ambient', group: 'C' },
+      ],
+    };
+    const m = mergeWiring({ ...DEFAULT_WIRING, attention: [...DEFAULT_WIRING.attention!, { match: { cause: 'other' }, mechanism: 'ambient' }] }, over);
+    expect(m.attention!.map((r) => [r.match.cause, r.group])).toEqual([
+      ['decide', 'A'],
+      ['waiting_for_human', 'A'],
+      ['todo', 'B'],
+      ['flagged', 'C'],
+      ['other', undefined],
+    ]);
+    // A later ungrouped file (e.g. a settings edit) keeps that order and the groups.
+    const edited = mergeWiring(m, { version: V, attention: [{ match: { cause: 'flagged' }, mechanism: 'interrupt' }] });
+    expect(edited.attention!.map((r) => [r.match.cause, r.mechanism, r.group])).toEqual([
+      ['decide', 'interrupt', 'A'],
+      ['waiting_for_human', 'interrupt', 'A'],
+      ['todo', 'interrupt', 'B'],
+      ['flagged', 'interrupt', 'C'],
+      ['other', 'ambient', undefined],
+    ]);
+  });
+
+  it('a replacing attention rule without a group keeps the replaced rule\'s group; a stated group wins', () => {
+    const base: WiringConfig = { version: V, attention: [{ match: { cause: 'c' }, mechanism: 'interrupt', group: 'G' }] };
+    expect(mergeWiring(base, { version: V, attention: [{ match: { cause: 'c' }, mechanism: 'ambient' }] }).attention).toEqual([
+      { match: { cause: 'c' }, mechanism: 'ambient', group: 'G' },
+    ]);
+    expect(mergeWiring(base, { version: V, attention: [{ match: { cause: 'c' }, mechanism: 'ambient', group: 'H' }] }).attention).toEqual([
+      { match: { cause: 'c' }, mechanism: 'ambient', group: 'H' },
+    ]);
   });
 
   it('attention merges per cause: a known cause is replaced in place, a new cause is appended', () => {
@@ -134,5 +185,23 @@ describe('lens merge', () => {
       { id: 'hot', label: 'Busy', match: { states: ['busy'] } },
       { id: 'mine', label: 'Mine', match: { attention: true } },
     ]);
+  });
+});
+
+describe('example wiring files', () => {
+  it('every examples/wiring/*.json validates alone and merges over the default', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const dir = new URL('../../../examples/wiring/', import.meta.url);
+    const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    expect(files.length).toBeGreaterThan(0);
+    for (const f of files) {
+      const config = JSON.parse(readFileSync(new URL(f, dir), 'utf8')) as unknown;
+      const r = loadWiringFiles([{ file: f, config }], DEFAULT_WIRING, quiet);
+      expect(r.files.rejected, f).toEqual([]);
+      expect(r.problems, f).toEqual([]);
+      // The file's own display-group order survives the merge over the default.
+      const alone = configGroups(config as WiringConfig).map((g) => g.name);
+      if (alone.length > 0) expect(configGroups(r.config).map((g) => g.name), f).toEqual(alone);
+    }
   });
 });

@@ -2,7 +2,7 @@
 // node checks and carries domain vocabulary through as opaque strings.
 import { describe, expect, it } from 'vitest';
 import { nodeProblem } from '@gunnflow/contract';
-import { FLAGGED, MEMBER_OF, UNSTATED, WAITING_FOR_HUMAN, WORKSPACE_NODE_ID, emptyFixture, blockedFixture, gatesFixture, largeFixture, normalFixture, projectNodes } from '../src/index.js';
+import { CHORE_KIND, FAKE_CHORE_COMMAND, FLAGGED, MEMBER_OF, NEEDS_HANDS, UNSTATED, WAITING_FOR_HUMAN, WORKSPACE_NODE_ID, detailOf, emptyFixture, inboxFixture, blockedFixture, gatesFixture, largeFixture, normalFixture, projectNodes } from '../src/index.js';
 
 describe('projectNodes', () => {
   it('every fixture translates into well-formed contract nodes: one per domain node plus the root', () => {
@@ -61,5 +61,23 @@ describe('projectNodes', () => {
     const [root] = projectNodes(emptyFixture());
     expect(root).toMatchObject({ id: WORKSPACE_NODE_ID, kind: 'workspace', label: 'Workspace' });
     expect(root!.capabilities).toEqual([{ action: 'mission.create', level: 'enabled', decision: { input: { required: true } } }]);
+  });
+
+  it('hands-on requests: own kind and cause, report actions only when declared, detail texts verbatim', () => {
+    const p = inboxFixture();
+    const nodes = new Map(projectNodes(p).map((n) => [n.id, n]));
+    for (const n of nodes.values()) expect(nodeProblem(n), n.id).toBeNull();
+    const chore = nodes.get('c-publish')!;
+    expect(chore).toMatchObject({ kind: CHORE_KIND, state: { value: 'waiting' }, relations: [{ type: MEMBER_OF, target: 'm1' }] });
+    expect(chore.attention).toEqual([{ cause: NEEDS_HANDS, since: expect.any(String) }]);
+    expect(chore.capabilities.map((c) => [c.action, c.decision?.input?.required])).toEqual([
+      ['chore.done', false],
+      ['chore.cannot', true],
+    ]);
+    expect(nodes.get('c-silent')!.capabilities).toEqual([]);
+    expect(nodes.get('c-silent')!.attention.map((a) => a.cause)).toEqual([NEEDS_HANDS]);
+    const detail = detailOf(p, 'c-publish')!;
+    expect(detail.items.map((i) => i.label)).toEqual(['why', 'where', 'command', 'afterwards']);
+    expect(detail.items[2]!.text).toBe(FAKE_CHORE_COMMAND);
   });
 });

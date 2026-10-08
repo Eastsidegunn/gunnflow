@@ -56,6 +56,14 @@
     "unstated": {
       "glyph": "○",
       "tone": "#dde3ea"
+    },
+    "done": {
+      "glyph": "✓",
+      "tone": "#6ee7a8"
+    },
+    "unable": {
+      "glyph": "⊘",
+      "tone": "#ff5d5d"
     }
   },
   "relations": {
@@ -90,25 +98,36 @@
       "match": {
         "cause": "needs_human"
       },
-      "mechanism": "interrupt"
+      "mechanism": "interrupt",
+      "group": "결정"
     },
     {
       "match": {
         "cause": "waiting_for_human"
       },
-      "mechanism": "interrupt"
+      "mechanism": "interrupt",
+      "group": "결정"
     },
     {
       "match": {
-        "cause": "flagged"
+        "cause": "needs_human_action"
       },
-      "mechanism": "ambient"
+      "mechanism": "interrupt",
+      "group": "할 일"
     },
     {
       "match": {
         "cause": "approval_unverified"
       },
-      "mechanism": "ambient"
+      "mechanism": "ambient",
+      "group": "확인"
+    },
+    {
+      "match": {
+        "cause": "flagged"
+      },
+      "mechanism": "ambient",
+      "group": "확인"
     }
   ],
   "viewers": {
@@ -276,6 +295,43 @@
           }
         }
       ]
+    },
+    "request": {
+      "parts": [
+        {
+          "id": "status",
+          "part": "glyph"
+        },
+        {
+          "id": "state",
+          "part": "label",
+          "source": "state"
+        },
+        {
+          "id": "complete-note",
+          "part": "text",
+          "action": "request.complete"
+        },
+        {
+          "id": "complete",
+          "part": "send",
+          "action": "request.complete",
+          "requires": []
+        },
+        {
+          "id": "unable-reason",
+          "part": "text",
+          "action": "request.unable"
+        },
+        {
+          "id": "unable",
+          "part": "send",
+          "action": "request.unable",
+          "requires": [
+            "unable-reason"
+          ]
+        }
+      ]
     }
   },
   "lenses": [
@@ -305,11 +361,35 @@
       }
     }
   ],
+  "actions": {
+    "gate.approve": {
+      "label": "승인"
+    },
+    "gate.reject": {
+      "label": "거부"
+    },
+    "gate.requestChanges": {
+      "label": "수정 요청"
+    },
+    "request.complete": {
+      "label": "완료 알림"
+    },
+    "request.unable": {
+      "label": "못 함 알림"
+    }
+  },
   "detail": {
     "emphasis": [
       "권고",
       "recommendation",
       "승인 상태"
+    ],
+    "collapsed": [
+      "digest"
+    ],
+    "copyable": [
+      "명령",
+      "command"
     ]
   }
 }

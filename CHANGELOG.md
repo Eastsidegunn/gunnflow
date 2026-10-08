@@ -7,6 +7,9 @@ aims to follow [Semantic Versioning](https://semver.org/). The contract package
 
 ## [Unreleased]
 
+- `@gunnflow/contract` 0.4.0: the wiring schema gains optional presentation fields — `attention[].group` (display group name), `actions` (display label per action name), `detail.collapsed` and `detail.copyable` (`detail.emphasis` becomes optional). Every existing config stays valid; node, detail and intent wire are unchanged. Consumers claim `0.4.x`.
+- Decision inbox v2: attention groups with per-group counts on the toggle (interrupt groups expanded, ambient groups folded), the canvas frames the selected item beside the drawer and restores the camera on close, a readable claim-graded detail body, config action labels, a horizontal action bar with inline reason fields, folded detail items, waiting time from `attention.since`, and exact-bytes copy boxes that make invisible characters visible (Gunnflow never executes them).
+
 - `@gunnflow/upstream-port` 0.1.0 is publishable: built `dist/` (it carries one runtime class, `UnsupportedDetail`), npm metadata, README and LICENSE; peer `@gunnflow/contract` `^0.3.1`. `scripts/pack-check.mjs` checks either package's tarball (`pnpm contract:pack-check`, `pnpm upstream-port:pack-check`).
 - `@gunnflow/contract` 0.3.2: a live artifact URL carrying userinfo credentials (`user:pass@`) is refused by the validator; the problem text never echoes the URL. Compliant backends are unaffected.
 - `@gunnflow/contract` 0.3.1: the optional `vitest` peer (conformance suite) accepts `^3 || ^4 || ^5`. Packaging only — no contract change.

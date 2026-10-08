@@ -153,7 +153,8 @@ export function setRelation(d: WiringConfig, key: string, value: { style: EdgeSt
 export function setAttention(d: WiringConfig, cause: string, mechanism: AttentionMechanism): WiringConfig {
   const rules = [...(d.attention ?? [])];
   const at = rules.findIndex((r) => r.match.cause === cause);
-  if (at >= 0) rules[at] = { match: { cause }, mechanism };
+  // A rule's display group survives a mechanism change.
+  if (at >= 0) rules[at] = { ...rules[at]!, match: { cause }, mechanism };
   else rules.push({ match: { cause }, mechanism });
   return { ...d, attention: rules };
 }

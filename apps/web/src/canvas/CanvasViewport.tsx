@@ -38,6 +38,9 @@ import { planEmphasis } from '../state/lens.js';
 import { computeSpatialTiers, computeTiers, spatialNeighbors, type LensVerdict, type Tier } from '../state/relevance.js';
 import { computeFocusAlpha } from '../state/focus.js';
 import type { WorkspaceStores } from '../state/stores.js';
+import type { Camera } from '../state/viewState.js';
+import { asideCamera, frameIds, lerpCamera, unionRect } from '../state/inboxCamera.js';
+import { relationArrangeFor } from '@gunnflow/contract/wiring';
 
 export interface CanvasViewportProps {
   stores: WorkspaceStores;
@@ -319,6 +322,74 @@ export function CanvasViewport(props: CanvasViewportProps) {
   onCleanup(cancelStagePan);
   // ---- end stage pan-aside -------------------------------------------------
 
+  // ---- 결정함 F2: inbox-aside framing (view state only) --------------------
+  // While the decision inbox is open, the canvas left of its drawer frames the
+  // selected item, its nearest container and its received-relation
+  // neighbours; closing the inbox restores the camera the person had before
+  // it opened. Animated with the theme's motion unless reduced motion is set.
+  let cameraRaf = 0;
+  /** The running tween's destination (a person's gesture abandons it; unmounting lands it). */
+  let tweenTarget: Camera | null = null;
+  const cancelCameraTween = () => {
+    cancelAnimationFrame(cameraRaf);
+    tweenTarget = null;
+  };
+  const moveCamera = (to: Camera) => {
+    cancelCameraTween();
+    if (prefersReducedMotion()) {
+      viewState.setCameraView(to);
+      return;
+    }
+    tweenTarget = to;
+    const from = viewState.camera();
+    const dur = DEFAULT_THEME.motion.durations.moderate02;
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      viewState.setCameraView(t >= 1 ? to : lerpCamera(from, to, ease(t)));
+      if (t < 1) cameraRaf = requestAnimationFrame(step);
+      else tweenTarget = null;
+    };
+    cameraRaf = requestAnimationFrame(step);
+  };
+  const frameAside = (id: string) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const nodes = projectionStore.genericNodes()?.nodes ?? [];
+    const config = props.stores.wiring.config;
+    const ids = frameIds(nodes, id, topoGraph()?.parentOf, (type) => relationArrangeFor(config, type) === 'contain');
+    const bounds = unionRect(ids.flatMap((x) => (nodeRect(x) ? [nodeRect(x)!] : [])));
+    if (!bounds || !nodeRect(id)) return;
+    // The drawer's laid-out left edge (offsetLeft ignores its entrance transform).
+    const drawer = document.querySelector<HTMLElement>('[data-testid="decision-inbox"]');
+    const drawerLeft = drawer ? drawer.offsetLeft : window.innerWidth * 0.4;
+    const visibleWidth = drawerLeft - rect.left;
+    if (visibleWidth < 160) return;
+    moveCamera(asideCamera(bounds, { width: rect.width, height: rect.height, visibleWidth }));
+  };
+  createEffect(() => {
+    const frame = viewState.inboxFrame();
+    if (frame) {
+      // The camera from before the inbox opened lives in view state, so it is
+      // restored even when the canvas was away (③) at the moment of closing.
+      if (!untrack(viewState.inboxSavedCamera)) viewState.setInboxSavedCamera(untrack(viewState.camera));
+      const id = frame.nodeId;
+      // After the drawer has laid out (one frame), never inside the reactive pass.
+      if (id) requestAnimationFrame(() => untrack(() => viewState.inboxFrame()?.nodeId === id && frameAside(id)));
+    } else {
+      const back = untrack(viewState.inboxSavedCamera);
+      if (!back) return;
+      viewState.setInboxSavedCamera(null);
+      moveCamera(back);
+    }
+  });
+  onCleanup(() => {
+    const landing = tweenTarget;
+    cancelCameraTween();
+    if (landing) viewState.setCameraView(landing);
+  });
+  // ---- end inbox-aside framing --------------------------------------------
+
   const markDirty = () => {
     dirty = true;
   };
@@ -458,8 +529,9 @@ export function CanvasViewport(props: CanvasViewportProps) {
     | null = null;
 
   const onPointerDown = (e: PointerEvent) => {
-    // A fresh gesture owns the camera: a scheduled stage pan-aside yields.
+    // A fresh gesture owns the camera: a scheduled stage pan-aside (or inbox framing) yields.
     cancelStagePan();
+    cancelCameraTween();
     // Right press: the radial menu holds the gesture; nothing else starts.
     if (e.button === 2) {
       e.preventDefault();
@@ -685,6 +757,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    cancelCameraTween();
     { const z = props.stores.prefs.prefs().zoomSensitivity; viewState.zoomAt(e.deltaY < 0 ? z : 1 / z); }
   };
 

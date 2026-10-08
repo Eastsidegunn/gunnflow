@@ -151,6 +151,29 @@ export interface FakeDeliverableProjection {
   artifacts?: ArtifactRef[];
 }
 
+/**
+ * TEST-ONLY hands-on request: something the simulated agents ask a person to
+ * do by hand (run a command, change a setting) and report back. Its node kind,
+ * attention cause and action names are the simulator's own vocabulary; the
+ * cockpit learns how to show them only from wiring data.
+ */
+export interface FakeChoreProjection {
+  kind: 'chore';
+  id: string;
+  missionId: string;
+  name: string;
+  state: 'waiting' | 'done' | 'cannot';
+  requestedAt?: number;
+  /** Detail texts (served on demand, verbatim). */
+  why?: string;
+  where?: string;
+  /** The exact command text, bytes as authored (line breaks, tabs and all). */
+  command?: string;
+  afterwards?: string;
+  /** Whether the chore declares its report actions; false = no action at all. */
+  reportable: boolean;
+}
+
 export type FakeCanvasNode =
   | FakeTaskProjection
   | FakeGateProjection
@@ -241,6 +264,8 @@ export interface FakeWorkspaceProjection {
   workspaceCapabilities?: Capability[];
   /** Idempotency keys of the intents the upstream has applied, most recent last (bounded). */
   appliedIntentKeys?: string[];
+  /** Hands-on requests to a person (present only in the fixtures that carry them). */
+  chores?: FakeChoreProjection[];
 }
 
 /* ------------------------------------------------------------------ */
