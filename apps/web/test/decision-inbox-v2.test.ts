@@ -20,7 +20,7 @@ import {
 } from '../src/state/decisionInbox.js';
 import { copiedStatement, joinRaw, lineCount, markFor, tokenizeCopyText, utf8Bytes, type CopyLine } from '../src/state/copyText.js';
 import { asideCamera, frameIds, lerpCamera, unionRect } from '../src/state/inboxCamera.js';
-import { shownDecision, textModeFor } from '../src/state/genericActions.js';
+import { hiddenDraft, shownDecision, textModeFor } from '../src/state/genericActions.js';
 import { buildScene } from '../src/canvas/genericScene.js';
 
 describe('action bar text slots (F5): nothing is relayed that the control does not show', () => {
@@ -36,14 +36,29 @@ describe('action bar text slots (F5): nothing is relayed that the control does n
     expect(m({})).toBe('expand');
   });
 
-  it('a composing text from another surface leaves only while its field is on screen', () => {
+  it('a composing text the control does not show is a hidden draft: never sent, never dropped', () => {
     const typedElsewhere = { text: 'typed on the stage', option: 'x' };
-    expect(shownDecision(typedElsewhere, 'expand', false)).toEqual({ option: 'x' });
-    expect(shownDecision(typedElsewhere, 'none', false)).toEqual({ option: 'x' });
-    expect(shownDecision(typedElsewhere, 'expand', true)).toEqual(typedElsewhere);
-    expect(shownDecision(typedElsewhere, 'inline', false)).toEqual(typedElsewhere);
-    expect(shownDecision(typedElsewhere, 'field', false)).toEqual(typedElsewhere);
-    expect(shownDecision({}, 'expand', false)).toEqual({});
+    // Hidden: behind a closed form, or no field at all any more (slot removed by a capability/config change).
+    expect(hiddenDraft(typedElsewhere, 'expand', false)).toBe('typed on the stage');
+    expect(hiddenDraft(typedElsewhere, 'none', false)).toBe('typed on the stage');
+    // Shown: no hidden draft.
+    expect(hiddenDraft(typedElsewhere, 'expand', true)).toBeNull();
+    expect(hiddenDraft(typedElsewhere, 'inline', false)).toBeNull();
+    expect(hiddenDraft(typedElsewhere, 'field', false)).toBeNull();
+    // Nothing typed: nothing to protect.
+    expect(hiddenDraft({}, 'none', false)).toBeNull();
+    expect(hiddenDraft({ text: '' }, 'none', false)).toBeNull();
+    // Whitespace is typed bytes too.
+    expect(hiddenDraft({ text: ' ' }, 'none', false)).toBe(' ');
+  });
+
+  it('sanitizing drops only an EMPTY hidden text; a typed one is never stripped (the send is refused instead)', () => {
+    const typed = { text: 'keep me', option: 'x' };
+    expect(shownDecision(typed, 'none', false)).toEqual(typed);
+    expect(shownDecision(typed, 'expand', false)).toEqual(typed);
+    expect(shownDecision({ text: '', option: 'x' }, 'none', false)).toEqual({ option: 'x' });
+    expect(shownDecision({ text: '' }, 'expand', true)).toEqual({ text: '' });
+    expect(shownDecision({}, 'none', false)).toEqual({});
   });
 });
 

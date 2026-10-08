@@ -22,6 +22,7 @@ import { resolveParts, type ResolvedAction } from '../canvas/parts.js';
 import { actionGate, opensPanel } from '../state/genericActions.js';
 import { workspaceRoot } from '../state/workspaceRoot.js';
 import { manageFocus, focusables } from './focusScope.js';
+import { escStack } from '../state/escStack.js';
 
 export type ContextTarget =
   | { kind: 'empty' }
@@ -210,6 +211,8 @@ export function CanvasContextMenu(props: {
     const f = focusables(rootEl);
     const at = f.indexOf(document.activeElement as HTMLElement);
     if (e.key === 'Escape') {
+      if (!escStack.isTop(escOwner)) return;
+      e.preventDefault();
       e.stopPropagation();
       props.onClose();
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
@@ -224,10 +227,16 @@ export function CanvasContextMenu(props: {
       f[f.length - 1]?.focus();
     }
   };
-  // Esc cancels a hold too.
+  // The menu is an Esc owner like any surface over the canvas: while it is
+  // open it is the top layer, so one Esc closes it and nothing below (the
+  // decision inbox, the App's depth ladder) — in click and hold mode alike.
+  const escOwner = {};
+  onCleanup(escStack.push(escOwner));
+  // Esc closes the menu (hold or click mode) wherever focus is, while it is the top owner.
   onMount(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && holding()) {
+      if (e.key === 'Escape' && escStack.isTop(escOwner)) {
+        e.preventDefault();
         e.stopPropagation();
         props.onClose();
       }

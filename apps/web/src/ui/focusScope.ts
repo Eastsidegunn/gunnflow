@@ -19,6 +19,15 @@ export function shouldRestoreFocus(active: Element | null, body: Element | null)
   return !active || active === body;
 }
 
+/**
+ * Whether a non-modal surface may take a key whose target is `target`: focus
+ * is inside the surface, or on nothing in particular (the body / no target).
+ */
+export function keyOwnerFocus(target: Node | null, root: Pick<Node, 'contains'> | null, body: Node | null): boolean {
+  if (target === null || target === body) return true;
+  return root !== null && root.contains(target);
+}
+
 /** Call on mount; the returned cleanup restores focus (when the opener still exists). */
 export function manageFocus(el: HTMLElement, opts: { trap?: boolean } = {}): () => void {
   const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;

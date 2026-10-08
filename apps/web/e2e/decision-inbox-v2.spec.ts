@@ -225,60 +225,209 @@ type Debug = {
   selectedId: () => string | null;
   nodeRect: (id: string) => { x: number; y: number; w: number; h: number } | undefined;
 };
+type Box = { left: number; top: number; right: number; bottom: number };
 const camera = (page: Page) => page.evaluate(() => (window as unknown as { __gunnflowDebug: Debug }).__gunnflowDebug.camera());
 const canvasSelection = (page: Page) => page.evaluate(() => (window as unknown as { __gunnflowDebug: Debug }).__gunnflowDebug.selectedId());
-/** Where the canvas draws a node right now, in client coordinates. */
-const drawnCenter = (page: Page, id: string) =>
-  page.evaluate((nodeId) => {
+/** Where the canvas draws a node right now, in client coordinates (null when it is not drawn). */
+const drawnBox = (page: Page, id: string) =>
+  page.evaluate((nodeId): Box | null => {
     const dbg = (window as unknown as { __gunnflowDebug: Debug }).__gunnflowDebug;
     const r = dbg.nodeRect(nodeId);
     if (!r) return null;
     const cam = dbg.camera();
     const host = document.querySelector('[data-testid="canvas-host"] canvas')!.getBoundingClientRect();
-    return { x: host.left + host.width / 2 + (r.x + r.w / 2 - cam.x) * cam.zoom, y: host.top + host.height / 2 + (r.y + r.h / 2 - cam.y) * cam.zoom };
+    const sx = (wx: number) => host.left + host.width / 2 + (wx - cam.x) * cam.zoom;
+    const sy = (wy: number) => host.top + host.height / 2 + (wy - cam.y) * cam.zoom;
+    return { left: sx(r.x), top: sy(r.y), right: sx(r.x + r.w), bottom: sy(r.y + r.h) };
   }, id);
+const centerOf = (b: Box) => ({ x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2 });
+
+/** Polls until `read` returns the same value `times` polls in a row (≈100 ms apart); returns it. */
+async function settled<T>(read: () => Promise<T>, times = 4): Promise<T> {
+  let last = await read();
+  let same = 0;
+  await expect
+    .poll(
+      async () => {
+        const cur = await read();
+        same = JSON.stringify(cur) === JSON.stringify(last) ? same + 1 : 0;
+        last = cur;
+        return same;
+      },
+      { intervals: [100], timeout: 15_000 },
+    )
+    .toBeGreaterThanOrEqual(times);
+  return last;
+}
+/** Camera plus the drawn boxes of the given nodes: geometry is still when this stops changing. */
+const geometry = (page: Page, ids: readonly string[]) => async () => ({
+  cam: await camera(page),
+  boxes: await Promise.all(ids.map((id) => drawnBox(page, id))),
+});
+
+/** The visible canvas area: the canvas left of the drawer (or all of it when the drawer is closed). */
+async function visibleArea(page: Page): Promise<Box> {
+  const host = (await page.getByTestId('canvas-host').boundingBox())!;
+  const drawer = page.getByTestId('decision-inbox');
+  const right = (await drawer.count()) > 0 ? (await drawer.boundingBox())!.x : host.x + host.width;
+  return { left: host.x, top: host.y, right, bottom: host.y + host.height };
+}
+const inside = (b: Box, area: Box, pad = 8) =>
+  b.left >= area.left + pad && b.right <= area.right - pad && b.top >= area.top + pad && b.bottom <= area.bottom - pad;
+
+/** Canvas nodes of the 'inbox' fixture other than the inbox's own selection. */
+const CANDIDATES = ['t-draft', 'd-report', 't-research', 't-build', 't-test'];
+/** A node drawn wholly inside the visible canvas area once geometry is still; null when none is. */
+async function visibleTarget(page: Page): Promise<string | null> {
+  await settled(geometry(page, ['g-publish', ...CANDIDATES]));
+  const area = await visibleArea(page);
+  for (const id of CANDIDATES) {
+    const b = await drawnBox(page, id);
+    if (b && inside(b, area)) return id;
+  }
+  return null;
+}
+/** Recomputes the target's centre on still geometry and checks it is still inside the visible area. */
+async function aim(page: Page, id: string) {
+  await settled(geometry(page, [id]));
+  const b = (await drawnBox(page, id))!;
+  expect(inside(b, await visibleArea(page)), `${id} drawn inside the visible canvas`).toBe(true);
+  return centerOf(b);
+}
+/**
+ * With the inbox open on g-publish, a node the framing put in view. If the
+ * layout moved after the first framing, re-select to frame the current layout.
+ */
+async function framedTarget(page: Page): Promise<string> {
+  let target = await visibleTarget(page);
+  if (target === null) {
+    await page.getByTestId('inbox-row-c-silent').click();
+    await page.getByTestId('inbox-row-g-publish').click();
+    await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
+    target = await visibleTarget(page);
+  }
+  expect(target, 'a node of the framed mission is drawn left of the drawer').not.toBeNull();
+  return target!;
+}
 /** The person's own view first: a wheel zoom (it also stops the automatic re-fit); returns the settled camera. */
 async function personZoom(page: Page) {
   const box = (await page.getByTestId('canvas-host').boundingBox())!;
   await page.mouse.move(box.x + box.width / 4, box.y + box.height / 2);
   await page.mouse.wheel(0, 300);
-  await page.waitForTimeout(400);
-  return camera(page);
+  return settled(() => camera(page));
 }
 
-test('non-modal: with the inbox open the canvas pans, zooms and highlights a clicked node; the inbox selection stays', async ({ page }) => {
+test('non-modal: with the inbox open the canvas highlights a clicked node and zooms; the inbox selection stays; Esc leaves no stage', async ({ page }) => {
+  await open(page);
+  await page.getByTestId('decision-inbox-toggle').click();
+  const inbox = page.getByTestId('decision-inbox');
+  await expect(inbox).toBeVisible();
+  await expect(inbox).toHaveAttribute('role', 'complementary');
+  await expect(inbox).not.toHaveAttribute('aria-modal', 'true');
+  await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
+  expect(await canvasSelection(page)).toBeNull();
+
+  // A click on a drawn node left of the drawer selects it on the canvas only.
+  const target = await framedTarget(page);
+  let at = await aim(page, target);
+  await page.mouse.click(at.x, at.y);
+  await expect.poll(() => canvasSelection(page)).toBe(target);
+  await expect(inbox).toBeVisible();
+  await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
+  await expect(page.getByTestId('inbox-detail-title')).toHaveText('Publish?');
+  await expect(page.getByTestId('node-stage')).toHaveCount(0);
+
+  // Selection resized the node: aim again on still geometry, then double-click — no ③.
+  at = await aim(page, target);
+  await page.mouse.dblclick(at.x, at.y);
+  // The gesture hit the node (a miss on empty canvas would have cleared the selection).
+  await expect.poll(() => canvasSelection(page)).toBe(target);
+  await expect(inbox).toBeVisible();
+  await expect(page.getByTestId('task-inspector')).toHaveCount(0);
+  await expect(page.getByTestId('gate-surface')).toHaveCount(0);
+  await expect(page.getByTestId('node-stage')).toHaveCount(0);
+
+  // Wheel over the visible canvas zooms (the scrim does not swallow it).
+  const area = await visibleArea(page);
+  const z0 = (await settled(() => camera(page))).zoom;
+  await page.mouse.move((area.left + area.right) / 2, area.bottom - 20);
+  await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await camera(page)).zoom).not.toBe(z0);
+
+  // One Esc, one level: the inbox closes; the looked-at node leaves no stage behind.
+  await page.keyboard.press('Escape');
+  await expect(inbox).toBeHidden();
+  await expect.poll(() => canvasSelection(page)).toBeNull();
+  await expect(page.getByTestId('node-stage')).toHaveCount(0);
+});
+
+test('closing the inbox puts back the selection from before it opened (its stage returns, not the inspected one)', async ({ page }) => {
+  await open(page);
+  await page.getByTestId('node-t-draft').dispatchEvent('click');
+  await expect(page.getByTestId('node-stage')).toBeVisible();
+  await page.getByTestId('decision-inbox-toggle').click();
+  await expect(page.getByTestId('decision-inbox')).toBeVisible();
+  await expect(page.getByTestId('node-stage')).toHaveCount(0);
+
+  await framedTarget(page);
+  const target = await otherTarget(page, 't-draft');
+  expect(target).not.toBeNull();
+  const at = await aim(page, target!);
+  await page.mouse.click(at.x, at.y);
+  await expect.poll(() => canvasSelection(page)).toBe(target);
+
+  await page.getByTestId('inbox-close').click();
+  await expect(page.getByTestId('decision-inbox')).toBeHidden();
+  await expect.poll(() => canvasSelection(page)).toBe('t-draft');
+  await expect(page.getByTestId('node-stage')).toBeVisible();
+  await expect(page.getByTestId('node-stage')).toContainText('Draft');
+});
+
+/** A visible candidate other than `not`. */
+async function otherTarget(page: Page, not: string): Promise<string | null> {
+  await settled(geometry(page, CANDIDATES));
+  const area = await visibleArea(page);
+  for (const id of CANDIDATES) {
+    if (id === not) continue;
+    const b = await drawnBox(page, id);
+    if (b && inside(b, area)) return id;
+  }
+  return null;
+}
+
+test('keyboard: a context menu opened over the canvas owns arrows and Esc while the inbox is open', async ({ page }) => {
   await open(page);
   await page.getByTestId('decision-inbox-toggle').click();
   const inbox = page.getByTestId('decision-inbox');
   await expect(inbox).toBeVisible();
   await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
-  await expect(inbox).not.toHaveAttribute('aria-modal', 'true');
-  await page.waitForTimeout(600); // let the framing settle
 
-  // Wheel over the visible canvas zooms (the scrim no longer swallows it).
-  const host = (await page.getByTestId('canvas-host').boundingBox())!;
-  const drawerLeft = (await inbox.boundingBox())!.x;
-  const z0 = (await camera(page)).zoom;
-  await page.mouse.move(host.x + (drawerLeft - host.x) / 2, host.y + host.height / 2);
-  await page.mouse.wheel(0, -300);
-  await expect.poll(async () => (await camera(page)).zoom).not.toBe(z0);
-
-  // A click on a drawn node left of the drawer selects it on the canvas only.
-  const c = await drawnCenter(page, 't-research');
-  expect(c).not.toBeNull();
-  expect(c!.x).toBeLessThan(drawerLeft);
-  await page.mouse.click(c!.x, c!.y);
-  await expect.poll(() => canvasSelection(page)).toBe('t-research');
-  await expect(inbox).toBeVisible();
+  // Click mode (keyboard path): the menu takes the arrows; the inbox selection does not move.
+  await page.getByTestId('node-t-build').focus();
+  await page.getByTestId('node-t-build').dispatchEvent('contextmenu');
+  const menu = page.getByTestId('context-menu');
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitem').nth(1)).toBeFocused();
   await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
-  await expect(page.getByTestId('inbox-detail-title')).toHaveText('Publish?');
-  // No stage and no ③ from that click.
-  await expect(page.getByTestId('node-stage')).toHaveCount(0);
-  await page.mouse.dblclick(c!.x, c!.y);
+  // One Esc closes the menu only.
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
   await expect(inbox).toBeVisible();
-  await expect(page.getByTestId('task-inspector')).toHaveCount(0);
 
-  // One Esc, one level: the inbox closes first.
+  // Hold mode (right button held on the visible canvas): Esc closes the ring only.
+  const target = await framedTarget(page);
+  const at = await aim(page, target);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(inbox).toBeVisible();
+  await page.mouse.up({ button: 'right' });
+  await expect(inbox).toBeVisible();
+
+  // The next Esc is the inbox's.
   await page.keyboard.press('Escape');
   await expect(inbox).toBeHidden();
 });
@@ -291,15 +440,16 @@ test('a text typed on another surface is never sent invisibly from the bar', asy
   await page.getByTestId('generic-text-gate.reject').fill('typed on the stage');
   await page.getByTestId('decision-inbox-toggle').click();
   await expect(page.getByTestId('inbox-row-g-publish')).toHaveAttribute('data-selected', 'yes');
-  // In the bar the reject reason is not shown, so nothing can send it: only an opener exists.
+  // In the bar the reject reason is not shown, so nothing can send it: only an opener, marked as holding a draft.
   await expect(page.getByTestId('generic-send-gate.reject')).toHaveCount(0);
+  await expect(page.getByTestId('hidden-draft-mark-gate.reject')).toBeVisible();
   await page.getByTestId('generic-open-gate.reject').click();
   // Opened, the composing text is on screen before any send.
   await expect(page.getByTestId('generic-text-gate.reject')).toHaveValue('typed on the stage');
   await expect(page.getByTestId('receipt-gate.reject')).toHaveCount(0);
 });
 
-test('reduced motion: open → close restores the exact camera; so does open → ③ → back', async ({ page }) => {
+test('reduced motion: open → close restores the exact camera; so does open → ③ → back, once', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await open(page);
   const before = await personZoom(page);
@@ -310,6 +460,7 @@ test('reduced motion: open → close restores the exact camera; so does open →
   await page.getByTestId('inbox-close').click();
   await expect(page.getByTestId('decision-inbox')).toBeHidden();
   await expect.poll(() => camera(page)).toEqual(before);
+  expect(await settled(() => camera(page))).toEqual(before);
 
   // Open again, enter ③ from the inbox (the canvas unmounts), come back: the remount's fit must not win.
   await page.getByTestId('decision-inbox-toggle').click();
@@ -319,8 +470,16 @@ test('reduced motion: open → close restores the exact camera; so does open →
   await expect(page.getByTestId('canvas-host')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('canvas-host')).toBeVisible();
-  await page.waitForTimeout(800); // past the stage pan-aside delay
-  await expect.poll(() => camera(page)).toEqual(before);
+  // Still past the stage pan-aside delay (8 polls ≈ 800 ms of no change).
+  expect(await settled(() => camera(page), 8)).toEqual(before);
+
+  // The hold is consumed by that one remount: the next ③ round trip fits normally.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('canvas-host')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('canvas-host')).toBeVisible();
+  expect(await settled(() => camera(page), 8)).not.toEqual(before);
 });
 
 test('camera: the canvas frames the selection beside the drawer; closing restores the camera the person had', async ({ page }) => {
@@ -336,5 +495,6 @@ test('camera: the canvas frames the selection beside the drawer; closing restore
 
   await page.getByTestId('inbox-close').click();
   await expect(page.getByTestId('decision-inbox')).toBeHidden();
+  await expect(page.getByTestId('node-stage')).toHaveCount(0);
   await expect.poll(() => camera(page)).toEqual(before);
 });

@@ -288,8 +288,14 @@ export function CanvasViewport(props: CanvasViewportProps) {
     panTimer = undefined;
     cancelAnimationFrame(panRaf);
   };
-  // A camera held by an inbox restore is not panned on remount (back from ③).
-  let skipFirstPan = untrack(viewState.cameraHeld);
+  // A camera held by an inbox restore (결정함 F2) is consumed by exactly ONE
+  // canvas initialization: this mount's initial fits and first stage pan
+  // leave it alone; the shared flag is cleared at once, so later mounts fit.
+  let suppressInitialFits = untrack(viewState.cameraHeld);
+  if (suppressInitialFits) viewState.setCameraHeld(false);
+  let mounted = true;
+  onCleanup(() => (mounted = false));
+  let skipFirstPan = suppressInitialFits;
   createEffect(() => {
     const id = selection.selectedId();
     cancelStagePan();
@@ -385,7 +391,11 @@ export function CanvasViewport(props: CanvasViewportProps) {
   const yieldCamera = () => {
     cancelFraming();
     cancelCameraTween();
+    personTookCamera = true;
   };
+  /** The item last framed, and whether a gesture took the camera since (then layout changes do not re-frame it). */
+  let lastFramedId: string | null | undefined;
+  let personTookCamera = false;
   createEffect(() => {
     const frame = viewState.inboxFrame();
     cancelFraming();
@@ -397,17 +407,34 @@ export function CanvasViewport(props: CanvasViewportProps) {
         viewState.setCameraHeld(false);
       }
       const id = frame.nodeId;
+      // A new layout (e.g. the first layered pass) re-frames the same item —
+      // unless the person has taken the camera since that item was framed.
+      layoutState.positions();
+      if (id !== lastFramedId) {
+        lastFramedId = id;
+        personTookCamera = false;
+      } else if (personTookCamera) {
+        return;
+      }
       // After the drawer has laid out (one frame), never inside the reactive pass.
       if (id) frameRaf = requestAnimationFrame(() => {
         frameRaf = 0;
         untrack(() => viewState.inboxFrame()?.nodeId === id && frameAside(id));
       });
     } else {
+      lastFramedId = undefined;
       const back = untrack(viewState.inboxSavedCamera);
       if (!back) return;
       viewState.setInboxSavedCamera(null);
-      // Held: a later remount (back from ③) keeps this camera instead of re-fitting.
+      // This mount's remaining initial fits leave the restored camera alone.
+      suppressInitialFits = true;
+      // Held for the NEXT mount only if this canvas goes away right now (closing
+      // the inbox into ③ unmounts it in the same tick); a canvas still mounted a
+      // frame later releases the hold, so nothing lingers for unrelated mounts.
       viewState.setCameraHeld(true);
+      requestAnimationFrame(() => {
+        if (mounted) viewState.setCameraHeld(false);
+      });
       cancelStagePan();
       moveCamera(back);
     }
@@ -804,7 +831,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
    * the remount after ③, until the person moves the view themselves.
    */
   const autoFit = () => {
-    if (!untrack(viewState.cameraHeld)) fit();
+    if (!suppressInitialFits) fit();
   };
   onMount(autoFit);
   // The first layered pass replaces the first layout: frame it again then — unless the user has already moved the view.

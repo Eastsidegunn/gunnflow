@@ -19,6 +19,17 @@ describe('peer ranges for pack-check', () => {
     expect(caretAdmits('^1.2.0', '2.0.0')).toBe(false);
   });
 
+  it('0.0.x caret admits exactly that patch', async () => {
+    const { caretAdmits, rangeAdmits } = await load();
+    expect(caretAdmits('^0.0.3', '0.0.3')).toBe(true);
+    expect(caretAdmits('^0.0.3', '0.0.4')).toBe(false);
+    expect(caretAdmits('^0.0.3', '0.0.2')).toBe(false);
+    expect(caretAdmits('^0.0.3', '0.1.0')).toBe(false);
+    expect(caretAdmits('^0.0.0', '0.0.0')).toBe(true);
+    expect(rangeAdmits('^0.0.3 || ^0.4.0', '0.0.4')).toBe(false);
+    expect(rangeAdmits('^0.0.3 || ^0.4.0', '0.4.2')).toBe(true);
+  });
+
   it('|| joins caret parts; any other form admits nothing', async () => {
     const { rangeAdmits } = await load();
     const range = '^0.3.1 || ^0.4.0';

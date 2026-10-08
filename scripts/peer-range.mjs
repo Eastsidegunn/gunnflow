@@ -1,7 +1,10 @@
 // Peer-range checks for scripts/pack-check.mjs: the only range form a published package uses is
 // caret ranges, optionally joined by `||` (e.g. `^0.3.1 || ^0.4.0`). Anything else is refused.
 
-/** `^M.m.p` admits `v` (0.x caret: same major and minor, patch >= p; 1+: same major, >=). */
+/**
+ * `^M.m.p` admits `v`, as semver's caret: `^0.0.p` only `0.0.p` itself; `^0.m.p` (m > 0) the same
+ * minor with patch >= p; `^M.m.p` (M > 0) the same major at or above m.p.
+ */
 export function caretAdmits(range, v) {
   const r = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
   const x = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
@@ -9,6 +12,7 @@ export function caretAdmits(range, v) {
   const [rM, rm, rp] = r.slice(1).map(Number);
   const [xM, xm, xp] = x.slice(1).map(Number);
   if (rM !== xM) return false;
+  if (rM === 0 && rm === 0) return xm === 0 && xp === rp;
   if (rM === 0) return rm === xm && xp >= rp;
   return xm > rm || (xm === rm && xp >= rp);
 }

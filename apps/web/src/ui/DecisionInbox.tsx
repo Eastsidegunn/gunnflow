@@ -38,7 +38,7 @@ import { isTypingTarget, matchesKey, resolveKey } from '../state/keybindings.js'
 import { escStack } from '../state/escStack.js';
 import { glyphChar, toneColor } from '../canvas/tokens.js';
 import { resolveParts } from '../canvas/parts.js';
-import { manageFocus } from './focusScope.js';
+import { keyOwnerFocus, manageFocus } from './focusScope.js';
 import { DetailSection, NodeActions } from './nodeParts.jsx';
 
 /** A clock for relative waiting times: refreshed every 30 s while mounted. */
@@ -194,6 +194,18 @@ export function DecisionInbox(props: {
     focusRow(next);
   };
 
+  let rootEl: HTMLElement | undefined;
+  /**
+   * The inbox's navigation keys act only while it owns the keyboard: it is the
+   * top Esc owner (no menu or panel above it) and focus is inside the drawer —
+   * or nowhere in particular (the body).
+   */
+  const ownsKeys = (owner: object, target: EventTarget | null) => {
+    if (!escStack.isTop(owner)) return false;
+    const t = target instanceof Node ? target : null;
+    return keyOwnerFocus(t, rootEl ?? null, document.body);
+  };
+
   onMount(() => {
     const owner = {};
     onCleanup(escStack.push(owner));
@@ -208,6 +220,10 @@ export function DecisionInbox(props: {
         if (!escStack.isTop(owner)) return;
         consume(e);
         props.onClose();
+      } else if (!ownsKeys(owner, e.target)) {
+        // The drawer is non-modal: arrows, j/k and Enter belong to whatever holds focus elsewhere
+        // (the canvas mirror, a context menu opened over it).
+        return;
       } else if (e.key === 'ArrowDown' || matchesKey(e, resolveKey(keys(), 'inbox-next'))) {
         consume(e);
         move(1);
@@ -274,7 +290,10 @@ export function DecisionInbox(props: {
         data-testid="decision-inbox"
         role="complementary"
         aria-label="결정함"
-        ref={(el) => onCleanup(manageFocus(el))}
+        ref={(el) => {
+          rootEl = el;
+          onCleanup(manageFocus(el));
+        }}
       >
         <header class="inbox-header">
           <strong>결정함</strong>

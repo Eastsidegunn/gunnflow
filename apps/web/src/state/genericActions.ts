@@ -36,15 +36,27 @@ export function textModeFor(o: { hasText: boolean; bar: boolean; required: boole
   return 'expand';
 }
 
+const textShown = (mode: TextMode, expanded: boolean) => mode === 'field' || mode === 'inline' || (mode === 'expand' && expanded);
+
 /**
- * What a send may relay: never a text the control is not showing. A text the
- * person typed elsewhere stays in its composing entry, but leaves this control
- * only while its field is on screen.
+ * A typed text this control is not showing (typed on another surface, or
+ * before the capability/assembly changed): null when there is none. A send
+ * must never relay it and never silently drop it — the control blocks its
+ * direct send and shows the draft with an explicit keep/discard.
+ */
+export function hiddenDraft(decision: { text?: string }, mode: TextMode, expanded: boolean): string | null {
+  if (textShown(mode, expanded)) return null;
+  return decision.text !== undefined && decision.text !== '' ? decision.text : null;
+}
+
+/**
+ * What a send may relay: the decision as shown. Only an EMPTY hidden text is
+ * dropped (nothing typed is lost); a non-empty hidden text is never stripped
+ * here — callers refuse the send while `hiddenDraft` is non-null.
  */
 export function shownDecision<D extends { text?: string }>(decision: D, mode: TextMode, expanded: boolean): D {
-  const shown = mode === 'field' || mode === 'inline' || (mode === 'expand' && expanded);
-  if (shown || decision.text === undefined) return decision;
-  const { text: _hidden, ...rest } = decision;
+  if (textShown(mode, expanded) || decision.text !== '') return decision;
+  const { text: _empty, ...rest } = decision;
   return rest as D;
 }
 

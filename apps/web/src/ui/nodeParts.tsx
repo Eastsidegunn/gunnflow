@@ -10,7 +10,7 @@ import { actionLabel, detailCollapsed, detailCopyable, detailEmphasis } from '@g
 import type { WorkspaceStores } from '../state/stores.js';
 import type { Intent } from '../model/types.js';
 import type { ResolvedAction, ResolvedParts } from '../canvas/parts.js';
-import { actionGate, openGate, shownDecision, textModeFor, type TextMode } from '../state/genericActions.js';
+import { actionGate, hiddenDraft, openGate, shownDecision, textModeFor, type TextMode } from '../state/genericActions.js';
 import { copiedStatement, tokenizeCopyText } from '../state/copyText.js';
 import type { DisplayToken } from '../state/editorLogic.js';
 import { isUndecided, type ComposingEntry, type Draft } from '../state/pendingIntents.js';
@@ -301,8 +301,18 @@ export function NodeActions(props: {
     const gate = () => actionGate(a(), preconditions());
     const reason = () => (gate().runnable ? null : (gate() as { reason: string }).reason);
 
+    /** A typed text this control is not showing: its direct send is blocked until the person keeps (opens) or discards it. */
+    const hidden = () => hiddenDraft(decision(), textMode(), isExpanded());
+    const discardHidden = () => {
+      const current = composing();
+      if (!current) return;
+      const { text: _discarded, ...rest } = decision();
+      pendingIntents.update(current.localId, { nodeId: p.node.id, action: a().action, decision: rest });
+    };
+
     const send = () => {
-      // Never relay a text this control is not showing (it may have been typed on another surface).
+      // Never relay a text this control is not showing, and never drop one silently.
+      if (hidden() !== null) return;
       const d = shownDecision(decision(), textMode(), isExpanded());
       const slots: Pick<Intent, 'decision'> = Object.keys(d).length > 0 ? { decision: d } : {};
       const draft = { nodeId: p.node.id, action: a().action, ...slots };
@@ -320,6 +330,7 @@ export function NodeActions(props: {
       props.onSent?.();
     };
     const onSendClick = () => {
+      if (hidden() !== null) return;
       if (a().kind === 'fallback') {
         void pendingIntents.submit({ nodeId: p.node.id, action: a().action });
         props.onSent?.();
@@ -416,13 +427,25 @@ export function NodeActions(props: {
             </div>
           </div>
         </Show>
+        {/* A draft with no field to show it in (the slot went away): shown verbatim, send blocked until discarded. */}
+        <Show when={textMode() === 'none' && hidden()}>
+          {(text) => (
+            <div class="hidden-draft bar-wide" data-testid={`hidden-draft-${a().action}`}>
+              <p class="hint">이 행동에는 지금 입력란이 없지만, 전에 쓴 초안이 남아 있습니다. 버려야 보낼 수 있습니다.</p>
+              <pre class="detail-text">{text()}</pre>
+              <button data-testid={`hidden-draft-discard-${a().action}`} onClick={discardHidden}>
+                초안 버리기
+              </button>
+            </div>
+          )}
+        </Show>
         <Show
           when={textMode() === 'expand'}
           fallback={
             <button
               classList={{ primary: bar && p.primary }}
               data-testid={`generic-send-${a().action}`}
-              disabled={!gate().runnable || inFlight()}
+              disabled={!gate().runnable || inFlight() || hidden() !== null}
               aria-describedby={!gate().runnable ? `reason-${a().action}` : undefined}
               title={gate().runnable ? a().action : (reason() ?? undefined)}
               onClick={onSendClick}
@@ -440,6 +463,10 @@ export function NodeActions(props: {
             onClick={() => setExpanded(isExpanded() ? null : a().action)}
           >
             {label()}
+            {/* A kept draft waits behind the opener: opening shows it before anything can be sent. */}
+            <Show when={hidden() !== null}>
+              <span class="draft-mark" data-testid={`hidden-draft-mark-${a().action}`}> · 초안</span>
+            </Show>
           </button>
         </Show>
         <Show when={evidence().length > 0}>

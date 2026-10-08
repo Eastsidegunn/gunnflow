@@ -41,6 +41,26 @@ export function App() {
   const [personalOpen, setPersonalOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [inboxOpen, setInboxOpen] = createSignal(false);
+  /**
+   * While the inbox is open a canvas click only inspects (S3): the canvas
+   * selection it makes is transient. Closing puts back the selection from
+   * before opening, so no stage opens afterwards for a node merely looked at.
+   */
+  let selectionBeforeInbox: string | null = null;
+  const openInbox = () => {
+    if (inboxOpen()) return;
+    selectionBeforeInbox = stores.selection.selectedId();
+    setInboxOpen(true);
+  };
+  const closeInbox = () => {
+    if (!inboxOpen()) return;
+    setInboxOpen(false);
+    const before = selectionBeforeInbox;
+    selectionBeforeInbox = null;
+    if (before !== null && liveIds().has(before)) stores.selection.select(before);
+    else stores.selection.clear();
+  };
+  const toggleInbox = () => (inboxOpen() ? closeInbox() : openInbox());
   let stream: WorkspaceStream | undefined;
   // Exit presences (M-02/M-06/M-08): each surface outlives its close by its exit duration.
   const D = DEFAULT_THEME.motion.durations;
@@ -124,7 +144,7 @@ export function App() {
         !settingsOpen()
       ) {
         e.preventDefault();
-        setInboxOpen(!inboxOpen());
+        toggleInbox();
         return;
       }
       // Enter = one depth in (② → ③). Esc is its mirror. Chrome grammar, not a binding.
@@ -152,7 +172,7 @@ export function App() {
           setSurface(null);
         } else if (inboxOpen()) {
           // Unreachable while the inbox owns the stack; kept as a safe fallback.
-          setInboxOpen(false);
+          closeInbox();
         } else if (terminalSessionId()) {
           setTerminalSessionId(null);
         } else if (executionTaskId()) {
@@ -387,14 +407,14 @@ export function App() {
           stores.selection.select(id);
         }}
       />
-      <DecisionInboxToggle stores={stores} open={inboxOpen} onToggle={() => setInboxOpen(!inboxOpen())} />
+      <DecisionInboxToggle stores={stores} open={inboxOpen} onToggle={toggleInbox} />
       <Show when={inboxPresence.mounted()}>
         <DecisionInbox
           stores={stores}
           motion={inboxPresence.phase()}
-          onClose={() => setInboxOpen(false)}
+          onClose={closeInbox}
           onEnterWork={(nodeId, queue) => {
-            setInboxOpen(false);
+            closeInbox();
             enterWork(nodeId, queue);
           }}
         />
