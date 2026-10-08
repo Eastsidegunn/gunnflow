@@ -7,7 +7,7 @@
  */
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk-api.js';
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
-import { LAYOUT, childrenOf, packComponents, type LayoutGraph, type LayoutProvider, type Point, type Positions } from './layoutGraph.js';
+import { LAYOUT, childrenOf, packLayout, type LayoutGraph, type LayoutProvider, type Point, type Positions } from './layoutGraph.js';
 
 /** A layered pass that takes longer is abandoned (and its worker replaced). */
 export const LAYERED_TIMEOUT_MS = 15_000;
@@ -105,7 +105,7 @@ export function fromElk(result: ElkNode): Map<string, Point> {
 export function elkProvider(run: (graph: ElkNode) => Promise<ElkNode>): LayoutProvider {
   return {
     async layout(graph, hints) {
-      return packComponents(graph, fromElk(await run(toElk(graph, hints))));
+      return packLayout(graph, fromElk(await run(toElk(graph, hints))));
     },
   };
 }

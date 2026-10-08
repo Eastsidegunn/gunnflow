@@ -10,6 +10,7 @@ describe('prefs sanitize', () => {
       detailZoom: 0,
       defaultLens: 'all',
       keys: {},
+      packContainers: true,
     });
     expect(sanitizePrefs({ zoomSensitivity: '1.5', defaultLens: 'needs-you' })).toEqual({
       ...DEFAULT_PREFS,
@@ -22,5 +23,12 @@ describe('prefs sanitize', () => {
       ...DEFAULT_PREFS,
       keys: { 'open-decision-inbox': 'k' },
     });
+  });
+
+  it('packContainers: a boolean is kept, anything else falls back to on', () => {
+    expect(DEFAULT_PREFS.packContainers).toBe(true);
+    expect(sanitizePrefs({ packContainers: false }).packContainers).toBe(false);
+    expect(sanitizePrefs({ packContainers: true }).packContainers).toBe(true);
+    for (const bad of ['false', 0, null, {}]) expect(sanitizePrefs({ packContainers: bad }).packContainers).toBe(true);
   });
 });

@@ -410,6 +410,20 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                 </span>
                 <span class="settings-source">this machine</span>
               </div>
+              <div class="settings-row" data-testid="pref-row-pack-containers">
+                <span class="settings-key">pack containers</span>
+                <span />
+                <span class="settings-pickers">
+                  <input
+                    type="checkbox"
+                    checked={prefs.prefs().packContainers}
+                    data-testid="pref-pack-containers"
+                    onChange={(e) => void prefs.save({ packContainers: e.currentTarget.checked })}
+                  />
+                  <span class="hint">arrange unrelated members inside a group in rows, not one column (relayouts once)</span>
+                </span>
+                <span class="settings-source">this machine</span>
+              </div>
               <Show when={prefs.saveProblem()}>{(r) => <p class="hint warn">not saved — {r()}</p>}</Show>
             </div>
           </Show>

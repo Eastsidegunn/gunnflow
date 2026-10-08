@@ -82,6 +82,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       viewState.positions(),
       layoutState.positions(),
       displayed(),
+      { packContainers: props.stores.prefs.prefs().packContainers },
     ),
   );
   const layout = createMemo(() => scene().layout);
@@ -144,7 +145,11 @@ export function CanvasViewport(props: CanvasViewportProps) {
   // person-caused spatial tiers resize anything (ruling 2026-10-05).
   const topoGraph = createMemo(() => {
     const generic = projectionStore.genericNodes();
-    return generic ? layoutGraphOf(generic.nodes, props.stores.wiring.config) : null;
+    // The packing pref is a layout input: it joins the signature, so flipping it
+    // is a topology-like transition moment (one relayout), never a live track.
+    return generic
+      ? layoutGraphOf(generic.nodes, props.stores.wiring.config, { packContainers: props.stores.prefs.prefs().packContainers })
+      : null;
   });
   const [lock, setLock] = createSignal<{ layout: ReadonlyMap<string, Size>; ambient: ReadonlyMap<string, Size> }>({
     layout: new Map(),

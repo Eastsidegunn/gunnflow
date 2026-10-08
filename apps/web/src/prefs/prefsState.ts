@@ -18,9 +18,11 @@ export interface Prefs {
   defaultLens: string;
   /** Keybinding overrides by binding name; a name absent here keeps its engine default. */
   keys: Record<string, string>;
+  /** Pack unrelated children inside containers into rows toward the layout aspect (off: top-level packing only). */
+  packContainers: boolean;
 }
 
-export const DEFAULT_PREFS: Prefs = { zoomSensitivity: 1.1, detailZoom: 0.5, defaultLens: 'all', keys: {} };
+export const DEFAULT_PREFS: Prefs = { zoomSensitivity: 1.1, detailZoom: 0.5, defaultLens: 'all', keys: {}, packContainers: true };
 
 /** Clamp and fall back per field — a broken file never breaks the cockpit. */
 export function sanitizePrefs(raw: unknown): Prefs {
@@ -32,6 +34,7 @@ export function sanitizePrefs(raw: unknown): Prefs {
     detailZoom: num(o.detailZoom, DEFAULT_PREFS.detailZoom, 0, 4),
     defaultLens: typeof o.defaultLens === 'string' && o.defaultLens !== '' ? o.defaultLens : DEFAULT_PREFS.defaultLens,
     keys: sanitizeKeys(o.keys),
+    packContainers: typeof o.packContainers === 'boolean' ? o.packContainers : DEFAULT_PREFS.packContainers,
   };
 }
 

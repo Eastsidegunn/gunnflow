@@ -104,11 +104,13 @@ export function buildScene(
   base: Positions = new Map(),
   /** On-screen rects (dynamic-view P3): the animated, tier-sized geometry. Hit-testing follows these. */
   onScreen: ReadonlyMap<string, Rect> = new Map(),
+  /** Layout-shaping options (the `packContainers` machine pref), so the fallback matches the layout state's. */
+  layoutOptions: { packContainers?: boolean } = {},
 ): GenericScene {
   // The workspace root is the toolbar's node, not a canvas node.
   const nodes = all.filter((n) => n.kind !== WORKSPACE_ROOT_KIND);
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const graph = layoutGraphOf(nodes, config);
+  const graph = layoutGraphOf(nodes, config, layoutOptions);
   const leaves = leafIds(graph);
   // Computed positions come from the layout state; anything it has not placed yet takes the fallback.
   const placed = leaves.every((id) => base.has(id)) ? base : new Map([...fallbackLayout(graph), ...base]);

@@ -51,7 +51,18 @@ export interface LayoutGraph {
   withheld: string[];
   /** Collision-free topology signature: the cache key for "no recompute, no move". */
   signature: string;
+  /**
+   * Pack disconnected children inside every container into rows toward the
+   * engine aspect, as at top level (machine pref `packContainers`). Absent =
+   * on; `false` keeps top-level packing only. A layout input, so it joins the
+   * signature (and every component signature): toggling re-lays everything.
+   */
+  packContainers?: boolean;
 }
+
+/** The packing mode's share of a signature (empty when on, the default). */
+const packMark = (graph: { packContainers?: boolean }) => (graph.packContainers === false ? '|flat' : '');
+
 
 export interface LayoutProvider {
   /** `hints`: previous positions, used to keep the existing order. */
@@ -100,11 +111,16 @@ export function sizedGraph(graph: LayoutGraph, sizes: ReadonlyMap<string, { w: n
       graph.flow,
       graph.parentOf,
       new Map(nodes.map((n) => [n.id, { w: n.w, h: n.h }])),
-    ),
+    ) + packMark(graph),
   };
 }
 
-export function layoutGraphOf(all: readonly NodeProjection[], config: WiringConfig): LayoutGraph {
+export function layoutGraphOf(
+  all: readonly NodeProjection[],
+  config: WiringConfig,
+  options: { packContainers?: boolean } = {},
+): LayoutGraph {
+  const packContainers = options.packContainers ?? true;
   const nodes = all.filter((n) => n.kind !== WORKSPACE_ROOT_KIND).sort((a, b) => byId(a.id, b.id));
   const ids = new Set(nodes.map((n) => n.id));
   const flow: { from: string; to: string }[] = [];
@@ -178,7 +194,8 @@ export function layoutGraphOf(all: readonly NodeProjection[], config: WiringConf
       nodes.map((n) => n.id),
       flow,
       parentOf,
-    ),
+    ) + packMark({ packContainers }),
+    packContainers,
   };
 }
 
@@ -312,7 +329,7 @@ export function componentsOf(graph: LayoutGraph): { key: string; units: string[]
         graph.flow.filter((e) => inside.has(e.from) && compOf(e.from) === key),
         new Map([...graph.parentOf].filter(([child]) => inside.has(child))),
         sizes,
-      ),
+      ) + packMark(graph),
     };
   });
 }
@@ -331,6 +348,42 @@ function componentRect(graph: LayoutGraph, members: readonly string[], positions
 }
 
 /**
+ * The one row packer: boxes into rows toward the engine aspect ratio, in their
+ * current top-to-bottom order, the first row starting at `origin`. Returns each
+ * box's shift (by input index), or null when there is nothing to pack.
+ */
+function packRows(rects: readonly Rect[], origin: Point): Point[] | null {
+  if (rects.length <= 1) return null;
+  const order = rects.map((_, i) => i).sort((a, b) => rects[a]!.y - rects[b]!.y || rects[a]!.x - rects[b]!.x || a - b);
+  // Row width from total area toward the engine aspect: W such that W : (area/W) ≈ aspect.
+  let area = 0;
+  let widest = 0;
+  for (const r of rects) {
+    area += (r.w + LAYOUT.colGap) * (r.h + LAYOUT.rowGap * 2);
+    widest = Math.max(widest, r.w);
+  }
+  const rowWidth = Math.max(widest, Math.sqrt(area * LAYOUT.aspect));
+  const shifts: Point[] = new Array(rects.length);
+  let x = origin.x;
+  let y = origin.y;
+  let rowH = 0;
+  for (const i of order) {
+    const r = rects[i]!;
+    // Wrap at the nearest box boundary: a box whose midpoint still fits stays
+    // in the row (rows quantize, the width target cannot be exact).
+    if (x > origin.x && x + r.w / 2 > origin.x + rowWidth) {
+      x = origin.x;
+      y += rowH + LAYOUT.rowGap * 2;
+      rowH = 0;
+    }
+    shifts[i] = { x: x - r.x, y: y - r.y };
+    x += r.w + LAYOUT.colGap;
+    rowH = Math.max(rowH, r.h);
+  }
+  return shifts;
+}
+
+/**
  * Packs top-level components into rows toward the engine aspect ratio, in
  * their current top-to-bottom order — instead of one tall column of
  * unrelated groups.
@@ -338,37 +391,138 @@ function componentRect(graph: LayoutGraph, members: readonly string[], positions
 export function packComponents(graph: LayoutGraph, positions: Positions): Positions {
   const list = componentsOf(graph)
     .map((c) => ({ ...c, rect: componentRect(graph, c.members, positions) }))
-    .filter((c): c is typeof c & { rect: Rect } => c.rect !== undefined)
-    .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
-  if (list.length <= 1) return positions;
-  // Row width from total area toward the engine aspect: W such that W : (area/W) ≈ aspect.
-  let area = 0;
-  let widest = 0;
-  for (const c of list) {
-    area += (c.rect.w + LAYOUT.colGap) * (c.rect.h + LAYOUT.rowGap * 2);
-    widest = Math.max(widest, c.rect.w);
-  }
-  const rowWidth = Math.max(widest, Math.sqrt(area * LAYOUT.aspect));
+    .filter((c): c is typeof c & { rect: Rect } => c.rect !== undefined);
+  const shifts = packRows(list.map((c) => c.rect), { x: LAYOUT.pad, y: LAYOUT.pad });
+  if (!shifts) return positions;
   const shift = new Map<string, Point>();
-  let x = LAYOUT.pad;
-  let y = LAYOUT.pad;
-  let rowH = 0;
-  for (const c of list) {
-    // Wrap at the nearest component boundary: a component whose midpoint still
-    // fits stays in the row (rows quantize, the width target cannot be exact).
-    if (x > LAYOUT.pad && x + c.rect.w / 2 > LAYOUT.pad + rowWidth) {
-      x = LAYOUT.pad;
-      y += rowH + LAYOUT.rowGap * 2;
-      rowH = 0;
-    }
-    for (const m of c.members) shift.set(m, { x: x - c.rect.x, y: y - c.rect.y });
-    x += c.rect.w + LAYOUT.colGap;
-    rowH = Math.max(rowH, c.rect.h);
-  }
+  list.forEach((c, i) => {
+    for (const m of c.members) shift.set(m, shifts[i]!);
+  });
   return new Map([...positions].map(([id, p]) => {
     const d = shift.get(id) ?? { x: 0, y: 0 };
     return [id, { x: p.x + d.x, y: p.y + d.y }];
   }));
+}
+
+/**
+ * Flow relations lifted to the sibling pair under their lowest common
+ * container (`level`; undefined = top level): a relation between descendants
+ * counts for their sibling ancestors. Relations within one unit's own chain
+ * lift to nothing.
+ */
+function siblingLinks(graph: LayoutGraph, depth: ReadonlyMap<string, number>): { level: string | undefined; from: string; to: string }[] {
+  const out: { level: string | undefined; from: string; to: string }[] = [];
+  for (const e of graph.flow) {
+    let a: string | undefined = e.from;
+    let b: string | undefined = e.to;
+    let da = depth.get(a)!;
+    let db = depth.get(b)!;
+    while (da > db) (a = graph.parentOf.get(a!)), da--;
+    while (db > da) (b = graph.parentOf.get(b!)), db--;
+    while (a !== undefined && b !== undefined && graph.parentOf.get(a) !== graph.parentOf.get(b)) {
+      a = graph.parentOf.get(a);
+      b = graph.parentOf.get(b);
+    }
+    if (a === undefined || b === undefined || a === b) continue;
+    out.push({ level: graph.parentOf.get(a), from: a, to: b });
+  }
+  return out;
+}
+
+/**
+ * Component packing inside every container, deepest first (a container's box
+ * is final before its parent packs it): a container's children are grouped by
+ * the flow relations among them (lifted to the children), each group keeps
+ * its internal arrangement, and the groups are row-packed toward the engine
+ * aspect from the content's current top-left. Unrelated children no longer
+ * stack into one column (ELK puts edge-less siblings in a single layer).
+ */
+function packWithinContainers(graph: LayoutGraph, positions: Positions): Positions {
+  const children = childrenOf(graph);
+  const depth = nestDepths(graph);
+  const containers = [...children.keys()].filter((k): k is string => k !== undefined).sort((a, b) => depth.get(b)! - depth.get(a)!);
+  if (containers.length === 0) return positions;
+  const size = new Map(graph.nodes.map((n) => [n.id, n]));
+  const pos = new Map<string, Point>([...positions].map(([id, p]) => [id, { x: p.x, y: p.y }]));
+  const rect = new Map<string, Rect>();
+  // Each node's leaves (itself for a leaf): what moves when the node moves.
+  const leavesUnder = new Map<string, string[]>();
+  for (const id of leafIds(graph)) {
+    const p = pos.get(id);
+    if (p) rect.set(id, { x: p.x, y: p.y, w: size.get(id)!.w, h: size.get(id)!.h });
+    for (let cur: string | undefined = id, guard = 0; cur !== undefined && guard <= LAYOUT.maxNestDepth + 1; cur = graph.parentOf.get(cur), guard++) {
+      const list = leavesUnder.get(cur);
+      if (list) list.push(id);
+      else leavesUnder.set(cur, [id]);
+    }
+  }
+  const links = new Map<string, [string, string][]>();
+  for (const l of siblingLinks(graph, depth)) {
+    if (l.level === undefined) continue;
+    const list = links.get(l.level);
+    if (list) list.push([l.from, l.to]);
+    else links.set(l.level, [[l.from, l.to]]);
+  }
+  for (const c of containers) {
+    const kids = children.get(c)!.filter((k) => rect.has(k));
+    if (kids.length > 1) {
+      const root = new Map(kids.map((k) => [k, k]));
+      const find = (k: string) => {
+        let r = k;
+        while (root.get(r) !== r) r = root.get(r)!;
+        root.set(k, r);
+        return r;
+      };
+      for (const [a, b] of links.get(c) ?? []) {
+        if (!root.has(a) || !root.has(b)) continue;
+        const ra = find(a);
+        const rb = find(b);
+        if (ra !== rb) root.set(byId(ra, rb) < 0 ? rb : ra, byId(ra, rb) < 0 ? ra : rb);
+      }
+      const groups = new Map<string, string[]>();
+      for (const k of kids) {
+        const r = find(k);
+        const g = groups.get(r);
+        if (g) g.push(k);
+        else groups.set(r, [k]);
+      }
+      const list = [...groups.values()];
+      const content = union(kids.map((k) => rect.get(k)!))!;
+      const shifts = packRows(list.map((g) => union(g.map((k) => rect.get(k)!))!), { x: content.x, y: content.y });
+      if (shifts) {
+        list.forEach((g, i) => {
+          const d = shifts[i]!;
+          if (d.x === 0 && d.y === 0) return;
+          for (const k of g) {
+            const r = rect.get(k)!;
+            rect.set(k, { ...r, x: r.x + d.x, y: r.y + d.y });
+            for (const leaf of leavesUnder.get(k) ?? []) {
+              const p = pos.get(leaf);
+              if (p) pos.set(leaf, { x: p.x + d.x, y: p.y + d.y });
+            }
+          }
+        });
+      }
+    }
+    const inner = union(kids.map((k) => rect.get(k)!));
+    if (inner) {
+      rect.set(c, {
+        x: inner.x - LAYOUT.groupPad,
+        y: inner.y - LAYOUT.groupPad - LAYOUT.groupHeader,
+        w: inner.w + 2 * LAYOUT.groupPad,
+        h: inner.h + 2 * LAYOUT.groupPad + LAYOUT.groupHeader,
+      });
+    }
+  }
+  return pos;
+}
+
+/**
+ * The packing stage every layout result passes: inside containers (unless the
+ * graph opts out), then the top-level components.
+ */
+export function packLayout(graph: LayoutGraph, positions: Positions): Positions {
+  return packComponents(graph, graph.packContainers === false ? positions : packWithinContainers(graph, positions));
 }
 
 /**
@@ -386,19 +540,7 @@ export function fallbackLayout(graph: LayoutGraph): Positions {
 
   // Flow relations lifted to the sibling pair under their lowest common container.
   const levelEdges = new Map<string | undefined, Map<string, Set<string>>>();
-  for (const e of graph.flow) {
-    let a: string | undefined = e.from;
-    let b: string | undefined = e.to;
-    let da = depth.get(a)!;
-    let db = depth.get(b)!;
-    while (da > db) (a = graph.parentOf.get(a!)), da--;
-    while (db > da) (b = graph.parentOf.get(b!)), db--;
-    while (a !== undefined && b !== undefined && graph.parentOf.get(a) !== graph.parentOf.get(b)) {
-      a = graph.parentOf.get(a);
-      b = graph.parentOf.get(b);
-    }
-    if (a === undefined || b === undefined || a === b) continue;
-    const level = graph.parentOf.get(a);
+  for (const { level, from: a, to: b } of siblingLinks(graph, depth)) {
     const m = levelEdges.get(level) ?? new Map<string, Set<string>>();
     m.set(b, (m.get(b) ?? new Set()).add(a));
     levelEdges.set(level, m);
@@ -470,7 +612,7 @@ export function fallbackLayout(graph: LayoutGraph): Positions {
   }
   const out = new Map<string, Point>();
   for (const id of leafIds(graph)) out.set(id, absolute.get(id)!);
-  return packComponents(graph, out);
+  return packLayout(graph, out);
 }
 
 /** Over-budget fallback: each unit's leaves as a square block, blocks in rows. O(n). */
