@@ -351,10 +351,19 @@ function componentRect(graph: LayoutGraph, members: readonly string[], positions
  * The one row packer: boxes into rows toward the engine aspect ratio, in their
  * current top-to-bottom order, the first row starting at `origin`. Returns each
  * box's shift (by input index), or null when there is nothing to pack.
+ *
+ * `sides` (inside containers): the side each box's relations leave the
+ * container toward (-1 left, 0 none, +1 right). Left-linked boxes go first
+ * (the top-left), right-linked last, and a last row holding a right-linked
+ * box is right-aligned — so a relation leaving the packed box starts at the
+ * edge it leaves from, as in the unpacked column.
  */
-function packRows(rects: readonly Rect[], origin: Point): Point[] | null {
+function packRows(rects: readonly Rect[], origin: Point, sides?: readonly number[]): Point[] | null {
   if (rects.length <= 1) return null;
-  const order = rects.map((_, i) => i).sort((a, b) => rects[a]!.y - rects[b]!.y || rects[a]!.x - rects[b]!.x || a - b);
+  const side = (i: number) => sides?.[i] ?? 0;
+  const order = rects
+    .map((_, i) => i)
+    .sort((a, b) => side(a) - side(b) || rects[a]!.y - rects[b]!.y || rects[a]!.x - rects[b]!.x || a - b);
   // Row width from total area toward the engine aspect: W such that W : (area/W) ≈ aspect.
   let area = 0;
   let widest = 0;
@@ -367,6 +376,8 @@ function packRows(rects: readonly Rect[], origin: Point): Point[] | null {
   let x = origin.x;
   let y = origin.y;
   let rowH = 0;
+  let row: number[] = [];
+  let right = origin.x;
   for (const i of order) {
     const r = rects[i]!;
     // Wrap at the nearest box boundary: a box whose midpoint still fits stays
@@ -375,10 +386,17 @@ function packRows(rects: readonly Rect[], origin: Point): Point[] | null {
       x = origin.x;
       y += rowH + LAYOUT.rowGap * 2;
       rowH = 0;
+      row = [];
     }
     shifts[i] = { x: x - r.x, y: y - r.y };
+    row.push(i);
+    right = Math.max(right, x + r.w);
     x += r.w + LAYOUT.colGap;
     rowH = Math.max(rowH, r.h);
+  }
+  if (row.some((i) => side(i) > 0)) {
+    const slack = right - (x - LAYOUT.colGap);
+    if (slack > 0) for (const i of row) shifts[i] = { x: shifts[i]!.x + slack, y: shifts[i]!.y };
   }
   return shifts;
 }
@@ -389,8 +407,16 @@ function packRows(rects: readonly Rect[], origin: Point): Point[] | null {
  * unrelated groups.
  */
 export function packComponents(graph: LayoutGraph, positions: Positions): Positions {
+  // One pass over the container boxes serves every component (a container's
+  // descendants all belong to its component).
+  const size = new Map(graph.nodes.map((n) => [n.id, n]));
+  const leafRect = (id: string): Rect | undefined => {
+    const p = positions.get(id);
+    return p ? { x: p.x, y: p.y, w: size.get(id)!.w, h: size.get(id)!.h } : undefined;
+  };
+  const groups = containerRects(graph, leafRect);
   const list = componentsOf(graph)
-    .map((c) => ({ ...c, rect: componentRect(graph, c.members, positions) }))
+    .map((c) => ({ ...c, rect: union(c.members.map((id) => groups.get(id) ?? leafRect(id)).filter((r): r is Rect => r !== undefined)) }))
     .filter((c): c is typeof c & { rect: Rect } => c.rect !== undefined);
   const shifts = packRows(list.map((c) => c.rect), { x: LAYOUT.pad, y: LAYOUT.pad });
   if (!shifts) return positions;
@@ -404,14 +430,16 @@ export function packComponents(graph: LayoutGraph, positions: Positions): Positi
   }));
 }
 
+type SiblingLink = { level: string | undefined; from: string; to: string; edge: { from: string; to: string } };
+
 /**
  * Flow relations lifted to the sibling pair under their lowest common
  * container (`level`; undefined = top level): a relation between descendants
- * counts for their sibling ancestors. Relations within one unit's own chain
- * lift to nothing.
+ * counts for their sibling ancestors (`edge` keeps the real endpoints).
+ * Relations within one unit's own chain lift to nothing.
  */
-function siblingLinks(graph: LayoutGraph, depth: ReadonlyMap<string, number>): { level: string | undefined; from: string; to: string }[] {
-  const out: { level: string | undefined; from: string; to: string }[] = [];
+function siblingLinks(graph: LayoutGraph, depth: ReadonlyMap<string, number>): SiblingLink[] {
+  const out: SiblingLink[] = [];
   for (const e of graph.flow) {
     let a: string | undefined = e.from;
     let b: string | undefined = e.to;
@@ -424,18 +452,35 @@ function siblingLinks(graph: LayoutGraph, depth: ReadonlyMap<string, number>): {
       b = graph.parentOf.get(b);
     }
     if (a === undefined || b === undefined || a === b) continue;
-    out.push({ level: graph.parentOf.get(a), from: a, to: b });
+    out.push({ level: graph.parentOf.get(a), from: a, to: b, edge: e });
   }
   return out;
 }
 
+const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
 /**
  * Component packing inside every container, deepest first (a container's box
- * is final before its parent packs it): a container's children are grouped by
- * the flow relations among them (lifted to the children), each group keeps
- * its internal arrangement, and the groups are row-packed toward the engine
- * aspect from the content's current top-left. Unrelated children no longer
- * stack into one column (ELK puts edge-less siblings in a single layer).
+ * is final before its parent packs it). ELK puts edge-less siblings in one
+ * layer, so unrelated children would otherwise stack into one column.
+ *
+ * At every level (each container's children, then the top-level units):
+ *  1. Re-separation, per component of siblings linked by flow. A block whose
+ *     box changed below (a packed container) is re-anchored at its original
+ *     top-left; then every growth is inserted as space at the grown block's
+ *     original right / bottom edge — a block starting at or past that line
+ *     shifts by the growth. The shift is monotone in the original coordinate,
+ *     so every pair keeps the axis it was separated on: no overlap, the ELK
+ *     order (left-to-right layers, top-to-bottom within) is kept. Shrinks
+ *     leave space, never pull anything (pulling could collide).
+ *  2. Re-attachment (best effort, edge length): an unchanged block linked to
+ *     a changed one is moved to restore its original offset to the linked
+ *     endpoints (both axes, then y only, then x only) — the first of those
+ *     spots that is free of every sibling box (with half the spacing gap)
+ *     and shortens its flow edges. Otherwise it stays where step 1 put it.
+ *  3. Inside a container, the components are row-packed toward the engine
+ *     aspect from the content's top-left; the box is re-derived with the
+ *     same padding and header. (Top level: packComponents does this.)
  */
 function packWithinContainers(graph: LayoutGraph, positions: Positions): Positions {
   const children = childrenOf(graph);
@@ -443,78 +488,192 @@ function packWithinContainers(graph: LayoutGraph, positions: Positions): Positio
   const containers = [...children.keys()].filter((k): k is string => k !== undefined).sort((a, b) => depth.get(b)! - depth.get(a)!);
   if (containers.length === 0) return positions;
   const size = new Map(graph.nodes.map((n) => [n.id, n]));
-  const pos = new Map<string, Point>([...positions].map(([id, p]) => [id, { x: p.x, y: p.y }]));
-  const rect = new Map<string, Rect>();
-  // Each node's leaves (itself for a leaf): what moves when the node moves.
-  const leavesUnder = new Map<string, string[]>();
-  for (const id of leafIds(graph)) {
-    const p = pos.get(id);
-    if (p) rect.set(id, { x: p.x, y: p.y, w: size.get(id)!.w, h: size.get(id)!.h });
-    for (let cur: string | undefined = id, guard = 0; cur !== undefined && guard <= LAYOUT.maxNestDepth + 1; cur = graph.parentOf.get(cur), guard++) {
-      const list = leavesUnder.get(cur);
-      if (list) list.push(id);
-      else leavesUnder.set(cur, [id]);
+  // `orig`: every box before packing (the reference frame); `rect`: the live boxes.
+  const orig = new Map<string, Rect>();
+  for (const [id, p] of positions) {
+    const s = size.get(id);
+    if (s) orig.set(id, { x: p.x, y: p.y, w: s.w, h: s.h });
+  }
+  for (const [id, r] of containerRects(graph, (id) => orig.get(id))) orig.set(id, r);
+  const rect = new Map(orig);
+  // Each node's subtree (itself included): what moves when the node moves.
+  const under = new Map<string, string[]>();
+  for (const n of graph.nodes) {
+    for (let cur: string | undefined = n.id, guard = 0; cur !== undefined && guard <= LAYOUT.maxNestDepth + 1; cur = graph.parentOf.get(cur), guard++) {
+      const list = under.get(cur);
+      if (list) list.push(n.id);
+      else under.set(cur, [n.id]);
     }
   }
-  const links = new Map<string, [string, string][]>();
+  const shiftTree = (k: string, dx: number, dy: number) => {
+    if (dx === 0 && dy === 0) return;
+    for (const id of under.get(k) ?? [k]) {
+      const r = rect.get(id);
+      if (r) rect.set(id, { ...r, x: r.x + dx, y: r.y + dy });
+    }
+  };
+  const linksAt = new Map<string | undefined, SiblingLink[]>();
   for (const l of siblingLinks(graph, depth)) {
-    if (l.level === undefined) continue;
-    const list = links.get(l.level);
-    if (list) list.push([l.from, l.to]);
-    else links.set(l.level, [[l.from, l.to]]);
+    const list = linksAt.get(l.level);
+    if (list) list.push(l);
+    else linksAt.set(l.level, [l]);
   }
-  for (const c of containers) {
-    const kids = children.get(c)!.filter((k) => rect.has(k));
-    if (kids.length > 1) {
-      const root = new Map(kids.map((k) => [k, k]));
-      const find = (k: string) => {
-        let r = k;
-        while (root.get(r) !== r) r = root.get(r)!;
-        root.set(k, r);
-        return r;
+  const gap = Math.min(LAYOUT.rowGap, LAYOUT.colGap) / 2;
+  // Which side each child's relations leave its container toward (original
+  // frame): for every flow relation, every container holding one end but not
+  // the other gets a vote for the child on that end's path.
+  const votes = new Map<string, Map<string, number>>();
+  const chain = (id: string) => {
+    const out: string[] = [id];
+    for (let p = graph.parentOf.get(id), guard = 0; p !== undefined && guard <= LAYOUT.maxNestDepth + 1; p = graph.parentOf.get(p), guard++) out.push(p);
+    return out;
+  };
+  for (const e of graph.flow) {
+    for (const [u, v] of [[e.from, e.to], [e.to, e.from]] as const) {
+      const ov = orig.get(v);
+      if (!ov) continue;
+      const cu = chain(u);
+      const cv = new Set(chain(v));
+      for (let i = 1; i < cu.length; i++) {
+        const box = cu[i]!;
+        if (cv.has(box)) break;
+        const ob = orig.get(box);
+        if (!ob) continue;
+        const m = votes.get(box) ?? new Map<string, number>();
+        m.set(cu[i - 1]!, (m.get(cu[i - 1]!) ?? 0) + Math.sign(centre(ov).x - centre(ob).x));
+        votes.set(box, m);
+      }
+    }
+  }
+
+  const reseparate = (comp: readonly string[], links: readonly SiblingLink[]) => {
+    const changed = new Set(
+      comp.filter((k) => {
+        const o = orig.get(k)!;
+        const n = rect.get(k)!;
+        return o.x !== n.x || o.y !== n.y || o.w !== n.w || o.h !== n.h;
+      }),
+    );
+    if (changed.size === 0) return;
+    const cutsX: [number, number][] = [];
+    const cutsY: [number, number][] = [];
+    for (const k of changed) {
+      const o = orig.get(k)!;
+      const n = rect.get(k)!;
+      shiftTree(k, o.x - n.x, o.y - n.y);
+      if (n.w > o.w) cutsX.push([o.x + o.w, n.w - o.w]);
+      if (n.h > o.h) cutsY.push([o.y + o.h, n.h - o.h]);
+    }
+    const along = (cuts: readonly [number, number][], v: number) => {
+      let s = 0;
+      for (const [c, amount] of cuts) if (c <= v) s += amount;
+      return s;
+    };
+    for (const k of comp) {
+      const o = orig.get(k)!;
+      shiftTree(k, along(cutsX, o.x), along(cutsY, o.y));
+    }
+    // Re-attachment of unchanged blocks to the changed ones they link to.
+    for (const k of comp) {
+      if (changed.has(k)) continue;
+      const mine = links.filter((l) => l.from === k || l.to === k);
+      const toChanged = mine.filter((l) => changed.has(l.from === k ? l.to : l.from));
+      if (toChanged.length === 0) continue;
+      const ends = (l: SiblingLink) => (l.from === k ? [l.edge.from, l.edge.to] : [l.edge.to, l.edge.from]) as [string, string];
+      let dx = 0;
+      let dy = 0;
+      for (const l of toChanged) {
+        const [own, other] = ends(l);
+        const now = { a: centre(rect.get(own)!), b: centre(rect.get(other)!) };
+        const was = { a: centre(orig.get(own)!), b: centre(orig.get(other)!) };
+        dx += now.b.x - now.a.x - (was.b.x - was.a.x);
+        dy += now.b.y - now.a.y - (was.b.y - was.a.y);
+      }
+      dx /= toChanged.length;
+      dy /= toChanged.length;
+      const cost = (sx: number, sy: number) => {
+        let s = 0;
+        for (const l of mine) {
+          const [own, other] = ends(l);
+          const a = centre(rect.get(own)!);
+          const b = centre(rect.get(other)!);
+          s += Math.hypot(a.x + sx - b.x, a.y + sy - b.y);
+        }
+        return s;
       };
-      for (const [a, b] of links.get(c) ?? []) {
-        if (!root.has(a) || !root.has(b)) continue;
-        const ra = find(a);
-        const rb = find(b);
-        if (ra !== rb) root.set(byId(ra, rb) < 0 ? rb : ra, byId(ra, rb) < 0 ? ra : rb);
+      const r = rect.get(k)!;
+      const free = (sx: number, sy: number) => {
+        const t = { x: r.x + sx - gap, y: r.y + sy - gap, w: r.w + 2 * gap, h: r.h + 2 * gap };
+        return comp.every((o) => o === k || !overlaps(t, rect.get(o)!));
+      };
+      let best: [number, number] | null = null;
+      let bestCost = cost(0, 0);
+      for (const [sx, sy] of [[dx, dy], [0, dy], [dx, 0]] as const) {
+        if ((sx === 0 && sy === 0) || !free(sx, sy)) continue;
+        const c = cost(sx, sy);
+        if (c < bestCost - 1e-6) {
+          best = [sx, sy];
+          bestCost = c;
+        }
       }
-      const groups = new Map<string, string[]>();
-      for (const k of kids) {
-        const r = find(k);
-        const g = groups.get(r);
-        if (g) g.push(k);
-        else groups.set(r, [k]);
-      }
-      const list = [...groups.values()];
-      const content = union(kids.map((k) => rect.get(k)!))!;
-      const shifts = packRows(list.map((g) => union(g.map((k) => rect.get(k)!))!), { x: content.x, y: content.y });
-      if (shifts) {
-        list.forEach((g, i) => {
-          const d = shifts[i]!;
-          if (d.x === 0 && d.y === 0) return;
-          for (const k of g) {
-            const r = rect.get(k)!;
-            rect.set(k, { ...r, x: r.x + d.x, y: r.y + d.y });
-            for (const leaf of leavesUnder.get(k) ?? []) {
-              const p = pos.get(leaf);
-              if (p) pos.set(leaf, { x: p.x + d.x, y: p.y + d.y });
-            }
-          }
-        });
-      }
+      if (best) shiftTree(k, best[0], best[1]);
     }
-    const inner = union(kids.map((k) => rect.get(k)!));
-    if (inner) {
-      rect.set(c, {
-        x: inner.x - LAYOUT.groupPad,
-        y: inner.y - LAYOUT.groupPad - LAYOUT.groupHeader,
-        w: inner.w + 2 * LAYOUT.groupPad,
-        h: inner.h + 2 * LAYOUT.groupPad + LAYOUT.groupHeader,
-      });
+  };
+
+  /** Re-separates the level's components; returns them (children order). */
+  const level = (parent: string | undefined): string[][] => {
+    const kids = (children.get(parent) ?? []).filter((k) => rect.has(k));
+    const links = (linksAt.get(parent) ?? []).filter((l) => rect.has(l.from) && rect.has(l.to) && rect.has(l.edge.from) && rect.has(l.edge.to));
+    const root = new Map(kids.map((k) => [k, k]));
+    const find = (k: string) => {
+      let r = k;
+      while (root.get(r) !== r) r = root.get(r)!;
+      root.set(k, r);
+      return r;
+    };
+    for (const l of links) {
+      const ra = find(l.from);
+      const rb = find(l.to);
+      if (ra !== rb) root.set(byId(ra, rb) < 0 ? rb : ra, byId(ra, rb) < 0 ? ra : rb);
     }
+    const groups = new Map<string, string[]>();
+    for (const k of kids) {
+      const r = find(k);
+      const g = groups.get(r);
+      if (g) g.push(k);
+      else groups.set(r, [k]);
+    }
+    const comps = [...groups.values()];
+    for (const comp of comps) {
+      if (comp.length < 2) continue;
+      const inside = new Set(comp);
+      reseparate(comp, links.filter((l) => inside.has(l.from)));
+    }
+    return comps;
+  };
+
+  for (const c of containers) {
+    const comps = level(c);
+    const kids = comps.flat();
+    const content = union(kids.map((k) => rect.get(k)!));
+    if (!content) continue;
+    const vote = votes.get(c);
+    const sides = comps.map((g) => Math.sign(g.reduce((s, k) => s + (vote?.get(k) ?? 0), 0)));
+    const shifts = packRows(comps.map((g) => union(g.map((k) => rect.get(k)!))!), { x: content.x, y: content.y }, sides);
+    if (shifts) comps.forEach((g, i) => g.forEach((k) => shiftTree(k, shifts[i]!.x, shifts[i]!.y)));
+    const inner = union(kids.map((k) => rect.get(k)!))!;
+    rect.set(c, {
+      x: inner.x - LAYOUT.groupPad,
+      y: inner.y - LAYOUT.groupPad - LAYOUT.groupHeader,
+      w: inner.w + 2 * LAYOUT.groupPad,
+      h: inner.h + 2 * LAYOUT.groupPad + LAYOUT.groupHeader,
+    });
   }
-  return pos;
+  level(undefined);
+  return new Map([...positions].map(([id, p]) => {
+    const r = rect.get(id);
+    return [id, r ? { x: r.x, y: r.y } : p];
+  }));
 }
 
 /**

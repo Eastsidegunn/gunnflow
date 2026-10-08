@@ -42,26 +42,30 @@ const sceneOf = (nodes: NodeProjection[], pos: Positions, packContainers: boolea
   buildScene(nodes, DEFAULT_WIRING, new Map(), pos, new Map(), { packContainers });
 
 function assertNoOverlaps(scene: ReturnType<typeof buildScene>, label: string) {
+  // Nesting by membership (members = every descendant leaf), never by geometry:
+  // a foreign box lying wholly inside a group is an overlap too.
+  const memberOf = new Map(scene.groups.map((g) => [g.id, new Set(g.members)]));
+  const nested = (outer: (typeof scene.groups)[number], g: (typeof scene.groups)[number]) =>
+    g.depth > outer.depth && g.members.length > 0 && g.members.every((m) => memberOf.get(outer.id)!.has(m));
   const leaves = [...scene.layout.nodes.values()];
   for (let i = 0; i < leaves.length; i++)
     for (let j = i + 1; j < leaves.length; j++)
       expect(overlaps(leaves[i]!, leaves[j]!), `${label}: leaves ${leaves[i]!.id}/${leaves[j]!.id}`).toBe(false);
   for (const a of scene.groups)
     for (const b of scene.groups) {
-      if (a === b || inside(a, b) || inside(b, a)) continue;
+      if (a === b || nested(a, b) || nested(b, a)) continue;
       expect(overlaps(a, b), `${label}: groups ${a.id}/${b.id}`).toBe(false);
     }
   for (const leaf of leaves)
     for (const g of scene.groups) {
-      if (inside(g, leaf)) continue;
+      if (memberOf.get(g.id)!.has(leaf.id)) {
+        expect(inside(g, leaf), `${label}: ${leaf.id} outside its group ${g.id}`).toBe(true);
+        continue;
+      }
       expect(overlaps(leaf, g), `${label}: leaf ${leaf.id} vs group ${g.id}`).toBe(false);
     }
-  // Every member stays inside its own group box.
-  for (const g of scene.groups)
-    for (const m of g.members) {
-      const r = scene.layout.nodes.get(m) ?? scene.groups.find((x) => x.id === m);
-      if (r) expect(inside(g, r), `${label}: ${m} outside ${g.id}`).toBe(true);
-    }
+  for (const a of scene.groups)
+    for (const b of scene.groups) if (a !== b && nested(a, b)) expect(inside(a, b), `${label}: ${b.id} outside ${a.id}`).toBe(true);
 }
 
 const layouts = async (nodes: NodeProjection[], packContainers: boolean): Promise<[string, Positions][]> => {
@@ -142,5 +146,100 @@ describe('container packing (packContainers)', () => {
     expect(s.positions()).not.toEqual(before);
     const goal = sceneOf(nodes, s.positions(), true).groups.find((g) => g.id === 'goal')!;
     expect(goal.h).toBeLessThanOrEqual(2.5 * goal.w);
+  });
+
+  /* ---- review repros: a packed (grown) group must not swallow a flow-linked neighbour ---- */
+
+  const member = (id: string, of: string, extra: NodeProjection['relations'] = []) =>
+    node(id, 'task', [{ type: 'member-of', target: of }, ...extra]);
+  /** Group g of n unconnected children, the first linked out to a top-level node (inside → outside). */
+  const insideOut = (n: number): NodeProjection[] => [
+    node('g', 'mission'),
+    node('outside', 'task'),
+    ...Array.from({ length: n }, (_, i) =>
+      member(`c${String(i).padStart(2, '0')}`, 'g', i === 0 ? [{ type: 'dependency', target: 'outside' }] : []),
+    ),
+  ];
+  /** outer ⊃ inner ⊃ 8 leaves; outer ⊃ s; an inner leaf links to s (inner → outer sibling). */
+  const threeLevel = (): NodeProjection[] => [
+    node('outer', 'goal'),
+    node('inner', 'mission', [{ type: 'member-of', target: 'outer' }]),
+    member('s', 'outer'),
+    ...Array.from({ length: 8 }, (_, i) => member(`l${i}`, 'inner', i === 0 ? [{ type: 'dependency', target: 's' }] : [])),
+  ];
+  /** Gap between two rects (0 when touching or overlapping). */
+  const rectGap = (a: R, b: R) =>
+    Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w), Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h));
+  const maxGap = Math.max(LAYOUT.rowGap, LAYOUT.colGap);
+
+  const repros: [string, NodeProjection[], string, string, string][] = [
+    ['inside→outside edge (3 children)', insideOut(3), 'outside', 'g', 'c00'],
+    ['inside→outside edge (24 children)', insideOut(24), 'outside', 'g', 'c00'],
+    ['3-level, inner leaf → outer sibling', threeLevel(), 's', 'inner', 'l0'],
+  ];
+  const edgeLength = (scene: ReturnType<typeof buildScene>, a: string, b: string) => {
+    const p = scene.layout.nodes.get(a)!;
+    const q = scene.layout.nodes.get(b)!;
+    return Math.hypot(p.x + p.w / 2 - q.x - q.w / 2, p.y + p.h / 2 - q.y - q.h / 2);
+  };
+
+  it('review repros: overlap-free and members inside their groups, ELK and fallback', async () => {
+    for (const [name, nodes] of repros)
+      for (const on of [true, false])
+        for (const [label, pos] of await layouts(nodes, on)) assertNoOverlaps(sceneOf(nodes, pos, on), `${name} ${label} pack=${on}`);
+  });
+
+  it('review repros (ELK): the linked outside node stays adjacent to the packed group', async () => {
+    for (const [name, nodes, ext, group, end] of repros) {
+      const pos = await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING));
+      const scene = sceneOf(nodes, pos, true);
+      const g = scene.groups.find((x) => x.id === group)!;
+      const e = scene.layout.nodes.get(ext)!;
+      const a = scene.layout.nodes.get(end)!;
+      expect(rectGap(g, e), `${name}: ${ext} ${JSON.stringify(e)} vs ${group} ${JSON.stringify(g)}`).toBeLessThanOrEqual(2 * maxGap);
+      // The relation itself stays short: its ends are neighbours across the group edge.
+      expect(edgeLength(scene, ext, end), name).toBeLessThanOrEqual(2 * maxGap + 2 * LAYOUT.groupPad + (a.w + e.w) / 2 + (a.h + e.h) / 2);
+    }
+  });
+
+  it('relations leaving a packed group are no longer than in the unpacked column (ELK and fallback)', async () => {
+    const cases: [string, NodeProjection[], string, string][] = [
+      ...repros.map(([n, nodes, ext, , end]) => [n, nodes, ext, end] as [string, NodeProjection[], string, string]),
+      ['nested goal', nestedGoal(), 'outside', 'm0-a'],
+    ];
+    for (const [name, nodes, ext, end] of cases) {
+      const off = await layouts(nodes, false);
+      const on = await layouts(nodes, true);
+      for (let i = 0; i < on.length; i++) {
+        const before = edgeLength(sceneOf(nodes, off[i]![1], false), ext, end);
+        const after = edgeLength(sceneOf(nodes, on[i]![1], true), ext, end);
+        expect(after, `${name} ${on[i]![0]}: ${Math.round(before)} → ${Math.round(after)}`).toBeLessThanOrEqual(before + 1);
+      }
+    }
+  });
+
+  it('the nested goal (ELK): the outside node stays adjacent to the packed goal', async () => {
+    const nodes = nestedGoal();
+    const scene = sceneOf(nodes, await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING)), true);
+    const goal = scene.groups.find((g) => g.id === 'goal')!;
+    expect(rectGap(goal, scene.layout.nodes.get('outside')!)).toBeLessThanOrEqual(2 * maxGap);
+  });
+
+  it('seeded nested fuzz: random containment + random flow, overlap-free on both paths', async () => {
+    let seed = 20261008;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0), seed / 2 ** 32);
+    for (let run = 0; run < 16; run++) {
+      const n = 20 + Math.floor(rnd() * 40);
+      const nodes: NodeProjection[] = [];
+      for (let i = 0; i < n; i++) {
+        const id = `n${String(i).padStart(2, '0')}`;
+        const rel: NodeProjection['relations'] = [];
+        // Parent among earlier nodes (acyclic), so nesting goes up to a few levels.
+        if (i > 0 && rnd() < 0.75) rel.push({ type: 'member-of', target: `n${String(Math.floor(rnd() * Math.min(i, 8))).padStart(2, '0')}` });
+        if (i > 0 && rnd() < 0.3) rel.push({ type: 'dependency', target: `n${String(Math.floor(rnd() * i)).padStart(2, '0')}` });
+        nodes.push(node(id, 'task', rel));
+      }
+      for (const [label, pos] of await layouts(nodes, true)) assertNoOverlaps(sceneOf(nodes, pos, true), `fuzz run ${run} ${label}`);
+    }
   });
 });
