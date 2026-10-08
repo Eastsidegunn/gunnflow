@@ -103,6 +103,12 @@
         "cause": "flagged"
       },
       "mechanism": "ambient"
+    },
+    {
+      "match": {
+        "cause": "approval_unverified"
+      },
+      "mechanism": "interrupt"
     }
   ],
   "viewers": {
@@ -267,7 +273,8 @@
   "detail": {
     "emphasis": [
       "권고",
-      "recommendation"
+      "recommendation",
+      "승인 상태"
     ]
   }
 }
