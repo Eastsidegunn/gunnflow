@@ -120,6 +120,8 @@ describe('closed nested shapes and node structure', () => {
   it('a live access url never carries userinfo credentials, and the problem never echoes them', () => {
     const live = (url: string) => ({ id: 'a', mediaType: 't', access: { kind: 'live', url } });
     expect(artifactRefProblem(live('https://h.example/x'))).toBeNull();
+    expect(artifactRefProblem(live('http://h.example:8080/x?q=1'))).toBeNull();
+    expect(artifactRefProblem(live('http://alice:s3cret@h.example/x'))).toBe('live access url must not carry credentials');
     for (const url of ['https://alice:s3cret@h.example/x', 'https://alice@h.example/x', 'https://:s3cret@h.example/x']) {
       const p = artifactRefProblem(live(url));
       expect(p).toBe('live access url must not carry credentials');
