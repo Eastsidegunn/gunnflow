@@ -153,6 +153,19 @@ export function CopyBox(props: { text: string; testId: string }) {
   };
   return (
     <div class="copy-box" data-grade="claim" data-testid={props.testId}>
+      <div class="copy-box-head">
+        <button
+          class="copy-button"
+          data-testid={`${props.testId}-copy`}
+          data-state={status()?.kind ?? 'idle'}
+          onClick={copy}
+        >
+          {(() => {
+            const s = status();
+            return s?.kind === 'copied' ? s.statement : '복사';
+          })()}
+        </button>
+      </div>
       <div class="copy-box-frame">
         <div class="copy-gutter" aria-hidden="true">
           <For each={lines()}>{(l) => <span data-testid={`${props.testId}-line`}>{l.number}</span>}</For>
@@ -174,17 +187,6 @@ export function CopyBox(props: { text: string; testId: string }) {
             )}
           </For>
         </code>
-        <button
-          class="copy-button"
-          data-testid={`${props.testId}-copy`}
-          data-state={status()?.kind ?? 'idle'}
-          onClick={copy}
-        >
-          {(() => {
-            const s = status();
-            return s?.kind === 'copied' ? s.statement : '복사';
-          })()}
-        </button>
       </div>
       <Show when={status()?.kind === 'failed'}>
         <p class="copy-failed" role="alert" data-testid={`${props.testId}-failed`}>
