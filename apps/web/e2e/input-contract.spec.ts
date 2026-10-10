@@ -49,6 +49,8 @@ async function open(page: Page) {
   expect((await page.request.put('http://127.0.0.1:8787/api/personal', { data: EMPTY_PERSONAL })).ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
+  // The layered pass replaces the first layout with an animated move: measure only after it has landed.
+  await expect(page.getByTestId('layout-source')).toHaveText('layered', { timeout: 15_000 });
   await still(page, ['t-build', 'm1']);
 }
 
