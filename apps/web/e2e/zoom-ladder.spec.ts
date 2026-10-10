@@ -135,32 +135,78 @@ test('double-click on empty canvas goes one anchor out; Alt+wheel zooms freely o
   expect((await ticks(page)).some((x) => Math.abs(x.zoom - free) < 1e-4)).toBe(false);
 });
 
-test('double-click on a container fits it (one anchor in); on a leaf node it still opens the work surface', async ({ page }) => {
+/** The canvas area left of the stage (40 % clamped 360..620 px), in client coordinates. */
+async function visibleLeft(page: Page) {
+  const host = (await page.locator('[data-testid="canvas-host"] canvas').boundingBox())!;
+  const stageW = Math.min(620, Math.max(360, host.width * 0.4));
+  return { left: host.x, right: host.x + host.width - stageW, top: host.y, bottom: host.y + host.height };
+}
+async function clientRect(page: Page, id: string) {
+  const r = (await rectOf(page, id))!;
+  const a = await toClient(page, r.x, r.y);
+  const b = await toClient(page, r.x + r.w, r.y + r.h);
+  return { left: a.x, top: a.y, right: b.x, bottom: b.y };
+}
+
+test('double-click on a container frames it beside the stage with a margin, on a ladder step; no work surface opens', async ({ page }) => {
   await open(page);
   const host = (await page.locator('[data-testid="canvas-host"] canvas').boundingBox())!;
-  // Zoom out first so the container is small on screen.
   const center = { x: host.x + host.width / 2, y: host.y + host.height / 2 };
   for (let i = 0; i < 4; i++) await notch(page, center, -1);
   const out = (await landed(page)).zoom;
-  // A point inside the container that no member covers: just inside its top-left corner.
   const g = (await rectOf(page, 'm1'))!;
   const inGroup = await toClient(page, g.x + 6, g.y + 6);
   await page.mouse.dblclick(inGroup.x, inGroup.y);
   const fitted = await landed(page);
   expect(fitted.zoom).toBeGreaterThan(out);
-  // Centred on the container as it is now (the double-click's first click selected it, which can grow it),
-  // and the zoom is an anchor of the scale.
-  const gNow = (await rectOf(page, 'm1'))!;
-  expect(Math.abs(fitted.x - (gNow.x + gNow.w / 2))).toBeLessThan(30);
-  expect(Math.abs(fitted.y - (gNow.y + gNow.h / 2))).toBeLessThan(30);
-  const anchors = (await ticks(page)).filter((x) => x.anchor).map((x) => x.zoom);
-  expect(anchors.some((a) => Math.abs(a - fitted.zoom) < 1e-3)).toBe(true);
+  expect((await ticks(page)).some((x) => Math.abs(x.zoom - fitted.zoom) < 1e-3)).toBe(true);
+  // The container sits wholly inside the area left of the stage.
+  const area = await visibleLeft(page);
+  const box = await clientRect(page, 'm1');
+  expect(box.left).toBeGreaterThanOrEqual(area.left - 1);
+  expect(box.right).toBeLessThanOrEqual(area.right + 1);
+  expect(box.top).toBeGreaterThanOrEqual(area.top - 1);
+  expect(box.bottom).toBeLessThanOrEqual(area.bottom + 1);
   await expect(page.getByTestId('task-inspector')).toHaveCount(0);
+});
 
-  // A leaf node: the work surface opens, as before.
-  const b = (await rectOf(page, 't-build'))!;
-  const leafAt = await toClient(page, b.x + b.w / 2, b.y + b.h / 2);
-  await page.mouse.dblclick(leafAt.x, leafAt.y);
+test('double-click on a leaf frames it with its one-hop neighbours, on a ladder step; Enter opens its work surface', async ({ page }) => {
+  await open(page);
+  // t-research links to t-draft, t-build and d-report (normal fixture).
+  const r = (await rectOf(page, 't-research'))!;
+  const at = await toClient(page, r.x + r.w / 2, r.y + r.h / 2);
+  await page.mouse.dblclick(at.x, at.y);
+  const cam = await landed(page);
+  expect((await ticks(page)).some((x) => Math.abs(x.zoom - cam.zoom) < 1e-3)).toBe(true);
+  const area = await visibleLeft(page);
+  for (const id of ['t-research', 't-draft', 't-build', 'd-report']) {
+    const b = await clientRect(page, id);
+    expect(b.left, `${id} left`).toBeGreaterThanOrEqual(area.left - 1);
+    expect(b.right, `${id} right`).toBeLessThanOrEqual(area.right + 1);
+    expect(b.top, `${id} top`).toBeGreaterThanOrEqual(area.top - 1);
+    expect(b.bottom, `${id} bottom`).toBeLessThanOrEqual(area.bottom + 1);
+  }
+  await expect(page.getByTestId('task-inspector')).toHaveCount(0);
+  await expect(page.getByTestId('node-stage')).toHaveAttribute('data-node', 't-research');
+  await page.keyboard.press('Enter');
   await expect(page.getByTestId('task-inspector')).toBeVisible();
+});
+
+test('a cold double-click on a right-edge node (under where the stage appears) frames it; it never opens the work surface', async ({ page }) => {
+  await open(page);
+  // t-test sits in the last layer — under the stage region at the first fit.
+  const r = (await rectOf(page, 't-test'))!;
+  const at = await toClient(page, r.x + r.w / 2, r.y + r.h / 2);
+  await page.mouse.dblclick(at.x, at.y);
+  const cam = await landed(page);
+  expect((await ticks(page)).some((x) => Math.abs(x.zoom - cam.zoom) < 1e-3)).toBe(true);
+  await expect(page.getByTestId('task-inspector')).toHaveCount(0);
+  const area = await visibleLeft(page);
+  // t-test and its neighbour t-build are both left of the stage.
+  for (const id of ['t-test', 't-build']) {
+    const b = await clientRect(page, id);
+    expect(b.left, `${id} left`).toBeGreaterThanOrEqual(area.left - 1);
+    expect(b.right, `${id} right`).toBeLessThanOrEqual(area.right + 1);
+  }
 });
 

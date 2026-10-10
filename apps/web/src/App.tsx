@@ -88,7 +88,7 @@ export function App() {
   /** Whether ③ (a work surface of any flavor) owns the body. */
   const workActive = () => Boolean(terminalSessionId() || executionTaskId() || work());
 
-  /** The ONE ③ entry: canvas double-click, Enter on the stage, the stage button, an inbox item. */
+  /** The ONE ③ entry: Enter on the stage, the stage button, an inbox item (a canvas double-click frames the view instead). */
   const enterWork = (nodeId: string, queue?: readonly string[]) => {
     stores.selection.select(nodeId);
     setWork({ nodeId, ...(queue ? { queue } : {}) });

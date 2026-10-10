@@ -14,6 +14,13 @@
  *     around it, so stepping flips detail exactly once and no step sits on it.
  */
 
+/**
+ * Chrome hook: dispatching this window event (detail `{ id }`) asks the canvas
+ * to frame that node the way a canvas double-click does — the stage uses it
+ * when a double-click that began on the canvas ends on the stage.
+ */
+export const FRAME_NODE_EVENT = 'gunnflow:frame-node';
+
 export const ZOOM_MIN = 0.15;
 export const ZOOM_MAX = 2.5;
 export const ZOOM_RATIO = 1.22;
@@ -125,6 +132,25 @@ export function stepZoom(ladder: Ladder, current: number, dir: 1 | -1, slot: Slo
     return { zoom: current, slot: { key, index: i } };
   }
   return { zoom, slot: { key, index: j } };
+}
+
+/**
+ * A framing zoom snapped onto the ladder: the largest step at or below `zoom`
+ * (so what was framed still fits), else the ladder's smallest step. Landing on
+ * a step keeps every later notch reversible.
+ */
+export function snapDown(ladder: Ladder, zoom: number): number {
+  const below = ladder.steps.filter((s) => s <= zoom || same(s, zoom));
+  return below.length > 0 ? below[below.length - 1]! : ladder.steps[0]!;
+}
+
+/**
+ * The zoom that fits `bounds` in a visible area with a relative margin on each
+ * side (0.08 = 8 % of the width and of the height), clamped to the range.
+ */
+export function fitZoomRelative(bounds: { w: number; h: number }, viewW: number, viewH: number, margin: number, min = ZOOM_MIN, max = ZOOM_MAX): number {
+  const z = Math.min((viewW * (1 - 2 * margin)) / Math.max(1, bounds.w), (viewH * (1 - 2 * margin)) / Math.max(1, bounds.h));
+  return Math.min(max, Math.max(min, z));
 }
 
 /** The anchor one level out (the largest anchor below `current`); null when none. */

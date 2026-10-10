@@ -5,6 +5,7 @@
  * the node as a right-side stage sized for deciding in place. "들어가기 ↵"
  * (and Enter / canvas double-click) descends to the node's ③ work surface.
  */
+import { FRAME_NODE_EVENT } from '../canvas/zoomLadder.js';
 import { For, Show, createEffect, createMemo } from 'solid-js';
 import type { WorkspaceStores } from '../state/stores.js';
 import { resolveParts } from '../canvas/parts.js';
@@ -30,14 +31,15 @@ export function NodeStage(props: {
   });
   // A double-click that began on a canvas node can END on this stage (it
   // slides over the point between the two clicks). Inside the gesture window
-  // that is still the ③ entry; later double-clicks are content gestures.
+  // that is still the canvas double-click — it frames the node (③ opens with
+  // Enter or the stage button only); later double-clicks are content gestures.
   let openedAt = Date.now();
   createEffect(() => {
     void props.nodeId;
     openedAt = Date.now();
   });
   const onStageDblClick = () => {
-    if (Date.now() - openedAt < 600 && node()) props.onEnterWork(node()!.id);
+    if (Date.now() - openedAt < 600 && node()) window.dispatchEvent(new CustomEvent(FRAME_NODE_EVENT, { detail: { id: node()!.id } }));
   };
 
   return (
