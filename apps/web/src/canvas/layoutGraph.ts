@@ -78,6 +78,10 @@ const BAND_ASPECT = 6;
 export interface LayoutProvider {
   /** `hints`: previous positions, used to keep the existing order. */
   layout(graph: LayoutGraph, hints?: Positions): Promise<Positions>;
+  /** Loads whatever the engine needs (e.g. its worker script) ahead of the first pass. */
+  warm?(): Promise<void>;
+  /** Releases the engine (e.g. terminates its worker). */
+  dispose?(): void;
 }
 
 const byId = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);

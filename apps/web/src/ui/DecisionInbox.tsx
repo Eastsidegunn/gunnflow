@@ -14,7 +14,7 @@
  * selected item beside the drawer (view state); waiting time comes from the
  * received `attention.since`; the actions sit in one horizontal bar.
  */
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { renderFor } from '@gunnflow/contract/wiring';
 import type { WorkspaceStores } from '../state/stores.js';
 import {
@@ -44,7 +44,7 @@ import { DetailSection, NodeActions } from './nodeParts.jsx';
 import { t } from '../i18n/index.js';
 
 /** A clock for relative waiting times: refreshed every 30 s while mounted. */
-function createNow() {
+export function createNow() {
   const [now, setNow] = createSignal(Date.now());
   const timer = setInterval(() => setNow(Date.now()), 30_000);
   onCleanup(() => clearInterval(timer));
@@ -130,6 +130,8 @@ export function DecisionInbox(props: {
   onClose: () => void;
   onEnterWork: (nodeId: string, queue: readonly string[]) => void;
   motion?: 'enter' | 'exit';
+  /** The pending item to open at (e.g. a waiting row of the Now list); absent → the first pending row. */
+  initialId?: string | null;
 }) {
   const { projectionStore, wiring, prefs } = props.stores;
   const nodes = () => projectionStore.genericNodes()?.nodes ?? [];
@@ -151,7 +153,7 @@ export function DecisionInbox(props: {
   const [decidedOpen, setDecidedOpen] = createSignal(false);
   const now = createNow();
 
-  const [selectedId, setSelectedId] = createSignal<string | null>(null);
+  const [selectedId, setSelectedId] = createSignal<string | null>(props.initialId ?? null);
   let lastIndex = 0;
   createEffect(() => {
     const sel = selectedId();
@@ -207,6 +209,24 @@ export function DecisionInbox(props: {
     setSelectedId(next);
     focusRow(next);
   };
+
+  /**
+   * Opening AT an item (a waiting row of the Now list), on every open: its
+   * group unfolds if folded, it becomes the selection, and focus lands on its
+   * row (after the drawer's own first-control focus).
+   */
+  createEffect(
+    on(
+      () => props.initialId,
+      (id) => {
+        if (!id) return;
+        const target = groups()?.find((g) => g.rows.some((r) => r.id === id));
+        if (target && !groupOpen(target)) setFolds((m) => new Map([...m, [groupKey(target), true]]));
+        setSelectedId(id);
+        setTimeout(() => focusRow(id), 0);
+      },
+    ),
+  );
 
   let rootEl: HTMLElement | undefined;
   /**

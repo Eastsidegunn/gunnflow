@@ -29,6 +29,9 @@ import { resolveWorkSurface, surfaceForKind } from './state/depth.js';
 import { isTypingTarget, matchesKey, resolveKey } from './state/keybindings.js';
 import { escStack } from './state/escStack.js';
 import { t } from './i18n/index.js';
+import { NowView } from './ui/NowView.jsx';
+import { cursorNodeId, cursorSection, type CockpitView } from './state/nowView.js';
+import { browserIdle, scheduleLayoutPreload, type PreloadState } from './state/layoutPreload.js';
 
 export function App() {
   const stores = createWorkspaceStores(postIntent);
@@ -48,20 +51,24 @@ export function App() {
    * before opening, so no stage opens afterwards for a node merely looked at.
    */
   let selectionBeforeInbox: string | null = null;
-  const openInbox = () => {
+  /** The item the inbox opens at (a waiting row of the Now list); null = its own first pending row. */
+  const [inboxStartId, setInboxStartId] = createSignal<string | null>(null);
+  const openInbox = (at: string | null = null) => {
     if (inboxOpen()) return;
     selectionBeforeInbox = stores.selection.selectedId();
+    setInboxStartId(at);
     setInboxOpen(true);
   };
   const closeInbox = () => {
     if (!inboxOpen()) return;
     setInboxOpen(false);
+    setInboxStartId(null);
     const before = selectionBeforeInbox;
     selectionBeforeInbox = null;
     if (before !== null && liveIds().has(before)) stores.selection.select(before);
     else stores.selection.clear();
   };
-  const toggleInbox = () => (inboxOpen() ? closeInbox() : openInbox());
+  const toggleInbox = () => (inboxOpen() ? closeInbox() : openInbox(null));
   let stream: WorkspaceStream | undefined;
   // Exit presences (M-02/M-06/M-08): each surface outlives its close by its exit duration.
   const D = DEFAULT_THEME.motion.durations;
@@ -89,8 +96,40 @@ export function App() {
   /** Whether ③ (a work surface of any flavor) owns the body. */
   const workActive = () => Boolean(terminalSessionId() || executionTaskId() || work());
 
+  /** The current view (gf-p2-views): null until the landing view is decided at boot. */
+  const view = () => stores.viewState.view();
+  /**
+   * Switching views is local view state only (no request). The list has no
+   * depth of its own: leaving for it closes ③ and any modal surface; the
+   * selection stays, so a return to the full view finds its stage again.
+   */
+  const showView = (v: CockpitView) => {
+    if (v === 'now') {
+      stores.personal.setConnectFrom(null);
+      setTerminalSessionId(null);
+      setExecutionTaskId(null);
+      setWork(null);
+      setSurface(null);
+      setRewireArmed(false);
+    }
+    stores.viewState.setView(v);
+  };
+  /**
+   * Open a node from the Now list. Until view B exists this is the full view's
+   * ② (gf-p2-views §7e): select it there, the canvas pans it clear of the stage
+   * as "go to node" does. Opening marks only this node seen.
+   */
+  const openFromNow = (id: string) => {
+    const node = stores.projectionStore.genericNodes()?.nodes.find((n) => n.id === id);
+    if (node) stores.seen.markNode(node);
+    showView('all');
+    stores.selection.select(id);
+  };
+
   /** The ONE ③ entry: Enter on the stage, the stage button, an inbox item (a canvas double-click frames the view instead). */
   const enterWork = (nodeId: string, queue?: readonly string[]) => {
+    // ③ belongs to the full view's depth ladder.
+    stores.viewState.setView('all');
     stores.selection.select(nodeId);
     setWork({ nodeId, ...(queue ? { queue } : {}) });
   };
@@ -105,9 +144,18 @@ export function App() {
     // Prefs apply once at boot; the default lens is only a starting point, never a lock.
     void stores.prefs.load().then((p) => {
       if (p.defaultLens !== 'all') stores.lensState.setLens(p.defaultLens);
+      // The landing view, unless something (a deep link) already chose one.
+      if (stores.viewState.view() === null) stores.viewState.setView(p.landingView);
     });
+    // The upstream's identity as the BFF names it (its own route, no backend call): the key of the
+    // person's "last look" marks on this device. Unknown → memory only (no shared fallback record).
+    void fetch('/api/upstream', { cache: 'no-store' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ label?: unknown }>) : null))
+      .catch(() => null)
+      .then((b) => stores.seen.bind(typeof b?.label === 'string' && b.label !== '' ? b.label : null));
+    // Link mode belongs to the full view's canvas; on the Now list Esc does nothing.
     const cancelLink = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') stores.personal.setConnectFrom(null);
+      if (e.key === 'Escape' && view() === 'all') stores.personal.setConnectFrom(null);
     };
     window.addEventListener('keydown', cancelLink);
     onCleanup(() => window.removeEventListener('keydown', cancelLink));
@@ -145,12 +193,29 @@ export function App() {
         !settingsOpen()
       ) {
         e.preventDefault();
-        toggleInbox();
+        // On a waiting row of the Now list the inbox opens at that item.
+        const cur = stores.viewState.nowCursor();
+        const waitingId = view() === 'now' && cur !== null && cursorSection(cur) === 'waiting' ? cursorNodeId(cur) : null;
+        if (!inboxOpen() && waitingId !== null) openInbox(waitingId);
+        else toggleInbox();
+        return;
+      }
+      if (
+        matchesKey(e, resolveKey(stores.prefs.prefs().keys, 'switch-view')) &&
+        !isTypingTarget(e.target) &&
+        !settingsOpen() &&
+        !inboxOpen() &&
+        escStack.isEmpty() &&
+        view() !== null
+      ) {
+        e.preventDefault();
+        showView(view() === 'now' ? 'all' : 'now');
         return;
       }
       // Enter = one depth in (② → ③). Esc is its mirror. Chrome grammar, not a binding.
       if (
         e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        view() === 'all' &&
         !workActive() && !settingsOpen() && !surface() && !inboxOpen() &&
         !isTypingTarget(e.target) &&
         !(e.target instanceof HTMLElement && ['BUTTON', 'A', 'SELECT', 'SUMMARY'].includes(e.target.tagName))
@@ -171,6 +236,9 @@ export function App() {
           setSettingsOpen(false);
         } else if (surface()) {
           setSurface(null);
+        } else if (view() !== 'all') {
+          // The Now list has no depth and no selection of its own: Esc does nothing there
+          // (the hidden canvas's selection is left as it was).
         } else if (inboxOpen()) {
           // Unreachable while the inbox owns the stack; kept as a safe fallback.
           closeInbox();
@@ -194,6 +262,32 @@ export function App() {
       disconnect();
       window.removeEventListener('keydown', onKey);
     });
+  });
+
+  // Each snapshot revision: a first visit starts its "last look" record here; a revision below a
+  // mark means the backend was rebuilt and the record resets. Never an automatic advance.
+  createEffect(() => {
+    if (!stores.projectionStore.hasSnapshot() || !stores.seen.bound()) return;
+    stores.seen.record();
+    stores.seen.reconcile(stores.projectionStore.projection().revision);
+  });
+
+  /**
+   * The full view's layout code (the layered engine's chunk and worker script) loads once,
+   * after the first snapshot, when the browser is idle — so the first switch from the list
+   * to the canvas fetches nothing. The state is shown on the shell for tests (view status).
+   */
+  const [layoutPreload, setLayoutPreload] = createSignal<PreloadState>('pending');
+  let cancelPreload: (() => void) | null = null;
+  createEffect(() => {
+    if (cancelPreload || !stores.projectionStore.hasSnapshot()) return;
+    cancelPreload = scheduleLayoutPreload(() => stores.layout.preload(), setLayoutPreload, browserIdle());
+  });
+  // With the cockpit: a pending preload never starts, a late one reports nothing, the worker ends.
+  onCleanup(() => {
+    cancelPreload?.();
+    cancelPreload = () => undefined;
+    stores.layout.dispose();
   });
 
   const isEmpty = () =>
@@ -301,15 +395,23 @@ export function App() {
   };
 
   return (
-    <div class="shell">
-      <WorkspaceToolbar stores={stores} searchRef={(el) => (searchEl = el)} />
+    <div class="shell" data-layout-preload={layoutPreload()}>
+      <WorkspaceToolbar stores={stores} searchRef={(el) => (searchEl = el)} view={view} onView={showView} />
       <Show when={unreachableLong()}>
         <div class="unreachable-banner" data-testid="unreachable-banner" role="alert">
           {t('app.unreachableBanner', { time: unreachableSince() })}
         </div>
       </Show>
       <div class="body">
-        <Show when={!workActive()}>
+        <Show when={!workActive() && view() === 'now'}>
+          <NowView
+            stores={stores}
+            onOpen={openFromNow}
+            onShowAll={() => showView('all')}
+            keysActive={() => !settingsOpen() && !inboxOpen() && !surface()}
+          />
+        </Show>
+        <Show when={!workActive() && view() === 'all'}>
           <WorkspaceSidebar stores={stores} onOpenSettings={() => setSettingsOpen(true)} />
           <main class="canvas-area">
             <Show when={!isEmpty()} fallback={<EmptyState stores={stores} onStartMission={startMission} />}>
@@ -405,14 +507,16 @@ export function App() {
           setTerminalSessionId(null);
           setExecutionTaskId(null);
           setWork(null);
+          showView('all');
           stores.selection.select(id);
         }}
       />
-      <DecisionInboxToggle stores={stores} open={inboxOpen} onToggle={toggleInbox} />
+      <DecisionInboxToggle stores={stores} open={inboxOpen} onToggle={() => toggleInbox()} />
       <Show when={inboxPresence.mounted()}>
         <DecisionInbox
           stores={stores}
           motion={inboxPresence.phase()}
+          initialId={inboxStartId()}
           onClose={closeInbox}
           onEnterWork={(nodeId, queue) => {
             closeInbox();

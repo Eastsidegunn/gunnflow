@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
@@ -15,10 +15,16 @@ export const E2E_WIRING_DIR = join(tmpdir(), 'gunnflow-e2e-wiring');
 /**
  * The Gunnflow home during e2e: a temporary directory, never the person's ~/.gunnflow — so a
  * developer's own config.json, wiring/ and prefs.json there cannot leak into (or be written by) the
- * suite. Created empty here; the BFF creates files inside it as scenarios need.
+ * suite. Created here with one seeded file (prefs.json, below); the BFF creates the rest as scenarios need.
  */
 export const E2E_HOME = join(tmpdir(), 'gunnflow-e2e-home');
 mkdirSync(E2E_HOME, { recursive: true });
+/**
+ * The product lands on the Now list (prefs `landingView`, default `now`); the canvas scenarios
+ * were written for the full view, so the e2e home's prefs open on `all`. The Now scenario sets
+ * `now` itself through the same prefs store. Rewritten at each config load: every run starts here.
+ */
+writeFileSync(join(E2E_HOME, 'prefs.json'), JSON.stringify({ landingView: 'all' }, null, 2));
 
 export default defineConfig({
   testDir: 'e2e',

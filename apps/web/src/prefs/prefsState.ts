@@ -9,6 +9,7 @@
 import { createSignal } from 'solid-js';
 import { sanitizeKeys } from '../state/keybindings.js';
 import { msg, raw, tm, type Msg } from '../i18n/index.js';
+import { isCockpitView, type CockpitView } from '../state/nowView.js';
 
 export interface Prefs {
   /** Wheel zoom factor per notch (1.01..2). */
@@ -21,9 +22,11 @@ export interface Prefs {
   keys: Record<string, string>;
   /** Pack unrelated children inside containers into rows toward the layout aspect (off: top-level packing only). */
   packContainers: boolean;
+  /** The view the cockpit opens on: `now` (the list) or `all` (the full canvas). */
+  landingView: CockpitView;
 }
 
-export const DEFAULT_PREFS: Prefs = { zoomSensitivity: 1.1, detailZoom: 0.5, defaultLens: 'all', keys: {}, packContainers: true };
+export const DEFAULT_PREFS: Prefs = { zoomSensitivity: 1.1, detailZoom: 0.5, defaultLens: 'all', keys: {}, packContainers: true, landingView: 'now' };
 
 /** Clamp and fall back per field — a broken file never breaks the cockpit. */
 export function sanitizePrefs(raw: unknown): Prefs {
@@ -36,6 +39,7 @@ export function sanitizePrefs(raw: unknown): Prefs {
     defaultLens: typeof o.defaultLens === 'string' && o.defaultLens !== '' ? o.defaultLens : DEFAULT_PREFS.defaultLens,
     keys: sanitizeKeys(o.keys),
     packContainers: typeof o.packContainers === 'boolean' ? o.packContainers : DEFAULT_PREFS.packContainers,
+    landingView: isCockpitView(o.landingView) ? o.landingView : DEFAULT_PREFS.landingView,
   };
 }
 

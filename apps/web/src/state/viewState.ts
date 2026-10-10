@@ -4,6 +4,7 @@
  * (charter §32: visual layout move ≠ semantic rewire).
  */
 import { createSignal } from 'solid-js';
+import type { CockpitView } from './nowView.js';
 
 export interface Camera {
   x: number; // world coord at viewport centre
@@ -37,7 +38,19 @@ export function createViewState() {
   /** The inbox restored this camera on close: automatic fits leave it alone until the person moves the view. */
   const [cameraHeld, setCameraHeld] = createSignal(false);
 
+  /**
+   * The cockpit's current view (gf-p2-views): `now` (the list) or `all` (this
+   * canvas). null until the landing view is decided at boot (prefs). Local-only.
+   */
+  const [view, setView] = createSignal<CockpitView | null>(null);
+  /** View A's one list cursor (`section:nodeId`); kept across view switches so a return lands where it left. */
+  const [nowCursor, setNowCursor] = createSignal<string | null>(null);
+
   return {
+    view,
+    setView,
+    nowCursor,
+    setNowCursor,
     camera,
     positions,
     userMoved,

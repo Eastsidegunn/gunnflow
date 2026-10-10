@@ -11,6 +11,7 @@ describe('prefs sanitize', () => {
       defaultLens: 'all',
       keys: {},
       packContainers: true,
+      landingView: 'now',
     });
     expect(sanitizePrefs({ zoomSensitivity: '1.5', defaultLens: 'needs-you' })).toEqual({
       ...DEFAULT_PREFS,
@@ -30,5 +31,11 @@ describe('prefs sanitize', () => {
     expect(sanitizePrefs({ packContainers: false }).packContainers).toBe(false);
     expect(sanitizePrefs({ packContainers: true }).packContainers).toBe(true);
     for (const bad of ['false', 0, null, {}]) expect(sanitizePrefs({ packContainers: bad }).packContainers).toBe(true);
+  });
+
+  it('landingView: now or all, anything else falls back to now (the list)', () => {
+    expect(DEFAULT_PREFS.landingView).toBe('now');
+    expect(sanitizePrefs({ landingView: 'all' }).landingView).toBe('all');
+    for (const bad of ['map', '', 1, null]) expect(sanitizePrefs({ landingView: bad }).landingView).toBe('now');
   });
 });

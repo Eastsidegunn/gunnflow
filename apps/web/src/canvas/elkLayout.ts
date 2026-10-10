@@ -111,33 +111,68 @@ export function elkProvider(run: (graph: ElkNode) => Promise<ElkNode>): LayoutPr
   };
 }
 
+/** What the worker provider needs of an ELK engine (the real one, or a stand-in in tests). */
+export interface ElkEngine {
+  layout(graph: ElkNode): Promise<ElkNode>;
+  terminateWorker(): void;
+}
+
+const workerEngine = (): ElkEngine => new ELK({ workerFactory: () => new Worker(elkWorkerUrl) });
+
 /**
  * The app's provider: ELK's own worker script in a Web Worker, created on
- * first use. A pass over the time limit, or a failed one, terminates the
- * worker; the next pass starts a fresh one.
+ * first use. Calls run one at a time (a warm-up and a pass never overlap). A
+ * call over the time limit, or a failed one, terminates the worker (elkjs
+ * never settles a call whose worker is gone, so the limit is what ends it);
+ * the next call starts a fresh one.
  */
-export function createElkWorkerProvider(timeoutMs = LAYERED_TIMEOUT_MS): LayoutProvider {
-  let elk: InstanceType<typeof ELK> | null = null;
+export function createElkWorkerProvider(timeoutMs = LAYERED_TIMEOUT_MS, makeEngine: () => ElkEngine = workerEngine): LayoutProvider {
+  let elk: ElkEngine | null = null;
+  let disposed = false;
+  let lane: Promise<unknown> = Promise.resolve();
+  /** Rejects the call in flight (elkjs never settles a call whose worker was terminated). */
+  let abortActive: ((err: Error) => void) | null = null;
   const drop = () => {
     elk?.terminateWorker();
     elk = null;
   };
-  return elkProvider(async (graph) => {
-    elk ??= new ELK({ workerFactory: () => new Worker(elkWorkerUrl) });
-    const current = elk;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        current.layout(graph),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new MsgError(msg('layout.problem.timeout', { ms: timeoutMs }))), timeoutMs);
-        }),
-      ]);
-    } catch (err) {
-      if (elk === current) drop();
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
-  });
+  /** The one path every engine call takes: serialized, time-limited, the worker dropped on failure. */
+  const run = (graph: ElkNode): Promise<ElkNode> => {
+    const call = async () => {
+      if (disposed) throw new Error('layout engine disposed');
+      const current = (elk ??= makeEngine());
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          current.layout(graph),
+          new Promise<never>((_, reject) => {
+            abortActive = reject;
+            timer = setTimeout(() => reject(new MsgError(msg('layout.problem.timeout', { ms: timeoutMs }))), timeoutMs);
+          }),
+        ]);
+      } catch (err) {
+        if (elk === current) drop();
+        throw err;
+      } finally {
+        abortActive = null;
+        clearTimeout(timer);
+      }
+    };
+    const result = lane.then(call, call);
+    lane = result.catch(() => undefined);
+    return result;
+  };
+  return {
+    ...elkProvider(run),
+    /** Starts the worker (its script loads now) through the same path as a pass: one empty graph. */
+    async warm() {
+      await run({ id: 'warm', children: [] });
+    },
+    /** Terminates the worker and rejects the call in flight at once; later calls refuse. */
+    dispose() {
+      disposed = true;
+      abortActive?.(new Error('layout engine disposed'));
+      drop();
+    },
+  };
 }
