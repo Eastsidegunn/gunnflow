@@ -1,5 +1,5 @@
-// 조망 ① → 선택 ② → 작업 ③: one continuum. ③ entry = canvas double-click,
-// Enter while the stage is open, and the stage button — all through one path.
+// 조망 ① → 선택 ② → 작업 ③: one continuum. ③ entry = Enter while the stage is
+// open, and the stage button — one path (a canvas double-click frames the view).
 // ③ has NO context strip (design review ②): the work content fills the
 // screen; Esc is the only way back, ③ → ② (selection intact) → ①.
 import { expect, test, type Page } from '@playwright/test';
@@ -33,14 +33,14 @@ async function drawnCenter(page: Page, id: string) {
   }, id);
 }
 
-test('double-click → ③ fills the screen (no strip) → Esc → ② → other node → Enter → its ③ → Esc → ② → Esc → ①', async ({ page }) => {
+test('click → ② → Enter → ③ fills the screen (no strip) → Esc → ② → other node → Enter → its ③ → Esc → ② → Esc → ①', async ({ page }) => {
   await open(page, 'normal');
-  // COLD double-click: no pre-selection, no settle wait. The stage is an
-  // overlay (the canvas never reflows) and the pan-aside waits out the
-  // double-click window, so both hits see one coordinate space.
+  // COLD click: no pre-selection, no settle wait — the stage is an overlay (the canvas never reflows).
   const pt = await drawnCenter(page, 't-research');
   expect(pt).not.toBeNull();
-  await page.mouse.dblclick(pt!.x, pt!.y);
+  await page.mouse.click(pt!.x, pt!.y);
+  await expect(page.getByTestId('node-stage')).toHaveAttribute('data-node', 't-research');
+  await page.keyboard.press('Enter');
 
   // ③: the work content owns the screen — no strip, no ◀조망, no chips.
   await expect(page.getByTestId('task-inspector')).toBeVisible();
@@ -70,12 +70,14 @@ test('double-click → ③ fills the screen (no strip) → Esc → ② → other
   await expect(page.getByTestId('node-stage')).toBeHidden();
 });
 
-test('right-edge node: cold double-click lands on IT; a plain selection pans it clear of the stage', async ({ page }) => {
+test('right-edge node: a cold click lands on IT (Enter → its ③); a plain selection pans it clear of the stage', async ({ page }) => {
   await open(page, 'normal');
   // t-test sits in the last layer — under the stage region at ①-fit zoom.
   const pt = await drawnCenter(page, 't-test');
   expect(pt).not.toBeNull();
-  await page.mouse.dblclick(pt!.x, pt!.y);
+  await page.mouse.click(pt!.x, pt!.y);
+  await expect(page.getByTestId('node-stage')).toHaveAttribute('data-node', 't-test');
+  await page.keyboard.press('Enter');
   await expect(page.getByTestId('task-inspector')).toBeVisible();
   await expect(page.getByTestId('inspector-breadcrumb')).toHaveText('Ship Website / Test');
 

@@ -14,7 +14,7 @@ import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import { buildScene, genericEmphasis } from './genericScene.js';
 import { containerRects, layoutGraphOf, sizedGraph } from './layoutGraph.js';
 import { resolveDrop } from './dropResolve.js';
-import { anchorOut, fitZoom, ladderKey, ladderThreshold, ladderWith, stepZoom, wheelNotches, wheelPixels, zoomAtPoint, ZOOM_MAX, ZOOM_MIN, type Ladder, type Slot } from './zoomLadder.js';
+import { FRAME_NODE_EVENT, anchorOut, fitZoom, fitZoomRelative, ladderKey, snapDown, ladderThreshold, ladderWith, stepZoom, wheelNotches, wheelPixels, zoomAtPoint, ZOOM_MAX, ZOOM_MIN, type Ladder, type Slot } from './zoomLadder.js';
 import {
   TIDY_EVENT,
   cubicBezierEase,
@@ -835,29 +835,88 @@ export function CanvasViewport(props: CanvasViewportProps) {
     if (e.button === 1 || e.button > 2) e.preventDefault();
   };
 
-  const onDblClick = (e: MouseEvent) => {
-    const w = screenToWorld(e.clientX, e.clientY);
-    // A leaf node: its work surface (③), as before.
-    const leaf = hitTest(w.x, w.y);
-    if (leaf) {
-      props.onOpenNode(leaf.id, leaf.kind);
+  /** The margin a double-click framing keeps around what it frames (share of the visible width and height). */
+  const FRAME_MARGIN = 0.08;
+  /**
+   * The canvas area not covered by the stage (a selection opens it on the
+   * right; it mirrors the stage's CSS: 40 % clamped 360..620 px) or by the
+   * open inbox drawer: [left, width] in canvas pixels.
+   */
+  const visibleArea = (): { left: number; width: number } => {
+    const { w } = viewSize();
+    if (viewState.inboxFrame() !== undefined) {
+      const drawer = document.querySelector<HTMLElement>('[data-testid="decision-inbox"]');
+      const rect = canvas.getBoundingClientRect();
+      const drawerLeft = drawer ? drawer.offsetLeft - rect.left : w * 0.4;
+      return { left: 0, width: Math.max(160, Math.min(w, drawerLeft)) };
+    }
+    if (selection.selectedId() === null) return { left: 0, width: w };
+    return { left: 0, width: Math.max(160, w - Math.min(620, Math.max(360, w * 0.4))) };
+  };
+  /** The final rects (transition targets) of leaves and containers: what a framing must fit once growth settles. */
+  const finalRectOf = (id: string): Rect | undefined => {
+    const t = targets();
+    const leafRect = t.get(id);
+    if (leafRect) return leafRect;
+    const graph = topoGraph();
+    return graph ? containerRects(graph, (k) => t.get(k)).get(id) : undefined;
+  };
+  /**
+   * Double-click framing (decision 2026-10-10, [H] review): the view moves so
+   * `bounds` fits the visible area with a margin, centred there; the zoom is
+   * snapped onto the ladder (at or below the fit) so notches stay reversible.
+   */
+  const frameView = (bounds: Rect) => {
+    const { h: vh } = viewSize();
+    const area = visibleArea();
+    if (area.width === 0 || vh === 0) return;
+    const c = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+    const zoom = snapDown(ladderAt(c.x, c.y), fitZoomRelative(bounds, area.width, vh, FRAME_MARGIN));
+    // Centre the bounds in the visible area, not the whole canvas.
+    const offset = area.left + area.width / 2 - viewSize().w / 2;
+    cancelStagePan();
+    yieldCamera();
+    viewState.takeCamera();
+    zoomSlot = null;
+    setLadderPoint(c);
+    moveCamera({ x: c.x - offset / zoom, y: c.y, zoom });
+  };
+  /**
+   * Frames a node: a leaf with its one-hop neighbours (received relations,
+   * either direction), a container by itself — each by its FINAL box (the
+   * double-click's first click selected it, and selection can grow it).
+   */
+  const frameNode = (id: string) => {
+    if (layout().nodes.has(id)) {
+      const ids = new Set([id]);
+      for (const edge of scene()?.edges ?? []) {
+        if (edge.from === id) ids.add(edge.to);
+        if (edge.to === id) ids.add(edge.from);
+      }
+      const rects = [...ids].map(finalRectOf).filter((r): r is Rect => r !== undefined);
+      if (rects.length === 0) return;
+      const minX = Math.min(...rects.map((r) => r.x));
+      const minY = Math.min(...rects.map((r) => r.y));
+      const maxX = Math.max(...rects.map((r) => r.x + r.w));
+      const maxY = Math.max(...rects.map((r) => r.y + r.h));
+      frameView({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
       return;
     }
-    // A container: one anchor in — the view fits that container (decision 2026-10-10, option c).
-    const group = hitSticky(w.x, w.y) || hitBox(w.x, w.y) ? null : hitGroup(w.x, w.y);
-    if (group) {
-      const { w: vw, h: vh } = viewSize();
-      if (vw === 0 || vh === 0) return;
-      // The container's FINAL box: the first click of the double-click selected it, and it is still growing.
-      const graph = topoGraph();
-      const finalTargets = targets();
-      const box = (graph && containerRects(graph, (id) => finalTargets.get(id)).get(group.id)) ?? group;
-      const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
-      yieldCamera();
-      viewState.takeCamera();
-      zoomSlot = null;
-      setLadderPoint(c);
-      moveCamera({ ...c, zoom: fitZoom(box, vw, vh) });
+    const box = finalRectOf(id) ?? scene()?.groups.find((g) => g.id === id);
+    if (box) frameView(box);
+  };
+  onMount(() => {
+    const onFrameNode = (e: Event) => frameNode((e as CustomEvent<{ id: string }>).detail.id);
+    window.addEventListener(FRAME_NODE_EVENT, onFrameNode);
+    onCleanup(() => window.removeEventListener(FRAME_NODE_EVENT, onFrameNode));
+  });
+  const onDblClick = (e: MouseEvent) => {
+    const w = screenToWorld(e.clientX, e.clientY);
+    if (hitSticky(w.x, w.y) || hitBox(w.x, w.y)) return;
+    // A node or a container: frame it. A node's work surface (③) opens with Enter or the stage button.
+    const hit = hitTest(w.x, w.y) ?? hitGroup(w.x, w.y);
+    if (hit) {
+      frameNode(hit.id);
       return;
     }
     // Empty canvas: one anchor out (the next containment level that fits on screen), at the point.

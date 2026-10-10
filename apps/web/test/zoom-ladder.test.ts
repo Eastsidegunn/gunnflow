@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   anchorOut,
+  fitZoomRelative,
+  snapDown,
   baseSteps,
   fitZoom,
   ladderThreshold,
@@ -181,5 +183,16 @@ describe('zoom ladder', () => {
     expect(r.notches).toBe(1);
     expect(wheelNotches(-NOTCH_PX / 2, NOTCH_PX / 3, 0)).toEqual({ notches: 0, acc: NOTCH_PX / 3 });
     expect(wheelNotches(-0.5 * NOTCH_PX, -0.75 * NOTCH_PX, 0)).toEqual({ notches: 1, acc: -0.25 * NOTCH_PX });
+  });
+
+  it('framing snaps down onto the ladder (what was framed still fits); a relative margin fits inside it', () => {
+    const l = ladderWith([0.43]);
+    expect(snapDown(l, 0.5)).toBe(0.43);
+    expect(snapDown(l, 1)).toBe(1);
+    expect(snapDown(l, 1.1)).toBe(1);
+    expect(snapDown(l, 0.01)).toBe(l.steps[0]);
+    // 1000 × 800 view, 8 %: 840 × 672 usable.
+    expect(fitZoomRelative({ w: 840, h: 100 }, 1000, 800, 0.08)).toBeCloseTo(1, 9);
+    expect(fitZoomRelative({ w: 100, h: 672 }, 1000, 800, 0.08)).toBeCloseTo(1, 9);
   });
 });
