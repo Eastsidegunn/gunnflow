@@ -134,3 +134,33 @@ test('double-click on empty canvas goes one anchor out; Alt+wheel zooms freely o
   expect(free).not.toBeCloseTo(out, 6);
   expect((await ticks(page)).some((x) => Math.abs(x.zoom - free) < 1e-4)).toBe(false);
 });
+
+test('double-click on a container fits it (one anchor in); on a leaf node it still opens the work surface', async ({ page }) => {
+  await open(page);
+  const host = (await page.locator('[data-testid="canvas-host"] canvas').boundingBox())!;
+  // Zoom out first so the container is small on screen.
+  const center = { x: host.x + host.width / 2, y: host.y + host.height / 2 };
+  for (let i = 0; i < 4; i++) await notch(page, center, -1);
+  const out = (await landed(page)).zoom;
+  // A point inside the container that no member covers: just inside its top-left corner.
+  const g = (await rectOf(page, 'm1'))!;
+  const inGroup = await toClient(page, g.x + 6, g.y + 6);
+  await page.mouse.dblclick(inGroup.x, inGroup.y);
+  const fitted = await landed(page);
+  expect(fitted.zoom).toBeGreaterThan(out);
+  // Centred on the container as it is now (the double-click's first click selected it, which can grow it),
+  // and the zoom is an anchor of the scale.
+  const gNow = (await rectOf(page, 'm1'))!;
+  expect(Math.abs(fitted.x - (gNow.x + gNow.w / 2))).toBeLessThan(30);
+  expect(Math.abs(fitted.y - (gNow.y + gNow.h / 2))).toBeLessThan(30);
+  const anchors = (await ticks(page)).filter((x) => x.anchor).map((x) => x.zoom);
+  expect(anchors.some((a) => Math.abs(a - fitted.zoom) < 1e-3)).toBe(true);
+  await expect(page.getByTestId('task-inspector')).toHaveCount(0);
+
+  // A leaf node: the work surface opens, as before.
+  const b = (await rectOf(page, 't-build'))!;
+  const leafAt = await toClient(page, b.x + b.w / 2, b.y + b.h / 2);
+  await page.mouse.dblclick(leafAt.x, leafAt.y);
+  await expect(page.getByTestId('task-inspector')).toBeVisible();
+});
+

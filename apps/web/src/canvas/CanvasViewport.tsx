@@ -12,7 +12,7 @@ import { CanvasContextMenu, type ContextMenuState } from '../ui/CanvasContextMen
 import { createPresence, prefersReducedMotion } from '../ui/presence.js';
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import { buildScene, genericEmphasis } from './genericScene.js';
-import { layoutGraphOf, sizedGraph } from './layoutGraph.js';
+import { containerRects, layoutGraphOf, sizedGraph } from './layoutGraph.js';
 import { resolveDrop } from './dropResolve.js';
 import { anchorOut, fitZoom, ladderKey, ladderThreshold, ladderWith, stepZoom, wheelNotches, wheelPixels, zoomAtPoint, ZOOM_MAX, ZOOM_MIN, type Ladder, type Slot } from './zoomLadder.js';
 import {
@@ -837,9 +837,27 @@ export function CanvasViewport(props: CanvasViewportProps) {
 
   const onDblClick = (e: MouseEvent) => {
     const w = screenToWorld(e.clientX, e.clientY);
-    const hit = hitTest(w.x, w.y) ?? hitGroup(w.x, w.y);
-    if (hit) {
-      props.onOpenNode(hit.id, hit.kind);
+    // A leaf node: its work surface (③), as before.
+    const leaf = hitTest(w.x, w.y);
+    if (leaf) {
+      props.onOpenNode(leaf.id, leaf.kind);
+      return;
+    }
+    // A container: one anchor in — the view fits that container (decision 2026-10-10, option c).
+    const group = hitSticky(w.x, w.y) || hitBox(w.x, w.y) ? null : hitGroup(w.x, w.y);
+    if (group) {
+      const { w: vw, h: vh } = viewSize();
+      if (vw === 0 || vh === 0) return;
+      // The container's FINAL box: the first click of the double-click selected it, and it is still growing.
+      const graph = topoGraph();
+      const finalTargets = targets();
+      const box = (graph && containerRects(graph, (id) => finalTargets.get(id)).get(group.id)) ?? group;
+      const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+      yieldCamera();
+      viewState.takeCamera();
+      zoomSlot = null;
+      setLadderPoint(c);
+      moveCamera({ ...c, zoom: fitZoom(box, vw, vh) });
       return;
     }
     // Empty canvas: one anchor out (the next containment level that fits on screen), at the point.
