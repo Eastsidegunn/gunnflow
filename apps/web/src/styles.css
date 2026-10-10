@@ -834,3 +834,9 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
   margin: 0; padding: 8px 12px; font-size: 13px; color: var(--text);
   background: rgba(148, 160, 174, 0.08); border: 1px solid var(--border); border-radius: 8px;
 }
+
+/* Zoom ladder tick scale (GF-P1b C): a thin vertical scale in the canvas corner, view chrome only. */
+.zoom-ladder { position: absolute; right: 14px; bottom: 16px; width: 14px; height: 120px; pointer-events: none; opacity: 0.75; }
+.zoom-ladder .zoom-tick { position: absolute; right: 0; width: 6px; height: 1px; background: var(--subtext); transform: translateY(50%); }
+.zoom-ladder .zoom-tick.anchor { width: 12px; height: 2px; background: var(--text, #e6e6e6); }
+.zoom-ladder .zoom-current { position: absolute; right: 0; width: 14px; height: 2px; background: var(--accent); transform: translateY(50%); transition: bottom var(--duration-fast01) var(--ease-standard); }

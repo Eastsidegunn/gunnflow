@@ -27,6 +27,8 @@ interface Frame {
   boxOf?: (id: string) => NodeBox | undefined;
   /** Semantic-zoom threshold (a machine-local pref); detail lines appear at or above it. */
   detailZoom?: number;
+  /** The zoom detail is decided at: the step a zoom move is heading to (no flicker mid-move); defaults to the camera's. */
+  labelZoom?: number;
   /** Relevance tiers (dynamic-view P2); absent = every node tier 1. */
   tiers?: ReadonlyMap<string, Tier>;
 }
@@ -244,7 +246,7 @@ function drawGenericNode(ctx: CanvasRenderingContext2D, box: NodeBox, node: Scen
     }
   }
 
-  if (detailOn((frame.tiers?.get(node.id) ?? 1) as Tier, frame.camera.zoom, frame.detailZoom ?? 0.5)) {
+  if (detailOn((frame.tiers?.get(node.id) ?? 1) as Tier, frame.labelZoom ?? frame.camera.zoom, frame.detailZoom ?? 0.5)) {
     ctx.font = DEFAULT_THEME.fonts.meta;
     ctx.fillStyle = C.subtext;
     const detail = node.labels.length > 0 ? node.labels.join(' · ') : `${node.kind} · ${node.state}`;

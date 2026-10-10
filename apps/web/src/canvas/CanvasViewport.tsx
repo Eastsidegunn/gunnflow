@@ -5,15 +5,16 @@
  * Node drag is a VISUAL layout move (local-only). Semantic rewire happens only
  * in explicit rewire mode while intervening, and only as a relayed intent.
  */
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { layoutBounds, type NodeBox } from './layout.js';
 import { drawGeneric } from './draw.js';
 import { CanvasContextMenu, type ContextMenuState } from '../ui/CanvasContextMenu.jsx';
 import { createPresence, prefersReducedMotion } from '../ui/presence.js';
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import { buildScene, genericEmphasis } from './genericScene.js';
-import { layoutGraphOf, sizedGraph } from './layoutGraph.js';
+import { containerRects, layoutGraphOf, sizedGraph } from './layoutGraph.js';
 import { resolveDrop } from './dropResolve.js';
+import { FRAME_NODE_EVENT, anchorOut, fitZoom, fitZoomRelative, ladderKey, snapDown, ladderThreshold, ladderWith, stepZoom, wheelNotches, wheelPixels, zoomAtPoint, ZOOM_MAX, ZOOM_MIN, type Ladder, type Slot } from './zoomLadder.js';
 import {
   TIDY_EVENT,
   cubicBezierEase,
@@ -51,6 +52,9 @@ export interface CanvasViewportProps {
   onOpenPersonalList: () => void;
   onOpenNode: (id: string, kind: string) => void;
 }
+
+/** The ladder without anchors: the detail threshold is fixed against it, so it never moves during a zoom. */
+const PLAIN_LADDER = ladderWith([]);
 
 export function CanvasViewport(props: CanvasViewportProps) {
   const { projectionStore, viewState, lensState, selection, pendingIntents, inspector, layout: layoutState, personal } =
@@ -528,6 +532,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       canvas.height = rect.height * dpr;
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
+      setViewSize({ w: rect.width, h: rect.height });
       markDirty();
     };
     const observer = new ResizeObserver(resize);
@@ -556,7 +561,8 @@ export function CanvasViewport(props: CanvasViewportProps) {
         pending: pendingIntents.inFlight(),
         rewireDrag,
         now: Date.now(),
-        detailZoom: props.stores.prefs.prefs().detailZoom,
+        detailZoom: ladderThreshold(PLAIN_LADDER, props.stores.prefs.prefs().detailZoom),
+        labelZoom: (tweenTarget ?? viewState.camera()).zoom,
         tiers: tiers() as ReadonlyMap<string, Tier>,
       };
       drawGeneric(ctx, canvas.width / dpr, canvas.height / dpr, { ...common, scene: scene() });
@@ -829,10 +835,101 @@ export function CanvasViewport(props: CanvasViewportProps) {
     if (e.button === 1 || e.button > 2) e.preventDefault();
   };
 
+  /** The margin a double-click framing keeps around what it frames (share of the visible width and height). */
+  const FRAME_MARGIN = 0.08;
+  /**
+   * The canvas area not covered by the stage (a selection opens it on the
+   * right; it mirrors the stage's CSS: 40 % clamped 360..620 px) or by the
+   * open inbox drawer: [left, width] in canvas pixels.
+   */
+  const visibleArea = (): { left: number; width: number } => {
+    const { w } = viewSize();
+    if (viewState.inboxFrame() !== undefined) {
+      const drawer = document.querySelector<HTMLElement>('[data-testid="decision-inbox"]');
+      const rect = canvas.getBoundingClientRect();
+      const drawerLeft = drawer ? drawer.offsetLeft - rect.left : w * 0.4;
+      return { left: 0, width: Math.max(160, Math.min(w, drawerLeft)) };
+    }
+    if (selection.selectedId() === null) return { left: 0, width: w };
+    return { left: 0, width: Math.max(160, w - Math.min(620, Math.max(360, w * 0.4))) };
+  };
+  /** The final rects (transition targets) of leaves and containers: what a framing must fit once growth settles. */
+  const finalRectOf = (id: string): Rect | undefined => {
+    const t = targets();
+    const leafRect = t.get(id);
+    if (leafRect) return leafRect;
+    const graph = topoGraph();
+    return graph ? containerRects(graph, (k) => t.get(k)).get(id) : undefined;
+  };
+  /**
+   * Double-click framing (decision 2026-10-10, [H] review): the view moves so
+   * `bounds` fits the visible area with a margin, centred there; the zoom is
+   * snapped onto the ladder (at or below the fit) so notches stay reversible.
+   */
+  const frameView = (bounds: Rect) => {
+    const { h: vh } = viewSize();
+    const area = visibleArea();
+    if (area.width === 0 || vh === 0) return;
+    const c = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+    const zoom = snapDown(ladderAt(c.x, c.y), fitZoomRelative(bounds, area.width, vh, FRAME_MARGIN));
+    // Centre the bounds in the visible area, not the whole canvas.
+    const offset = area.left + area.width / 2 - viewSize().w / 2;
+    cancelStagePan();
+    yieldCamera();
+    viewState.takeCamera();
+    zoomSlot = null;
+    setLadderPoint(c);
+    moveCamera({ x: c.x - offset / zoom, y: c.y, zoom });
+  };
+  /**
+   * Frames a node: a leaf with its one-hop neighbours (received relations,
+   * either direction), a container by itself — each by its FINAL box (the
+   * double-click's first click selected it, and selection can grow it).
+   */
+  const frameNode = (id: string) => {
+    if (layout().nodes.has(id)) {
+      const ids = new Set([id]);
+      for (const edge of scene()?.edges ?? []) {
+        if (edge.from === id) ids.add(edge.to);
+        if (edge.to === id) ids.add(edge.from);
+      }
+      const rects = [...ids].map(finalRectOf).filter((r): r is Rect => r !== undefined);
+      if (rects.length === 0) return;
+      const minX = Math.min(...rects.map((r) => r.x));
+      const minY = Math.min(...rects.map((r) => r.y));
+      const maxX = Math.max(...rects.map((r) => r.x + r.w));
+      const maxY = Math.max(...rects.map((r) => r.y + r.h));
+      frameView({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
+      return;
+    }
+    const box = finalRectOf(id) ?? scene()?.groups.find((g) => g.id === id);
+    if (box) frameView(box);
+  };
+  onMount(() => {
+    const onFrameNode = (e: Event) => frameNode((e as CustomEvent<{ id: string }>).detail.id);
+    window.addEventListener(FRAME_NODE_EVENT, onFrameNode);
+    onCleanup(() => window.removeEventListener(FRAME_NODE_EVENT, onFrameNode));
+  });
   const onDblClick = (e: MouseEvent) => {
     const w = screenToWorld(e.clientX, e.clientY);
+    if (hitSticky(w.x, w.y) || hitBox(w.x, w.y)) return;
+    // A node or a container: frame it. A node's work surface (③) opens with Enter or the stage button.
     const hit = hitTest(w.x, w.y) ?? hitGroup(w.x, w.y);
-    if (hit) props.onOpenNode(hit.id, hit.kind);
+    if (hit) {
+      frameNode(hit.id);
+      return;
+    }
+    // Empty canvas: one anchor out (the next containment level that fits on screen), at the point.
+    if (hitSticky(w.x, w.y) || hitBox(w.x, w.y)) return;
+    const base = zoomBase();
+    const p = worldAt(base, e.clientX, e.clientY);
+    const out = anchorOut(ladderAt(p.x, p.y), base.zoom);
+    if (out === null) return;
+    yieldCamera();
+    viewState.takeCamera();
+    zoomSlot = null;
+    setLadderPoint(p);
+    moveCamera(zoomAtPoint(base, out, p.x, p.y));
   };
 
   // Right-click: the context menu for whatever is under the cursor.
@@ -884,10 +981,95 @@ export function CanvasViewport(props: CanvasViewportProps) {
     onCleanup(() => window.removeEventListener(TIDY_EVENT, onTidy));
   });
 
+  // ---- zoom ladder (GF-P1b C) ---------------------------------------------
+  /** The canvas size in CSS pixels (0 before layout); kept by the resize observer. */
+  const [viewSize, setViewSize] = createSignal({ w: 0, h: 0 });
+  /**
+   * The ladder at a world point: anchors are the fit zooms of everything
+   * (containment depth 0) and of the containers under the point at depths
+   * 1 and 2. View math only.
+   */
+  const ladderAt = (wx: number, wy: number): Ladder => {
+    const { w, h } = viewSize();
+    if (w === 0 || h === 0) return ladderWith([]);
+    const anchors: number[] = [];
+    const all = layoutBounds(layout());
+    if (all) anchors.push(fitZoom(all, w, h));
+    for (const g of scene()?.groups ?? []) {
+      if (g.depth <= 1 && inside(g, wx, wy)) anchors.push(fitZoom(g, w, h));
+    }
+    return ladderWith(anchors);
+  };
+  /** Where the last zoom move happened (world); the tick scale shows the ladder there. Null = the view centre at that time. */
+  const [ladderPoint, setLadderPoint] = createSignal<{ x: number; y: number } | null>(null);
+  /** The tick scale's ladder: recomputed on layout, resize or a new zoom point — never per animation frame. */
+  const viewLadder = createMemo(() => {
+    layout();
+    viewSize();
+    const p = ladderPoint() ?? untrack(viewState.camera);
+    return ladderAt(p.x, p.y);
+  });
+  /** A zoom's place on the tick scale (0 = ZOOM_MIN, 1 = ZOOM_MAX, log scale). */
+  const ladderPos = (z: number) => (Math.log(z) - Math.log(ZOOM_MIN)) / (Math.log(ZOOM_MAX) - Math.log(ZOOM_MIN));
+  let zoomSlot: Slot | null = null;
+  let wheelAcc = 0;
+  /** The ladder the accumulated trackpad input belongs to: input never carries over to another ladder. */
+  let wheelLadderKey = '';
+  let lastWheelAt = 0;
+  /** A pause this long ends a trackpad gesture: what it left in the accumulator is dropped. */
+  const WHEEL_IDLE_MS = 250;
+  /** The camera a zoom move starts from: where a running move is heading, else the camera itself. */
+  const zoomBase = () => tweenTarget ?? viewState.camera();
+  /** The world point under a client point, as seen from `cam`. */
+  const worldAt = (cam: { x: number; y: number; zoom: number }, sx: number, sy: number) => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: cam.x + (sx - rect.left - rect.width / 2) / cam.zoom, y: cam.y + (sy - rect.top - rect.height / 2) / cam.zoom };
+  };
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheelAt > WHEEL_IDLE_MS) wheelAcc = 0;
+    lastWheelAt = now;
+    // Escape hatch: pinch (ctrl+wheel on trackpads) and Alt+wheel zoom freely, off the ladder,
+    // from the view as displayed (a running step move stops where it is).
+    if (e.ctrlKey || e.altKey) {
+      const shown = viewState.camera();
+      const p = worldAt(shown, e.clientX, e.clientY);
+      const px = wheelPixels(e.deltaY, e.deltaMode);
+      const sens = props.stores.prefs.prefs().zoomSensitivity;
+      const factor = e.ctrlKey ? Math.exp(-px * 0.01) : sens ** (-px / 100);
+      const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, shown.zoom * factor));
+      yieldCamera();
+      viewState.takeCamera();
+      viewState.setCameraView(zoomAtPoint(shown, zoom, p.x, p.y));
+      setLadderPoint(p);
+      zoomSlot = null;
+      wheelAcc = 0;
+      return;
+    }
+    const base = zoomBase();
+    const p = worldAt(base, e.clientX, e.clientY);
+    const ladder = ladderAt(p.x, p.y);
+    const key = ladderKey(ladder);
+    if (key !== wheelLadderKey) {
+      wheelLadderKey = key;
+      wheelAcc = 0;
+    }
+    const { notches, acc } = wheelNotches(wheelAcc, e.deltaY, e.deltaMode);
+    wheelAcc = acc;
+    if (notches === 0) return;
+    setLadderPoint(p);
+    let zoom = base.zoom;
+    for (let k = 0; k < Math.abs(notches); k++) {
+      const r = stepZoom(ladder, zoom, notches > 0 ? 1 : -1, zoomSlot);
+      zoom = r.zoom;
+      zoomSlot = r.slot;
+    }
+    // An absorbed notch (anchor stickiness, ladder end) leaves a running move alone.
+    if (zoom === base.zoom) return;
     yieldCamera();
-    { const z = props.stores.prefs.prefs().zoomSensitivity; viewState.zoomAt(e.deltaY < 0 ? z : 1 / z); }
+    viewState.takeCamera();
+    moveCamera(zoomAtPoint(base, zoom, p.x, p.y));
   };
 
   const fit = () => {
@@ -918,7 +1100,8 @@ export function CanvasViewport(props: CanvasViewportProps) {
   createEffect(() => {
     if (!fitted && projectionStore.hasSnapshot()) {
       fitted = true;
-      autoFit();
+      // A view the person already zoomed or panned (before the first snapshot landed) is left alone.
+      if (!untrack(viewState.userMoved)) autoFit();
     }
   });
 
@@ -939,6 +1122,20 @@ export function CanvasViewport(props: CanvasViewportProps) {
         onContextMenu={onContextMenu}
         onWheel={onWheel}
       />
+      {/* The zoom ladder's tick scale: every step, anchors larger, the current zoom marked (view chrome). */}
+      <div class="zoom-ladder" data-testid="zoom-ladder" aria-hidden="true">
+        <For each={viewLadder().steps}>
+          {(s) => (
+            <span
+              class="zoom-tick"
+              classList={{ anchor: viewLadder().anchors.includes(s) }}
+              data-zoom={s.toFixed(4)}
+              style={{ bottom: `${ladderPos(s) * 100}%` }}
+            />
+          )}
+        </For>
+        <span class="zoom-current" data-testid="zoom-current" data-zoom={viewState.camera().zoom.toFixed(4)} style={{ bottom: `${ladderPos(viewState.camera().zoom) * 100}%` }} />
+      </div>
       <Show when={menuPresence.held()}>
         {(state) => (
           <CanvasContextMenu
