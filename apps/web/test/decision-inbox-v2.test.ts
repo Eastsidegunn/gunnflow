@@ -12,6 +12,7 @@ import {
   groupRows,
   groupStartsOpen,
   inboxRows,
+  interruptCount,
   navigableRows,
   nextPendingId,
   relativeSince,
@@ -165,6 +166,39 @@ const GROUPED: WiringConfig = {
     { match: { cause: 'c-check-2' }, mechanism: 'ambient', group: 'C' },
   ],
 };
+
+describe('the need-you total (a count of received attention, no upstream number)', () => {
+  it('one per node with an interrupt-mapped cause, however many causes it carries; ambient and unmapped not counted', () => {
+    const rows = inboxRows(
+      [
+        node('a', ['c-decide']),
+        node('b', ['c-todo']),
+        node('c', ['c-plain']),
+        node('d', ['c-decide', 'c-decide-2', 'c-check']),
+        node('e', ['c-check']),
+        node('f', ['unknown-cause']),
+        node('g', []),
+      ],
+      GROUPED,
+    );
+    expect(interruptCount(rows)).toBe(4);
+    expect(interruptCount([])).toBe(0);
+  });
+
+  it('three interrupt nodes in three groups: total 3, one per group', () => {
+    const cfg: WiringConfig = {
+      version: V,
+      attention: [
+        { match: { cause: 'x' }, mechanism: 'interrupt', group: 'A' },
+        { match: { cause: 'y' }, mechanism: 'interrupt', group: 'B' },
+        { match: { cause: 'z' }, mechanism: 'interrupt', group: 'C' },
+      ],
+    };
+    const rows = inboxRows([node('1', ['x']), node('2', ['y']), node('3', ['z'])], cfg);
+    expect(interruptCount(rows)).toBe(3);
+    expect(groupRows(rows, cfg)!.map((g) => `${groupName(g)} ${g.rows.length}`)).toEqual(['A 1', 'B 1', 'C 1']);
+  });
+});
 
 describe('display groups (wiring attention[].group)', () => {
   it('config groups in first-appearance order; interrupt when any of its rules is', () => {

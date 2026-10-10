@@ -46,6 +46,8 @@ test('F3: attention — needs-you lens highlights the gate, dims the rest (E1)',
   await expect(page.getByTestId('node-g-publish')).toHaveAttribute('data-emphasis', 'highlight');
   await expect(page.getByTestId('node-t-build')).toHaveAttribute('data-emphasis', 'dim');
   await expect(page.getByTestId('strip-needsyou')).toHaveText(/1 need you/);
+  // The fake upstream sends its own counts: the strip shows them as received, unchanged.
+  await expect(page.getByTestId('strip-needsyou')).toHaveAttribute('data-source', 'received');
 
   // Gate click → the Human Gate surface (Screen #5) opens with full context.
   await clickNode(page, 'g-publish');

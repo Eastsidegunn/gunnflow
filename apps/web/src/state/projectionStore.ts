@@ -42,6 +42,8 @@ export function createProjectionStore() {
   const [hasSnapshot, setHasSnapshot] = createSignal(false);
   /** Contract NodeProjection collection, kept apart from the domain projection; null when not sent. */
   const [genericNodes, setGenericNodes] = createSignal<GenericNodes | null>(null);
+  /** Whether the latest body carried the upstream's own counts; false → counts above are placeholders. */
+  const [countsReceived, setCountsReceived] = createSignal(false);
   /** null until the BFF reports it (an upstream without status reporting counts as reachable). */
   const [upstream, setUpstream] = createSignal<UpstreamLink | null>(null);
 
@@ -51,6 +53,7 @@ export function createProjectionStore() {
     lastSeenAt,
     hasSnapshot,
     genericNodes,
+    countsReceived,
     upstream,
     instrument: () => connectionInstrument(connection(), upstream(), lastSeenAt()),
     /** Called only by the stream transport with the BFF's upstream-status events. */
@@ -58,8 +61,9 @@ export function createProjectionStore() {
       setUpstream(s);
     },
     /** Called only by the stream transport with upstream envelopes. */
-    applyUpstream(next: WorkspaceProjection, nodes: GenericNodes | null = null) {
+    applyUpstream(next: WorkspaceProjection, nodes: GenericNodes | null = null, counts = true) {
       setProjection(next);
+      setCountsReceived(counts);
       setGenericNodes(nodes);
       setHasSnapshot(true);
       setLastSeenAt(Date.now());

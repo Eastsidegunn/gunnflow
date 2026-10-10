@@ -26,6 +26,11 @@ export function normalizeProjection(raw: unknown): WorkspaceProjection {
   };
 }
 
+/** Whether the upstream body carries its own `counts` (a direct-wire body never does). */
+export function countsReceived(raw: unknown): boolean {
+  return typeof raw === 'object' && raw !== null && 'counts' in raw;
+}
+
 export interface GenericNodes {
   nodes: NodeProjection[];
   /** Received nodes that fail the contract's node checks, with the first reason each. */
