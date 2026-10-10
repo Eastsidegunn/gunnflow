@@ -22,6 +22,12 @@ test('toggle → count → emphasized recommendation → approve → auto-advanc
   await expect(page.getByTestId('inbox-pending-count')).toHaveText('2 pending');
   // Canvas stays visible behind the drawer (wide drawer, not a full overlay).
   await expect(page.getByTestId('canvas-host')).toBeVisible();
+  // The drawer stops above the status line: once it has settled, the strip's controls still take clicks.
+  await page.waitForTimeout(400);
+  const drawerBox = await inbox.boundingBox();
+  const stripBox = await page.locator('.status-strip').boundingBox();
+  expect(drawerBox!.y + drawerBox!.height).toBeLessThanOrEqual(stripBox!.y + 0.5);
+  await page.getByTestId('activity-toggle').click({ trial: true, timeout: 2000 });
 
   // Interrupt-mapped before ambient-mapped; rows carry state + cause verbatim.
   const gateRow = page.getByTestId('inbox-row-g-publish');
