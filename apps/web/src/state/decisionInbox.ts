@@ -43,6 +43,15 @@ export function inboxRows(nodes: readonly NodeProjection[], config: WiringConfig
   return [...rows.filter((r) => r.mechanism === 'interrupt'), ...rows.filter((r) => r.mechanism === 'ambient')];
 }
 
+/**
+ * How many nodes need the person: rows with an interrupt-mapped cause (config),
+ * one per node however many causes it carries. View status — a count of
+ * received attention, used where the upstream sends no count of its own.
+ */
+export function interruptCount(rows: readonly InboxRow[]): number {
+  return rows.filter((r) => r.mechanism === 'interrupt').length;
+}
+
 /** Every row seen since the inbox opened, newest facts winning; nothing is dropped. */
 export function accumulateSeen(seen: ReadonlyMap<string, InboxRow>, current: readonly InboxRow[]): ReadonlyMap<string, InboxRow> {
   let changed = false;

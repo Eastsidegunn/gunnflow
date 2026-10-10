@@ -361,6 +361,8 @@ input {
 }
 .status-strip .live { color: #4ade80; }
 .status-strip .needs-you { color: var(--gate); }
+/* A count made here from received attention (view status), not the backend's own number. */
+.status-strip .needs-you.view { text-decoration: underline dotted; text-underline-offset: 3px; }
 .status-strip .blocked { color: var(--blocked); }
 .status-strip .lost { color: var(--gate); }
 .status-strip .unreachable { color: var(--gate); font-weight: 600; }
@@ -744,6 +746,8 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 
 /* ---- 결정함 v2 (2026-10-08) ------------------------------------------------ */
 /* F1: per-group counts — interrupt groups with items stand out, the rest stay muted. */
+/* The toggle's total (interrupt-mapped nodes): no interrupt → the badge recedes, the per-group counts stay. */
+.decision-inbox-toggle .count.total[data-count='0'] { background: transparent; color: var(--subtext); padding: 0; }
 .group-counts { display: inline-flex; align-items: baseline; gap: 0; font-size: 12px; }
 .group-count { color: var(--subtext); white-space: nowrap; }
 .group-count[data-mechanism='interrupt']:not([data-count='0']) { color: var(--gate); font-weight: 700; }

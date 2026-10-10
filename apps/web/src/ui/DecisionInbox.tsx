@@ -25,6 +25,7 @@ import {
   groupRows,
   groupStartsOpen,
   inboxRows,
+  interruptCount,
   intentBadge,
   navigableRows,
   nextPendingId,
@@ -79,9 +80,11 @@ export function DecisionInboxToggle(props: { stores: WorkspaceStores; open: () =
   const { projectionStore, wiring } = props.stores;
   const pending = createMemo(() => inboxRows(projectionStore.genericNodes()?.nodes ?? [], wiring.config));
   const groups = createMemo(() => groupRows(pending(), wiring.config));
+  /** Nodes needing the person (interrupt-mapped), one per node: the total beside the per-group counts. */
+  const total = createMemo(() => interruptCount(pending()));
   const summary = () => {
     const g = groups();
-    return g ? g.map((x) => `${groupName(x)} ${x.rows.length}`).join(' · ') : `미결 ${pending().length}`;
+    return g ? `${total()} (${g.map((x) => `${groupName(x)} ${x.rows.length}`).join(' · ')})` : `미결 ${pending().length}`;
   };
   return (
     <div class="decision-inbox-toggle">
@@ -102,9 +105,18 @@ export function DecisionInboxToggle(props: { stores: WorkspaceStores; open: () =
           }
         >
           {(g) => (
-            <span class="toggle-groups" data-testid="decision-inbox-groups">
-              <GroupCounts groups={g()} testIdPrefix="decision-inbox-group" />
-            </span>
+            <>
+              <span class="count total" data-count={total()} data-testid="decision-inbox-total">
+                {total()}
+              </span>{' '}
+              <span class="toggle-paren">
+                (
+                <span class="toggle-groups" data-testid="decision-inbox-groups">
+                  <GroupCounts groups={g()} testIdPrefix="decision-inbox-group" />
+                </span>
+                )
+              </span>
+            </>
           )}
         </Show>
       </button>

@@ -79,6 +79,12 @@ test('groups: the toggle counts per group; interrupt groups open, the ambient gr
   const toggle = page.getByTestId('decision-inbox-toggle');
   // 'inbox': g-publish waits for a decision, two hands-on requests, one flagged task.
   await expect(page.getByTestId('decision-inbox-groups')).toHaveText('Decide 1 · Do 2 · Check 1');
+  // The total beside the groups: nodes with an interrupt-mapped cause (the ambient Check row is not counted).
+  await expect(page.getByTestId('decision-inbox-total')).toHaveText('3');
+  await expect(toggle).toHaveAttribute('aria-label', '결정함: 3 (Decide 1 · Do 2 · Check 1)');
+  // This upstream sends its own count (one waiting gate): the strip shows that, not the inbox total.
+  await expect(page.getByTestId('strip-needsyou')).toHaveText('◆ 1 need you');
+  await expect(page.getByTestId('strip-needsyou')).toHaveAttribute('data-source', 'received');
   await expect(page.getByTestId('decision-inbox-group-0')).toHaveAttribute('data-mechanism', 'interrupt');
   await expect(page.getByTestId('decision-inbox-group-1')).toHaveAttribute('data-mechanism', 'interrupt');
   await expect(page.getByTestId('decision-inbox-group-2')).toHaveAttribute('data-mechanism', 'ambient');

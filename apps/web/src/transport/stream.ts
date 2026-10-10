@@ -1,6 +1,6 @@
 /** SSE transport: snapshot + tail from the BFF, normalized into the store. */
 import type { WorkspaceProjection } from '../model/types.js';
-import { normalizeNodes, normalizeProjection } from '../model/normalize.js';
+import { countsReceived, normalizeNodes, normalizeProjection } from '../model/normalize.js';
 import type { ProjectionStore } from '../state/projectionStore.js';
 
 interface Envelope {
@@ -57,7 +57,7 @@ function open(store: ProjectionStore, onProjection?: (p: WorkspaceProjection) =>
     const projection = normalizeProjection(envelope.body);
     // The wire may omit revision inside body; the envelope's is authoritative.
     projection.revision = envelope.revision ?? projection.revision;
-    store.applyUpstream(projection, normalizeNodes(envelope.body));
+    store.applyUpstream(projection, normalizeNodes(envelope.body), countsReceived(envelope.body));
     onProjection?.(projection);
   };
   source.addEventListener('snapshot', apply);
