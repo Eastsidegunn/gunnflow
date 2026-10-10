@@ -20,6 +20,7 @@ import {
 import { configLensEmphasis, type Emphasis, type Lens, type LensFacts } from '../state/lens.js';
 import type { NodeBox, WorkspaceLayout } from './layout.js';
 import { resolveParts, type ResolvedParts } from './parts.js';
+import { isBand, leafBaseSize, leafShapeOf, type LeafShape } from './shapes.js';
 import { GENERIC_NODE_SIZE, LAYOUT, childrenOf, containerRects, fallbackLayout, layoutGraphOf, leafIds, type Positions, type Rect } from './layoutGraph.js';
 import { edgeStroke, glyphChar, toneColor, type EdgeStroke } from './tokens.js';
 
@@ -41,6 +42,11 @@ export interface SceneNode {
   parts: ResolvedParts;
   /** Display label per action name (wiring `actions`, else the raw name). */
   actionLabels: Readonly<Record<string, string>>;
+  /** The kind's drawn shape (wiring `kinds[kind].shape`; 'rect' unless stated) and its tier-1 box. */
+  shape: LeafShape;
+  baseSize: { w: number; h: number };
+  /** A container drawn as a wide band (wiring shape 'band'). */
+  band: boolean;
 }
 
 export interface SceneEdge {
@@ -87,6 +93,9 @@ function sceneNode(n: NodeProjection, config: WiringConfig): SceneNode {
     id: n.id,
     title: n.label ?? n.id,
     kind: n.kind,
+    shape: leafShapeOf(config, n.kind).shape,
+    baseSize: leafBaseSize(config, n.kind),
+    band: isBand(config, n.kind),
     state: n.state.value,
     glyph: glyphChar(render?.glyph),
     tone: toneColor(render?.tone),
@@ -126,7 +135,8 @@ export function buildScene(
       continue;
     }
     const at = overrides.get(id) ?? placed.get(id) ?? { x: 0, y: 0 };
-    boxes.set(id, { id, kind: byId.get(id)!.kind, x: at.x, y: at.y, w: GENERIC_NODE_SIZE.w, h: GENERIC_NODE_SIZE.h });
+    const size = graph.nodes.find((g) => g.id === id) ?? GENERIC_NODE_SIZE;
+    boxes.set(id, { id, kind: byId.get(id)!.kind, x: at.x, y: at.y, w: size.w, h: size.h });
   }
 
   // Group boxes wrap their content (after drags).

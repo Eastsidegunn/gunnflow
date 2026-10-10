@@ -27,10 +27,10 @@ Use this package when you:
 npm install @gunnflow/upstream-port @gunnflow/contract
 ```
 
-`@gunnflow/contract` is a peer dependency (`^0.3.1 || ^0.4.0`): the port's types refer to contract types
+`@gunnflow/contract` is a peer dependency (`^0.3.1 || ^0.4.0 || ^0.5.0`): the port's types refer to contract types
 (`IntentResult`, `NodeDetail`), so the contract version is yours to choose within that range.
-0.1.1 is packaging only: the peer range widened to admit contract 0.4.x (whose change is the wiring
-schema; the types the port uses are unchanged).
+0.1.1 and 0.1.2 are packaging only: the peer range widened to admit contract 0.4.x and 0.5.x (whose
+changes are the wiring schema; the types the port uses are unchanged).
 
 ## Usage
 

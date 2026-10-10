@@ -57,11 +57,31 @@ export const DIAGRAM_MEDIA_TYPES: Readonly<Record<'mermaid' | 'excalidraw', read
   excalidraw: ['application/vnd.excalidraw+json'],
 };
 export const ATTENTION_MECHANISMS = ['interrupt', 'ambient'] as const;
+/**
+ * Node shapes (closed set, 0.5.0): how a kind's nodes are drawn and how much
+ * room they take. Presentation only — a shape says nothing about state, risk
+ * or priority. 'band' applies to containers (a wide row with a name strip on
+ * top); a leaf declared 'band' is drawn as 'rect'.
+ */
+export const SHAPE_IDS = ['rect', 'pill', 'circle', 'diamond', 'hexagon', 'band'] as const;
+/** The range of a kind's size factor (1 = the engine's base size for its shape). */
+export const KIND_SIZE_RANGE = { min: 0.5, max: 3 } as const;
 
 export type EdgeStyleId = (typeof EDGE_STYLE_IDS)[number];
 export type ArrangeId = (typeof ARRANGE_IDS)[number];
 export type ViewerId = (typeof VIEWER_IDS)[number];
 export type AttentionMechanism = (typeof ATTENTION_MECHANISMS)[number];
+export type ShapeId = (typeof SHAPE_IDS)[number];
+
+/**
+ * One kind's presentation: its part assembly (absent = the engine default),
+ * its shape (absent = 'rect') and size factor (absent = 1).
+ */
+export interface KindDecl {
+  parts?: PartDecl[];
+  shape?: ShapeId;
+  size?: number;
+}
 
 export type PartDecl =
   | { id: string; part: 'glyph' }
@@ -117,7 +137,7 @@ export interface WiringConfig {
    */
   attention?: AttentionRule[];
   viewers?: Record<string, ViewerId>;
-  kinds?: Record<string, { parts: PartDecl[] }>;
+  kinds?: Record<string, KindDecl>;
   lenses?: LensDecl[];
   /**
    * Display label per action name (upstream vocabulary, verbatim key). A
@@ -383,8 +403,13 @@ export function validateWiringConfig(value: unknown): WiringValidation {
   }
 
   record(value.kinds, 'config.kinds', (_kind, x, at) => {
-    if (!isRecord(x)) return p(at, 'must be { parts }');
-    closed(x, ['parts'], at);
+    if (!isRecord(x)) return p(at, 'must be { parts?, shape?, size? }');
+    closed(x, ['parts', 'shape', 'size'], at);
+    if (x.shape !== undefined) oneOf(x.shape, SHAPE_IDS, `${at}.shape`);
+    if (x.size !== undefined && !(typeof x.size === 'number' && Number.isFinite(x.size) && x.size >= KIND_SIZE_RANGE.min && x.size <= KIND_SIZE_RANGE.max)) {
+      p(`${at}.size`, `must be a number from ${KIND_SIZE_RANGE.min} to ${KIND_SIZE_RANGE.max}, got ${JSON.stringify(x.size)}`);
+    }
+    if (x.parts === undefined) return;
     if (!Array.isArray(x.parts)) return p(`${at}.parts`, 'must be an array');
     if (x.parts.length > WIRING_LIMITS.partsPerKind) return p(`${at}.parts`, `more than ${WIRING_LIMITS.partsPerKind} parts`);
     validateParts(x.parts, `${at}.parts`, p, closed, oneOf, nonEmptyString);
@@ -553,6 +578,11 @@ export function relationDirectionFor(config: WiringConfig, type: string): Contai
 }
 export function kindParts(config: WiringConfig, kind: string): PartDecl[] | undefined {
   return own(config.kinds, kind)?.parts;
+}
+/** A kind's shape and size factor; unstated = 'rect' at 1. */
+export function kindShape(config: WiringConfig, kind: string): { shape: ShapeId; size: number } {
+  const k = own(config.kinds, kind);
+  return { shape: k?.shape ?? 'rect', size: k?.size ?? 1 };
 }
 
 /** Viewer for a media type: exact entry, else `type/*` (never for SVG), else undefined. */

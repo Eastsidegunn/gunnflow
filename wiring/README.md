@@ -11,8 +11,11 @@ config만 쓴다. 위치는 `gunnflow.config.json`의 `wiringDir` 또는 env `GU
 
 병합 규칙:
 
-- `render` · `relations` · `viewers` · `kinds` · `actions`: 키 단위 덮어쓰기 — 뒤 파일의 같은 키가 항목 전체를 대체, 새 키는 추가.
+- `render` · `relations` · `viewers` · `actions`: 키 단위 덮어쓰기 — 뒤 파일의 같은 키가 항목 전체를 대체, 새 키는 추가.
   (`actions`는 행동 이름별 표시 라벨 `{ "label": "…" }` — 없으면 버튼에 원문 이름.)
+- `kinds`: 키 안에서 필드 단위 덮어쓰기 — 뒤 파일은 말한 필드(`parts` · `shape` · `size`)만 바꾼다.
+  `shape`는 노드 모양(`rect` 기본 · `pill` · `circle` · `diamond` · `hexagon` · 컨테이너용 `band`),
+  `size`는 그 모양의 기본 크기에 곱하는 배율(0.5~3, 기본 1). 모양은 표시일 뿐 — 상태·위험·우선순위를 말하지 않는다.
 - `attention`: cause 단위 — 같은 cause는 뒤 파일 규칙이 그 자리에서 교체, 새 cause는 뒤에 추가(첫 일치 우선 유지).
   `group`(표시 무리 이름, 선택)을 말하지 않은 교체 규칙은 앞 규칙의 `group`을 이어받는다.
   단 `group`을 하나라도 말하는 파일은 무리 순서를 말한 것으로 본다: 그 파일의 규칙이 그 순서대로 앞에 서고,

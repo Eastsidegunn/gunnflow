@@ -38,9 +38,10 @@ export function loadWiring(offered: unknown = DEFAULT_WIRING, log: (msg: string)
 }
 
 /**
- * Layers `over` onto `base`. Tables (render, relations, viewers, kinds,
- * actions) override per key — a later file's entry replaces the whole entry,
- * new keys are added. Attention merges per cause — a later rule for a known
+ * Layers `over` onto `base`. Tables (render, relations, viewers, actions)
+ * override per key — a later file's entry replaces the whole entry, new keys
+ * are added. Kinds merge per field — a later file's entry replaces only the
+ * fields it states (parts, shape, size). Attention merges per cause — a later rule for a known
  * cause replaces it in place, a new cause is appended — so "first match wins"
  * keeps its meaning; a replacing rule that states no `group` keeps the
  * replaced rule's group (changing a mechanism does not ungroup a cause).
@@ -85,7 +86,16 @@ export function mergeWiring(base: WiringConfig, over: WiringConfig): WiringConfi
   const render = table(base.render, over.render);
   const relations = table(base.relations, over.relations);
   const viewers = table(base.viewers, over.viewers);
-  const kinds = table(base.kinds, over.kinds);
+  // Kinds merge per field: a later file's entry replaces only the fields it states (parts, shape, size).
+  const kinds =
+    base.kinds || over.kinds
+      ? Object.fromEntries(
+          [...new Set([...Object.keys(base.kinds ?? {}), ...Object.keys(over.kinds ?? {})])].map((k) => [
+            k,
+            { ...(base.kinds && Object.hasOwn(base.kinds, k) ? base.kinds[k] : {}), ...(over.kinds && Object.hasOwn(over.kinds, k) ? over.kinds[k] : {}) },
+          ]),
+        )
+      : undefined;
   const actions = table(base.actions, over.actions);
   if (render) merged.render = render;
   if (relations) merged.relations = relations;

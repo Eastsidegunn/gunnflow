@@ -36,10 +36,11 @@ const node = {
 const intent = (action: string, extra: object = {}) => ({ nodeId: 'n', action, idempotencyKey: 'k', ...extra });
 
 describe('contract', () => {
-  it('exports a semver version — 0.4.0: wiring presentation fields (attention group, action labels, detail collapsed/copyable)', () => {
+  it('exports a semver version — 0.5.0: wiring kind shape and size', () => {
     expect(CONTRACT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(CONTRACT_VERSION).toBe('0.4.0');
-    expect(isCompatibleContractVersion('0.4.0', CONTRACT_VERSION)).toBe(true);
+    expect(CONTRACT_VERSION).toBe('0.5.0');
+    expect(isCompatibleContractVersion('0.5.0', CONTRACT_VERSION)).toBe(true);
+    expect(isCompatibleContractVersion('0.4.0', CONTRACT_VERSION)).toBe(false);
     expect(isCompatibleContractVersion('0.3.2', CONTRACT_VERSION)).toBe(false);
     expect(isCompatibleContractVersion('0.2.0', CONTRACT_VERSION)).toBe(false);
   });

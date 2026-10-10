@@ -11,6 +11,9 @@ import {
   detailCollapsed,
   detailCopyable,
   detailEmphasis,
+  kindParts,
+  kindShape,
+  SHAPE_IDS,
   renderFor,
   validateWiringConfig,
   viewerFor,
@@ -352,3 +355,42 @@ describe('wiring 0.4.0 presentation fields (attention group, action labels, deta
     }
   });
 });
+
+describe('wiring 0.5.0 kind shape and size', () => {
+  const v = WIRING_SCHEMA_VERSION;
+
+  it('accepts shape and size on a kind, with or without parts; configs without them stay valid', () => {
+    const cfg: WiringConfig = {
+      version: v,
+      kinds: {
+        task: { parts: [{ id: 'g', part: 'glyph' }], shape: 'circle', size: 0.6 },
+        gate: { shape: 'diamond', size: 1.4 },
+        mission: { shape: 'band' },
+        plain: { parts: [] },
+      },
+    };
+    expect(validateWiringConfig(cfg)).toEqual({ ok: true, config: cfg });
+    for (const shape of SHAPE_IDS) expect(validateWiringConfig({ version: v, kinds: { k: { shape } } }).ok).toBe(true);
+  });
+
+  it('rejects an unknown shape, a size out of range or not a number, and unknown fields', () => {
+    const bad = (k: unknown) => validateWiringConfig({ version: v, kinds: { k } } as unknown as WiringConfig);
+    expect(bad({ shape: 'star' }).ok).toBe(false);
+    expect(bad({ shape: 'circle', size: 0.4 }).ok).toBe(false);
+    expect(bad({ size: 3.01 }).ok).toBe(false);
+    expect(bad({ size: '2' }).ok).toBe(false);
+    expect(bad({ size: Number.NaN }).ok).toBe(false);
+    expect(bad({ shape: 'circle', colour: 'red' }).ok).toBe(false);
+    expect(bad({ parts: 'x' }).ok).toBe(false);
+  });
+
+  it('helpers: unstated = rect at 1; a shape-only kind has no parts (the default assembly)', () => {
+    const cfg: WiringConfig = { version: v, kinds: { gate: { shape: 'diamond', size: 2 } } };
+    expect(kindShape(cfg, 'gate')).toEqual({ shape: 'diamond', size: 2 });
+    expect(kindShape(cfg, 'task')).toEqual({ shape: 'rect', size: 1 });
+    expect(kindParts(cfg, 'gate')).toBeUndefined();
+    // Prototype keys are never read as kinds.
+    expect(kindShape(cfg, '__proto__')).toEqual({ shape: 'rect', size: 1 });
+  });
+});
+
