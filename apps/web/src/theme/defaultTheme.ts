@@ -112,6 +112,8 @@ export const DEFAULT_THEME = {
     tierScale: [1, 1, 1.25, 1.6] as readonly number[],
     /** The clear breathing margin kept around a grown node when a local tier change pushes neighbours aside. */
     focusMargin: 24,
+    /** The clear space a dropped node keeps from other nodes and from containers it does not belong to. */
+    dropGap: 16,
     /** Push-aside locality: a ripple travels at most this many contact hops from a grown node — distant nodes never move. */
     pushHops: 3,
   },

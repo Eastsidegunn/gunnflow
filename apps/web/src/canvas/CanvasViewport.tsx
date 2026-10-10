@@ -13,6 +13,7 @@ import { createPresence, prefersReducedMotion } from '../ui/presence.js';
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import { buildScene, genericEmphasis } from './genericScene.js';
 import { layoutGraphOf, sizedGraph } from './layoutGraph.js';
+import { resolveDrop } from './dropResolve.js';
 import {
   TIDY_EVENT,
   cubicBezierEase,
@@ -579,8 +580,8 @@ export function CanvasViewport(props: CanvasViewportProps) {
   // ---- pointer interaction -------------------------------------------------
   let drag:
     | { type: 'pan'; lastX: number; lastY: number; moved: boolean; middle?: boolean }
-    | { type: 'node'; id: string; offsetX: number; offsetY: number; moved: boolean }
-    | { type: 'group'; id: string; lastX: number; lastY: number; moved: boolean }
+    | { type: 'node'; id: string; offsetX: number; offsetY: number; moved: boolean; origin: Map<string, Rect> }
+    | { type: 'group'; id: string; members: readonly string[]; lastX: number; lastY: number; moved: boolean; origin: Map<string, Rect> }
     | { type: 'sticky'; id: string; offsetX: number; offsetY: number; moved: boolean }
     | { type: 'box'; id: string; lastX: number; lastY: number; moved: boolean; contents: { stickies: string[]; boxes: string[] } }
     | { type: 'resize'; kind: 'sticky' | 'box'; id: string; x: number; y: number }
@@ -660,13 +661,55 @@ export function CanvasViewport(props: CanvasViewportProps) {
       rewireDrag = { fromId: source.id, toX: w.x, toY: w.y };
       markDirty();
     } else if (hit) {
-      drag = { type: 'node', id: hit.id, offsetX: w.x - hit.x, offsetY: w.y - hit.y, moved: false };
+      drag = { type: 'node', id: hit.id, offsetX: w.x - hit.x, offsetY: w.y - hit.y, moved: false, origin: originOf([hit.id]) };
       setDragLive(true);
     } else if (hitGroup(w.x, w.y)) {
-      drag = { type: 'group', id: hitGroup(w.x, w.y)!.id, lastX: w.x, lastY: w.y, moved: false };
+      const group = hitGroup(w.x, w.y)!;
+      // The member set is fixed for the gesture: a containment update mid-drag neither adds nor drops movers.
+      drag = { type: 'group', id: group.id, members: [...group.members], lastX: w.x, lastY: w.y, moved: false, origin: originOf(group.members) };
       setDragLive(true);
     } else {
       drag = { type: 'pan', lastX: e.clientX, lastY: e.clientY, moved: false };
+    }
+  };
+
+  /** The drawn rects of the given leaves at drag start — what the person grabbed (the drop's fallback). */
+  const originOf = (ids: readonly string[]) => {
+    const out = new Map<string, Rect>();
+    const rects = untrack(layout).nodes;
+    for (const id of ids) {
+      const r = rects.get(id);
+      if (r) out.set(id, { ...r });
+    }
+    return out;
+  };
+  /**
+   * Drop (GF-P1b B): the moved leaves settle as one rigid set at the nearest
+   * place that overlaps no other node and no container they do not belong to
+   * (dropResolve). View state only — the move animates like any local change.
+   */
+  const settleDrop = (origin: ReadonlyMap<string, Rect>) => {
+    const parentOf = untrack(topoGraph)?.parentOf ?? new Map<string, string>();
+    const rects = untrack(targets);
+    const d = resolveDrop({
+      parentOf,
+      rects,
+      moved: new Set(origin.keys()),
+      origin,
+      gap: geo.dropGap,
+      groupPad: geo.groupPad,
+      groupHeader: geo.groupHeader,
+    });
+    // Unresolved needs a missing origin, which originOf never leaves: the drop then stays as placed.
+    if (d.kind === 'unresolved') return;
+    if (d.kind === 'origin') {
+      for (const [id, r] of origin) viewState.moveNode(id, r.x, r.y);
+      return;
+    }
+    if (d.dx === 0 && d.dy === 0) return;
+    for (const id of origin.keys()) {
+      const r = rects.get(id);
+      if (r) viewState.moveNode(id, r.x + d.dx, r.y + d.dy);
     }
   };
 
@@ -716,8 +759,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       const dx = w.x - drag.lastX;
       const dy = w.y - drag.lastY;
       const nodes = layout().nodes;
-      const groupId = drag.id;
-      for (const id of scene()?.groups.find((g) => g.id === groupId)?.members ?? []) {
+      for (const id of drag.members) {
         const b = nodes.get(id);
         if (b) viewState.moveNode(id, b.x + dx, b.y + dy);
       }
@@ -751,6 +793,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       selection.clear();
       personal.setOpen({ kind: 'box', id: drag.id });
     } else if ((drag.type === 'node' || drag.type === 'group') && drag.moved) {
+      settleDrop(drag.origin);
       // Dropping a received node (or group) into a personal box files it there; dropping it outside takes it out.
       const r = nodeRect(drag.id);
       if (r) {
