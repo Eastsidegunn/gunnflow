@@ -11,9 +11,10 @@ import { drawGeneric } from './draw.js';
 import { CanvasContextMenu, type ContextMenuState } from '../ui/CanvasContextMenu.jsx';
 import { createPresence, prefersReducedMotion } from '../ui/presence.js';
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
-import { buildScene, genericEmphasis } from './genericScene.js';
+import { buildScene, endpointBox, genericEmphasis, nestedChipRect } from './genericScene.js';
 import { containerRects, layoutGraphOf, sizedGraph } from './layoutGraph.js';
 import { resolveDrop } from './dropResolve.js';
+import { escStack } from '../state/escStack.js';
 import { hitsLeaf, leafBaseSize, type LeafShape } from './shapes.js';
 import { FRAME_NODE_EVENT, anchorOut, fitZoom, fitZoomRelative, ladderKey, snapDown, ladderThreshold, ladderWith, stepZoom, wheelNotches, wheelPixels, zoomAtPoint, ZOOM_MAX, ZOOM_MIN, type Ladder, type Slot } from './zoomLadder.js';
 import {
@@ -538,7 +539,16 @@ export function CanvasViewport(props: CanvasViewportProps) {
       };
       // The drag's landing preview, as drawn (shape and rect per outline); [] when none.
       const dropPreview = () => (dropGhost ?? []).map((g) => ({ shape: g.shape, ...g.rect }));
-      w.__gunnflowDebug = { ...(w.__gunnflowDebug ?? {}), nodeRect, nodeStyle, dropPreview };
+      // Drawn relation lines and nested-link chips, as the scene has them.
+      const sceneEdges = () => (scene()?.edges ?? []).map((e) => ({ from: e.from, to: e.to, type: e.type }));
+      const nestedLinks = () => Object.fromEntries([...(scene()?.nestedLinks ?? new Map())].map(([id, l]) => [id, [...l]]));
+      const chipRect = (id: string) => {
+        const sc = scene();
+        const box = sc && endpointBox(sc, id);
+        const links = sc?.nestedLinks.get(id);
+        return box && links ? nestedChipRect(box, links.length) : undefined;
+      };
+      w.__gunnflowDebug = { ...(w.__gunnflowDebug ?? {}), nodeRect, nodeStyle, dropPreview, sceneEdges, nestedLinks, chipRect };
     }
     const ctx = canvas.getContext('2d')!;
     const resize = () => {
@@ -616,6 +626,44 @@ export function CanvasViewport(props: CanvasViewportProps) {
   let gesturePointer: number | null = null;
   const foreign = (e: PointerEvent) => gesturePointer !== null && e.pointerId !== gesturePointer;
 
+  // ---- nested-link chips (GF-E) -------------------------------------------
+  /** The chip popover: the descendant whose container relations it lists, where (client px), and whether a click pinned it. */
+  const [chipPopover, setChipPopover] = createSignal<{ id: string; x: number; y: number; pinned: boolean } | null>(null);
+  /** The descendant whose '◂' chip is under a world point, or null. */
+  const hitChip = (wx: number, wy: number): string | null => {
+    const sc = scene();
+    if (!sc) return null;
+    for (const [id, links] of sc.nestedLinks) {
+      const box = endpointBox(sc, id);
+      if (box && inside(nestedChipRect(box, links.length), wx, wy)) return id;
+    }
+    return null;
+  };
+  // A pinned popover owns Esc (one Esc closes it and nothing else) and closes on any press outside it.
+  const chipEscOwner = {};
+  let chipPopoverEl: HTMLDivElement | undefined;
+  createEffect(() => {
+    if (!chipPopover()?.pinned) return;
+    onCleanup(escStack.push(chipEscOwner));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && escStack.isTop(chipEscOwner)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setChipPopover(null);
+      }
+    };
+    const onPress = (e: PointerEvent) => {
+      if (chipPopoverEl && e.target instanceof Node && chipPopoverEl.contains(e.target)) return;
+      setChipPopover(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onPress, true);
+    onCleanup(() => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerdown', onPress, true);
+    });
+  });
+
   const onPointerDown = (e: PointerEvent) => {
     // Buttons beyond right (back/forward) start nothing on the canvas — not even a camera hand-over.
     if (e.button > 2) return;
@@ -670,6 +718,14 @@ export function CanvasViewport(props: CanvasViewportProps) {
     }
     if (sticky) {
       drag = { type: 'sticky', id: sticky.id, offsetX: w.x - sticky.x, offsetY: w.y - sticky.y, moved: false };
+      return;
+    }
+    // A nested-link chip (above the received node it sits on, below the personal layer and link mode):
+    // the press pins its popover — the relation detail — and starts nothing else.
+    const chip = hitChip(w.x, w.y);
+    if (chip) {
+      drag = null;
+      setChipPopover({ id: chip, x: e.clientX, y: e.clientY, pinned: true });
       return;
     }
     const hit = hitTest(w.x, w.y);
@@ -794,7 +850,18 @@ export function CanvasViewport(props: CanvasViewportProps) {
   };
 
   const onPointerMove = (e: PointerEvent) => {
-    if (!drag || foreign(e)) return;
+    if (!drag) {
+      // Hover: a chip shows its relations (a tooltip) until the pointer leaves it; a pinned popover stays.
+      const pop = chipPopover();
+      if (pop?.pinned) return;
+      const w = screenToWorld(e.clientX, e.clientY);
+      const chip = hitChip(w.x, w.y);
+      if (chip) {
+        if (pop?.id !== chip) setChipPopover({ id: chip, x: e.clientX, y: e.clientY, pinned: false });
+      } else if (pop) setChipPopover(null);
+      return;
+    }
+    if (foreign(e)) return;
     if (drag.type === 'pan') {
       viewState.panBy(e.clientX - drag.lastX, e.clientY - drag.lastY);
       drag.lastX = e.clientX;
@@ -1192,6 +1259,9 @@ export function CanvasViewport(props: CanvasViewportProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
+        onPointerLeave={() => {
+          if (chipPopover() && !chipPopover()!.pinned) setChipPopover(null);
+        }}
         onLostPointerCapture={onPointerCancel}
         onMouseDown={onButtonDefault}
         onMouseUp={onButtonDefault}
@@ -1200,6 +1270,39 @@ export function CanvasViewport(props: CanvasViewportProps) {
         onContextMenu={onContextMenu}
         onWheel={onWheel}
       />
+      <Show when={chipPopover()}>
+        {(pop) => {
+          const links = () => scene()?.nestedLinks.get(pop().id) ?? [];
+          const titleOf = (id: string) => scene()?.nodes.get(id)?.title ?? id;
+          const host = () => canvas.getBoundingClientRect();
+          return (
+            <div
+              ref={chipPopoverEl}
+              class="nested-popover"
+              data-testid="nested-link-popover"
+              data-pinned={pop().pinned ? 'yes' : 'no'}
+              role="dialog"
+              aria-label={`Relations with containers of ${titleOf(pop().id)}`}
+              style={{ left: `${pop().x - host().left + 12}px`, top: `${pop().y - host().top + 12}px` }}
+            >
+              <For each={links()}>
+                {(l, i) => (
+                  <button
+                    data-testid={`nested-link-${i()}`}
+                    title={`${l.type} (${l.direction === 'in' ? `${titleOf(l.other)} → this` : `this → ${titleOf(l.other)}`})`}
+                    onClick={() => {
+                      selection.select(l.other);
+                      setChipPopover(null);
+                    }}
+                  >
+                    {l.direction === 'in' ? `◂ ${titleOf(l.other)} — ${l.type} →` : `◂ — ${l.type} → ${titleOf(l.other)}`}
+                  </button>
+                )}
+              </For>
+            </div>
+          );
+        }}
+      </Show>
       {/* The zoom ladder's tick scale: every step, anchors larger, the current zoom marked (view chrome). */}
       <div class="zoom-ladder" data-testid="zoom-ladder" aria-hidden="true">
         <For each={viewLadder().steps}>

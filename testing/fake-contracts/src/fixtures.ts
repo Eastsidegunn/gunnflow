@@ -447,6 +447,16 @@ export function inboxFixture(): FakeWorkspaceProjection {
   };
 }
 
+/**
+ * GF-E — the normal fixture plus a relation from the mission to one of its own
+ * members (m1 produces d-report, which is a member of m1): a container linked
+ * to its own descendant, as some backends emit.
+ */
+export function nestedFlowFixture(): FakeWorkspaceProjection {
+  const base = normalFixture();
+  return { ...base, edges: [...base.edges, { id: 'e-nested', from: 'm1', to: 'd-report', edgeKind: 'produces' }] };
+}
+
 export const FIXTURES = {
   empty: emptyFixture,
   normal: normalFixture,
@@ -455,6 +465,7 @@ export const FIXTURES = {
   inbox: inboxFixture,
   gates: gatesFixture,
   large: () => largeFixture(),
+  'nested-flow': nestedFlowFixture,
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

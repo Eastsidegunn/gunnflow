@@ -41,7 +41,9 @@ describe('fixtures (charter §19 screen states)', () => {
   it('every fixture is internally consistent (edges reference known nodes)', () => {
     for (const make of Object.values(FIXTURES)) {
       const p = make();
+      // Missions are edge endpoints too: projectNodes carries a mission's edges as its relations.
       const ids = new Set([
+        ...p.missions.map((m) => m.id),
         ...p.tasks.map((t) => t.id),
         ...p.gates.map((g) => g.id),
         ...p.deliverables.map((d) => d.id),

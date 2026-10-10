@@ -65,6 +65,25 @@ export interface GenericScene {
   groups: GroupBox[];
   /** Nodes whose grouping is withheld (several containers or a containment cycle). */
   withheld: string[];
+  /**
+   * Relations between a container and one of its own descendants (other than
+   * the containment the nesting already shows), per descendant. They are not
+   * drawn as lines — a line from a box to something inside it reads as the
+   * containment again — but as a small chip on the descendant (decision
+   * 2026-10-10, GF-E). Received facts, kept verbatim; the engine reads only
+   * the geometry of containment, never a relation's name.
+   */
+  nestedLinks: ReadonlyMap<string, readonly NestedLink[]>;
+}
+
+/** A relation between a descendant and one of its containers, seen from the descendant. */
+export interface NestedLink {
+  /** The relation type, verbatim. */
+  type: string;
+  /** The container end. */
+  other: string;
+  /** 'in': the container's relation points at the descendant; 'out': the descendant's points at the container. */
+  direction: 'in' | 'out';
 }
 
 export { GENERIC_NODE_SIZE } from './layoutGraph.js';
@@ -164,18 +183,7 @@ export function buildScene(
     groups.set(id, { id, name: n.label ?? n.id, kind: n.kind, ...r, depth: depthOf(id), members: members(id) });
   }
 
-  // A containing relation is shown by the nesting itself; every other relation is drawn.
-  const nestingShows = (n: NodeProjection, r: { type: string; target: string }) => {
-    if (relationArrangeFor(config, r.type) !== 'contain') return false;
-    return relationDirectionFor(config, r.type) === 'out'
-      ? graph.parentOf.get(r.target) === n.id
-      : graph.parentOf.get(n.id) === r.target;
-  };
-  const edges: SceneEdge[] = nodes.flatMap((n) =>
-    n.relations
-      .filter((r) => byId.has(r.target) && !nestingShows(n, r))
-      .map((r) => ({ from: n.id, to: r.target, type: r.type, stroke: edgeStroke(relationStyleFor(config, r.type)) })),
-  );
+  const { edges, nestedLinks } = classifyRelations(nodes, config, graph);
   const groupList = [...groups.values()].sort((a, b) => a.depth - b.depth || (a.id < b.id ? -1 : 1));
   return {
     layout: { nodes: boxes, missions: groupList },
@@ -183,7 +191,65 @@ export function buildScene(
     edges,
     groups: groupList,
     withheld: graph.withheld,
+    nestedLinks,
   };
+}
+
+/**
+ * Which received relations are drawn as lines, and which are kept as nested
+ * links on a descendant (GF-E): a containment the nesting shows is neither; a
+ * relation between a container and its own descendant is a nested link; every
+ * other relation is a line. Containment geometry only — never a relation's name.
+ */
+export function classifyRelations(
+  nodes: readonly NodeProjection[],
+  config: WiringConfig,
+  graph: { parentOf: ReadonlyMap<string, string> },
+): { edges: SceneEdge[]; nestedLinks: Map<string, NestedLink[]> } {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  // A containing relation is shown by the nesting itself.
+  const nestingShows = (n: NodeProjection, r: { type: string; target: string }) => {
+    if (relationArrangeFor(config, r.type) !== 'contain') return false;
+    return relationDirectionFor(config, r.type) === 'out'
+      ? graph.parentOf.get(r.target) === n.id
+      : graph.parentOf.get(n.id) === r.target;
+  };
+  /** Whether `a` contains `b` at any depth (containment as laid out). */
+  const isAncestor = (a: string, b: string) => {
+    for (let p = graph.parentOf.get(b), guard = 0; p !== undefined && guard <= LAYOUT.maxNestDepth + 1; p = graph.parentOf.get(p), guard++) {
+      if (p === a) return true;
+    }
+    return false;
+  };
+  const nestedLinks = new Map<string, NestedLink[]>();
+  const addNested = (descendant: string, link: NestedLink) => {
+    const list = nestedLinks.get(descendant);
+    if (list) list.push(link);
+    else nestedLinks.set(descendant, [link]);
+  };
+  const edges: SceneEdge[] = nodes.flatMap((n) =>
+    n.relations
+      .filter((r) => byId.has(r.target) && !nestingShows(n, r))
+      .filter((r) => {
+        // Between a container and its own descendant: a chip on the descendant, not a line.
+        if (isAncestor(n.id, r.target)) {
+          addNested(r.target, { type: r.type, other: n.id, direction: 'in' });
+          return false;
+        }
+        if (isAncestor(r.target, n.id)) {
+          addNested(n.id, { type: r.type, other: r.target, direction: 'out' });
+          return false;
+        }
+        return true;
+      })
+      .map((r) => ({ from: n.id, to: r.target, type: r.type, stroke: edgeStroke(relationStyleFor(config, r.type)) })),
+  );
+  return { edges, nestedLinks };
+}
+
+/** Where a descendant's nested-link chip sits: on its top-left corner, a little outside (world units). */
+export function nestedChipRect(box: Rect, count: number): Rect {
+  return { x: box.x - 8, y: box.y - 10, w: count > 1 ? 30 : 20, h: 18 };
 }
 
 /** The drawn rect of any canvas node: its node box, or its group box when it contains others. */

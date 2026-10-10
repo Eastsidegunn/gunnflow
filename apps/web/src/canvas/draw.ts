@@ -10,7 +10,7 @@ import type { WorkspaceLayout, NodeBox } from './layout.js';
 import type { Camera } from '../state/viewState.js';
 import type { Emphasis } from '../state/lens.js';
 import type { InFlightEntry } from '../state/pendingIntents.js';
-import { endpointBox, type GenericScene, type GroupBox, type SceneNode } from './genericScene.js';
+import { endpointBox, nestedChipRect, type GenericScene, type GroupBox, type SceneNode } from './genericScene.js';
 import { ATTENTION_COLOR, CONFIG_EDGE_DASH, GROUP_STYLE, PENDING_DASH } from './tokens.js';
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import { detailOn, type Tier } from '../state/relevance.js';
@@ -184,6 +184,23 @@ export function drawGeneric(ctx: CanvasRenderingContext2D, width: number, height
     if (node) drawGenericNode(ctx, box, node, frame);
   }
   drawRewireDrag(ctx, frame);
+  // Relations between a container and its own descendant: a '◂' chip on the descendant (no line).
+  for (const [id, links] of input.scene.nestedLinks) {
+    const box = endpointBox(input.scene, id);
+    if (!box) continue;
+    const r = nestedChipRect(box, links.length);
+    ctx.globalAlpha = alphaFor(id, frame);
+    ctx.fillStyle = C.node;
+    ctx.strokeStyle = C.nodeBorder;
+    ctx.lineWidth = 1;
+    roundRect(ctx, r.x, r.y, r.w, r.h, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = C.subtext;
+    ctx.font = DEFAULT_THEME.fonts.small;
+    ctx.fillText(links.length > 1 ? `◂${links.length}` : '◂', r.x + 5, r.y + 13);
+    ctx.globalAlpha = 1;
+  }
   if (input.ghost) {
     // The landing preview: the shape outline, dashed, where the drag would settle.
     ctx.strokeStyle = C.text;
