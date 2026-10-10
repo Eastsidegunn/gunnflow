@@ -21,6 +21,7 @@ import { writeAffordance, type Affordance } from '../state/capabilities.js';
 import { elapsedLabel } from '../canvas/displayModel.js';
 import type { InspectorTab } from '../state/inspectorView.js';
 import { FakeEditorPart } from './FakeEditorPart.jsx';
+import { t, tn } from '../i18n/index.js';
 
 export function TaskInspector(props: {
   stores: WorkspaceStores;
@@ -47,38 +48,39 @@ export function TaskInspector(props: {
 
   return (
     <Show when={task()}>
-      {(t) => (
-        <aside class="inspector" data-motion={props.motion ?? 'enter'} data-testid="task-inspector" aria-label="Task inspector" ref={(el) => onCleanup(manageFocus(el))}>
+      {(tk) => (
+        <aside class="inspector" data-motion={props.motion ?? 'enter'} data-testid="task-inspector" aria-label={t('inspector.label')} ref={(el) => onCleanup(manageFocus(el))}>
           <header class="inspector-header">
             <div>
               <p class="breadcrumb" data-testid="inspector-breadcrumb">
-                {missionName(projection(), t().missionId) ?? t().missionId} / {t().name}
+                {missionName(projection(), tk().missionId) ?? tk().missionId} / {tk().name}
               </p>
-              <p class="inspector-state" data-testid="inspector-state" data-state={t().state}>
-                {t().state.toUpperCase()}
+              <p class="inspector-state" data-testid="inspector-state" data-state={tk().state}>
+                {tk().state.toUpperCase()}
                 <Show when={pendingOf('task.pause')}>
-                  <span class="pending-chip" data-testid="pending-pause">Pausing…</span>
+                  <span class="pending-chip" data-testid="pending-pause">{t('inspector.pausing')}</span>
                 </Show>
                 <Show when={pendingOf('task.resume')}>
-                  <span class="pending-chip" data-testid="pending-resume">Resuming…</span>
+                  <span class="pending-chip" data-testid="pending-resume">{t('inspector.resuming')}</span>
                 </Show>
               </p>
             </div>
-            <button data-testid="inspector-close" aria-label="Close inspector" onClick={props.onClose}>
+            <button data-testid="inspector-close" aria-label={t('inspector.close')} onClick={props.onClose}>
               ✕
             </button>
           </header>
 
           <Show when={stale()}>
             <p class="inspector-stale" data-testid="inspector-stale">
-              Stale · showing state from{' '}
-              {projectionStore.lastSeenAt()
-                ? new Date(projectionStore.lastSeenAt()!).toLocaleTimeString()
-                : 'unknown'}
+              {t('inspector.stale', {
+                time: projectionStore.lastSeenAt()
+                  ? new Date(projectionStore.lastSeenAt()!).toLocaleTimeString()
+                  : t('inspector.staleUnknown'),
+              })}
             </p>
           </Show>
 
-          <nav class="inspector-tabs" aria-label="Inspector tabs">
+          <nav class="inspector-tabs" aria-label={t('inspector.tabs')}>
             <For each={['overview', 'activity', 'related'] as InspectorTab[]}>
               {(tabName) => (
                 <button
@@ -86,7 +88,7 @@ export function TaskInspector(props: {
                   classList={{ active: inspector.tab() === tabName }}
                   onClick={() => inspector.setTab(tabName)}
                 >
-                  {tabName[0]!.toUpperCase() + tabName.slice(1)}
+                  {{ overview: t('inspector.tab.overview'), activity: t('inspector.tab.activity'), related: t('inspector.tab.related') }[tabName]}
                 </button>
               )}
             </For>
@@ -96,7 +98,7 @@ export function TaskInspector(props: {
             <Show when={inspector.tab() === 'overview'}>
               <Overview
                 stores={props.stores}
-                task={t()}
+                task={tk()}
                 affordance={affordance}
                 pendingOf={pendingOf}
                 onEnterSurface={props.onEnterSurface}
@@ -135,11 +137,11 @@ export function TaskInspector(props: {
         {/* "Why is it stopped?" answers first (brief §9) — upstream reason verbatim. */}
         <Show when={p.task.blockedReason}>
           <section class="blocked-panel" data-testid="inspector-blocked">
-            <h3>BLOCKED</h3>
+            <h3>{t('inspector.blocked')}</h3>
             <p>{p.task.blockedReason}</p>
             <Show when={gate()}>
               <button data-testid="review-gate" onClick={() => p.onEnterSurface('approval', gate()!.id)}>
-                Review gate →
+                {t('inspector.reviewGate')}
               </button>
             </Show>
           </section>
@@ -147,28 +149,28 @@ export function TaskInspector(props: {
 
         <Show when={p.task.currentAction}>
           <section>
-            <h3>Current</h3>
+            <h3>{t('inspector.current')}</h3>
             <p data-testid="inspector-current">{p.task.currentAction}</p>
           </section>
         </Show>
 
         <Show when={elapsedLabel(p.task.startedAt, p.task.updatedAt, Date.now())}>
           <section>
-            <h3>Timing</h3>
-            <p>{elapsedLabel(p.task.startedAt, p.task.updatedAt, Date.now())} elapsed</p>
+            <h3>{t('inspector.timing')}</h3>
+            <p>{t('inspector.elapsed', { elapsed: elapsedLabel(p.task.startedAt, p.task.updatedAt, Date.now()) ?? '' })}</p>
           </section>
         </Show>
 
         {/* Execution entry is always available (the surface itself reports
             whatever upstream provides); session rows only when linked. */}
         <section data-testid="inspector-execution">
-          <h3>Execution</h3>
+          <h3>{t('inspector.execution')}</h3>
           <For each={sessions()}>
             {(s) => (
               <p class="session-row">
                 {s.label} · {s.state}
                 {s.startedAt ? ` · ${elapsedLabel(s.startedAt, undefined, Date.now())}` : ''}
-                {s.forkCount ? ` · ${s.forkCount} forks` : ''}
+                {s.forkCount ? ` · ${tn('inspector.forks', s.forkCount)}` : ''}
               </p>
             )}
           </For>
@@ -176,13 +178,13 @@ export function TaskInspector(props: {
             data-testid="open-execution"
             onClick={() => p.onEnterSurface('execution', p.task.id)}
           >
-            Open execution →
+            {t('inspector.openExecution')}
           </button>
         </section>
 
         <Show when={relations().deliverables.length > 0}>
           <section data-testid="inspector-deliverables">
-            <h3>Deliverables</h3>
+            <h3>{t('inspector.deliverables')}</h3>
             <For each={relations().deliverables}>
               {(d) => (
                 <button
@@ -198,7 +200,7 @@ export function TaskInspector(props: {
         </Show>
 
         <section class="inspector-actions" data-testid="inspector-actions">
-          <h3>Actions</h3>
+          <h3>{t('inspector.actions')}</h3>
           <div class="actions">
             <Show when={p.affordance('pause') !== 'hidden' && p.task.state === 'running'}>
               <button
@@ -206,7 +208,7 @@ export function TaskInspector(props: {
                 disabled={p.affordance('pause') !== 'enabled' || p.pendingOf('task.pause')}
                 onClick={() => void pendingIntents.submit({ nodeId: p.task.id, action: 'task.pause' })}
               >
-                Pause
+                {t('inspector.pause')}
               </button>
             </Show>
             <Show when={p.affordance('resume') !== 'hidden' && (p.task.state === 'paused' || p.task.state === 'queued')}>
@@ -215,7 +217,7 @@ export function TaskInspector(props: {
                 disabled={p.affordance('resume') !== 'enabled' || p.pendingOf('task.resume')}
                 onClick={() => void pendingIntents.submit({ nodeId: p.task.id, action: 'task.resume' })}
               >
-                Resume
+                {t('inspector.resume')}
               </button>
             </Show>
             <Show when={p.affordance('cancel') !== 'hidden'}>
@@ -226,7 +228,7 @@ export function TaskInspector(props: {
                 disabled={p.affordance('cancel') !== 'enabled'}
                 onClick={() => p.onEnterSurface('privileged:cancel', p.task.id)}
               >
-                Cancel…
+                {t('inspector.cancel')}
               </button>
             </Show>
             <Show when={p.affordance('forceReplan') !== 'hidden'}>
@@ -236,7 +238,7 @@ export function TaskInspector(props: {
                 disabled={p.affordance('forceReplan') !== 'enabled'}
                 onClick={() => p.onEnterSurface('privileged:force-replan', p.task.id)}
               >
-                Force replan…
+                {t('inspector.forceReplan')}
               </button>
             </Show>
           </div>
@@ -254,12 +256,12 @@ export function TaskInspector(props: {
                 setInstruction('');
               }}
             >
-              <label for="instruct-input">Send instruction</label>
+              <label for="instruct-input">{t('inspector.sendInstruction')}</label>
               <textarea
                 id="instruct-input"
                 data-testid="instruct-input"
                 rows="2"
-                placeholder="Add human intent to this task's future execution…"
+                placeholder={t('inspector.instructPlaceholder')}
                 value={instruction()}
                 onInput={(e) => setInstruction(e.currentTarget.value)}
                 disabled={p.affordance('instruct') !== 'enabled'}
@@ -269,7 +271,7 @@ export function TaskInspector(props: {
                 data-testid="instruct-send"
                 disabled={p.affordance('instruct') !== 'enabled' || !instruction().trim()}
               >
-                Send
+                {t('inspector.send')}
               </button>
             </form>
           </Show>
@@ -284,15 +286,16 @@ export function TaskInspector(props: {
     const items = createMemo(() => taskActivities(projection(), p.taskId));
     return (
       <section data-testid="inspector-activity">
-        <h3>Recent activity</h3>
-        <Show when={items().length > 0} fallback={<p class="hint">No activity reported by upstream.</p>}>
+        <h3>{t('inspector.recentActivity')}</h3>
+        <Show when={items().length > 0} fallback={<p class="hint">{t('inspector.noActivity')}</p>}>
           <ul class="activity-list">
             <For each={items()}>
               {(a) => (
                 <li classList={{ human: a.actor === 'human' }}>
                   <span class="activity-label">{activityLabel(a)}</span>
                   <span class="activity-meta">
-                    {a.actor === 'human' ? '⟶ human' : a.actor}
+                    {/* The received actor, verbatim; 'human' only picks the arrow and the row style. */}
+                    {a.actor === 'human' ? `⟶ ${a.actor}` : a.actor}
                     {' · '}
                     {new Date(a.at).toLocaleTimeString()}
                   </span>
@@ -316,11 +319,11 @@ export function TaskInspector(props: {
     return (
       <section data-testid="inspector-related">
         <Show when={mission()}>
-          <h3>Mission</h3>
+          <h3>{t('inspector.mission')}</h3>
           <p>{mission()}</p>
         </Show>
         <Show when={rel().upstream.length > 0}>
-          <h3>Upstream</h3>
+          <h3>{t('inspector.upstream')}</h3>
           <For each={rel().upstream}>
             {(u) => (
               <button class="row-link" data-testid={`related-${u.id}`} onClick={() => p.onFocusNode(u.id)}>
@@ -330,7 +333,7 @@ export function TaskInspector(props: {
           </For>
         </Show>
         <Show when={rel().downstream.length > 0}>
-          <h3>Downstream</h3>
+          <h3>{t('inspector.downstream')}</h3>
           <For each={rel().downstream}>
             {(d) => (
               <button class="row-link" data-testid={`related-${d.id}`} onClick={() => p.onFocusNode(d.id)}>
@@ -340,7 +343,7 @@ export function TaskInspector(props: {
           </For>
         </Show>
         <Show when={rel().gates.length > 0}>
-          <h3>Gates</h3>
+          <h3>{t('inspector.gates')}</h3>
           <For each={rel().gates}>
             {(g) => (
               <button
@@ -354,7 +357,7 @@ export function TaskInspector(props: {
           </For>
         </Show>
         <Show when={rel().deliverables.length > 0}>
-          <h3>Deliverables</h3>
+          <h3>{t('inspector.deliverables')}</h3>
           <For each={rel().deliverables}>
             {(d) => (
               <button

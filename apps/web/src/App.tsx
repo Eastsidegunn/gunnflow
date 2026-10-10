@@ -28,6 +28,7 @@ import { dropAllTerminalStreams } from './state/terminalStore.js';
 import { resolveWorkSurface, surfaceForKind } from './state/depth.js';
 import { isTypingTarget, matchesKey, resolveKey } from './state/keybindings.js';
 import { escStack } from './state/escStack.js';
+import { t } from './i18n/index.js';
 
 export function App() {
   const stores = createWorkspaceStores(postIntent);
@@ -72,8 +73,8 @@ export function App() {
   createEffect(() => {
     const i = stores.projectionStore.instrument();
     if (i.kind === 'unreachable') {
-      const t = setTimeout(() => setUnreachableLong(true), 5000);
-      onCleanup(() => clearTimeout(t));
+      const timer = setTimeout(() => setUnreachableLong(true), 5000);
+      onCleanup(() => clearTimeout(timer));
     } else {
       setUnreachableLong(false);
     }
@@ -304,7 +305,7 @@ export function App() {
       <WorkspaceToolbar stores={stores} searchRef={(el) => (searchEl = el)} />
       <Show when={unreachableLong()}>
         <div class="unreachable-banner" data-testid="unreachable-banner" role="alert">
-          ⚠ Backend unreachable since {unreachableSince()} — showing earlier state. It keeps retrying; ↻ below retries now.
+          {t('app.unreachableBanner', { time: unreachableSince() })}
         </div>
       </Show>
       <div class="body">
@@ -337,7 +338,7 @@ export function App() {
               </Show>
             </Show>
             <Show when={rewireArmed()}>
-              <div class="rewire-banner" data-testid="rewire-armed">Rewire armed — drag from a node to its new target · Esc cancels</div>
+              <div class="rewire-banner" data-testid="rewire-armed">{t('app.rewireArmed')}</div>
             </Show>
             <ConnectBanner personal={stores.personal} />
             <A11yMirror stores={stores} />

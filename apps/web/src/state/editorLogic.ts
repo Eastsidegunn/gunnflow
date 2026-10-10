@@ -5,6 +5,7 @@
 import type { ArtifactRef, Capability } from '../model/types.js';
 import type { EditBuffer } from './pendingIntents.js';
 import { sha256Hex, utf8Bytes } from './digest.js';
+import { msg, msgN, type Msg } from '../i18n/index.js';
 
 /** A base that passed fixBase; only this module mints one. */
 export interface PinnedBase {
@@ -57,7 +58,7 @@ export function displayRecord(token: DisplayToken | null | undefined): DisplayRe
 
 export type BaseFix =
   | { ok: true; text: string; digest: string; pinned: PinnedBase }
-  | { ok: false; reason: string };
+  | { ok: false; reason: Msg };
 
 export function decodeBase64(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -80,33 +81,33 @@ export async function fixBase(
   snapshotBase64: string | undefined,
   mediaTypes: readonly string[],
 ): Promise<BaseFix> {
-  if (!ref) return { ok: false, reason: 'base artifact is not in the projection' };
-  if (ref.access.kind !== 'snapshot') return { ok: false, reason: 'only snapshot artifacts have fixed content' };
-  if (!ref.digest) return { ok: false, reason: 'artifact has no digest' };
+  if (!ref) return { ok: false, reason: msg('editorCheck.baseNotInProjection') };
+  if (ref.access.kind !== 'snapshot') return { ok: false, reason: msg('editorCheck.onlySnapshot') };
+  if (!ref.digest) return { ok: false, reason: msg('editorCheck.noDigest') };
   if (!mediaTypes.includes(ref.mediaType)) {
-    return { ok: false, reason: `media type ${ref.mediaType} is not declared editable` };
+    return { ok: false, reason: msg('editorCheck.mediaTypeNotEditable', { mediaType: ref.mediaType }) };
   }
-  if (snapshotBase64 === undefined) return { ok: false, reason: 'snapshot bytes unavailable' };
+  if (snapshotBase64 === undefined) return { ok: false, reason: msg('editorCheck.bytesUnavailable') };
   let bytes: Uint8Array;
   try {
     bytes = decodeBase64(snapshotBase64);
   } catch {
-    return { ok: false, reason: 'snapshot bytes unreadable' };
+    return { ok: false, reason: msg('editorCheck.bytesUnreadable') };
   }
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return { ok: false, reason: 'byte order mark present' };
+    return { ok: false, reason: msg('editorCheck.bomPresent') };
   }
   let text: string;
   try {
     text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
-    return { ok: false, reason: 'bytes are not valid UTF-8' };
+    return { ok: false, reason: msg('editorCheck.notUtf8') };
   }
   if (!sameBytes(utf8Bytes(text), bytes)) {
-    return { ok: false, reason: 'UTF-8 round trip changes the bytes' };
+    return { ok: false, reason: msg('editorCheck.roundTrip') };
   }
   if ((await sha256Hex(bytes)) !== ref.digest) {
-    return { ok: false, reason: 'bytes do not match the declared digest' };
+    return { ok: false, reason: msg('editorCheck.digestMismatch') };
   }
   const handle = Object.freeze({}) as PinnedBase;
   pinned.set(handle, { artifactId: ref.id, mediaType: ref.mediaType, digest: ref.digest, text });
@@ -147,9 +148,9 @@ export async function markServedAfterLoad(
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /** Body must encode to UTF-8 losslessly and without a BOM. Structure, not content. */
-export function bodyEncodingProblem(body: string): string | null {
-  if (body.startsWith('\uFEFF')) return 'body starts with a byte order mark (U+FEFF)';
-  if (LONE_SURROGATE.test(body)) return 'body contains an unpaired surrogate (not encodable as UTF-8)';
+export function bodyEncodingProblem(body: string): Msg | null {
+  if (body.startsWith('\uFEFF')) return msg('editorCheck.bodyBom');
+  if (LONE_SURROGATE.test(body)) return msg('editorCheck.bodySurrogate');
   return null;
 }
 
@@ -162,28 +163,28 @@ export interface EditContext {
  * Send-boundary recheck against the current projection. UI disabling is not
  * the boundary; this runs at send and a failure keeps the entry composing.
  */
-export function checkEditSend(buffer: EditBuffer, ctx: EditContext): string | null {
+export function checkEditSend(buffer: EditBuffer, ctx: EditContext): Msg | null {
   const cap = ctx.capability;
-  if (!cap) return 'edit capability is no longer declared';
-  if (cap.level !== 'enabled') return `edit capability is ${cap.level}`;
-  if (!cap.edit) return 'capability declares no edit slot';
-  if (cap.edit.artifactId === null) return 'new-body editing is not supported';
-  if (buffer.baseArtifactId !== cap.edit.artifactId) return 'edit target changed';
+  if (!cap) return msg('editorCheck.capGone');
+  if (cap.level !== 'enabled') return msg('editorCheck.capLevel', { level: cap.level });
+  if (!cap.edit) return msg('editorCheck.noEditSlot');
+  if (cap.edit.artifactId === null) return msg('editorCheck.newBodyUnsupported');
+  if (buffer.baseArtifactId !== cap.edit.artifactId) return msg('editorCheck.targetChanged');
   if (!cap.edit.mediaTypes.includes(buffer.mediaType)) {
-    return `media type ${buffer.mediaType} is not declared editable`;
+    return msg('editorCheck.mediaTypeNotEditable', { mediaType: buffer.mediaType });
   }
   const record = displayRecord(buffer.display);
-  if (!record) return 'base was never displayed';
-  if (record.artifactId !== buffer.baseArtifactId) return 'display record is for another artifact';
-  if (record.mediaType !== buffer.mediaType) return 'buffer media type differs from the displayed base';
+  if (!record) return msg('editorCheck.neverDisplayed');
+  if (record.artifactId !== buffer.baseArtifactId) return msg('editorCheck.recordOtherArtifact');
+  if (record.mediaType !== buffer.mediaType) return msg('editorCheck.bufferMediaType');
   const current = ctx.artifact;
-  if (!current) return 'base artifact is no longer in the projection';
-  if (current.access.kind !== 'snapshot') return 'base artifact is no longer a snapshot';
-  if (current.id !== record.artifactId) return 'base artifact id differs from the displayed base';
-  if (current.mediaType !== record.mediaType) return 'base media type differs from the displayed base';
-  if (current.digest !== record.digest) return 'base changed since it was displayed';
+  if (!current) return msg('editorCheck.baseGone');
+  if (current.access.kind !== 'snapshot') return msg('editorCheck.baseNotSnapshot');
+  if (current.id !== record.artifactId) return msg('editorCheck.baseIdDiffers');
+  if (current.mediaType !== record.mediaType) return msg('editorCheck.baseMediaType');
+  if (current.digest !== record.digest) return msg('editorCheck.baseChanged');
   const bytes = utf8Bytes(buffer.body).length;
-  if (bytes > cap.edit.maxBytes) return `body is ${bytes} bytes, limit ${cap.edit.maxBytes}`;
+  if (bytes > cap.edit.maxBytes) return msgN('editorCheck.overLimit', bytes, { max: cap.edit.maxBytes });
   return bodyEncodingProblem(buffer.body);
 }
 
@@ -193,7 +194,7 @@ export interface EditorSendState {
   overLimit: boolean;
   /** A based edit without a display record cannot be sent. */
   undisplayed: boolean;
-  encodingProblem: string | null;
+  encodingProblem: Msg | null;
   /** Base had CRLF line endings the buffer no longer has (textarea normalization). Shown, not blocked. */
   lineEndingsConverted: boolean;
   /** Projection digest of the base artifact ≠ the buffer's base digest. */

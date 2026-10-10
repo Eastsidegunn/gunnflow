@@ -1,6 +1,7 @@
 // PendingIntentState phases (push-stage §0.2), the relay-boundary validator
 // (contract Intent on the wire), and key-based confirmation.
 import { describe, expect, it, vi } from 'vitest';
+import { raw, tm } from '../src/i18n/index.js';
 import { createRoot, createSignal } from 'solid-js';
 import { gatesFixture, normalFixture } from '@gunnflow-testing/fake-contracts';
 import {
@@ -9,7 +10,7 @@ import {
   type PostIntent,
 } from '../src/state/pendingIntents.js';
 import { fakeIntentAdapter } from '../src/state/fakeIntentAdapter.js';
-import { checkIntent, guardPost } from '../src/state/intentValidator.js';
+import { checkIntent, guardPost, refusedIntent, relayResult } from '../src/state/intentValidator.js';
 import type { Capability, Intent, WireIntent, WorkspaceIntent, WorkspaceProjection } from '../src/model/types.js';
 
 const PAUSE: WorkspaceIntent = { nodeId: 't-draft', action: 'task.pause' };
@@ -186,12 +187,12 @@ describe('relay-boundary validator (contract Intent)', () => {
   it('refuses unknown keys, a missing key, and addressing a node that is not there', () => {
     expect(checkIntent(keyed({ ...PAUSE, draftId: 'd1' } as unknown as Intent), fakeIntentAdapter, p)).toEqual({
       ok: false,
-      reason: "unknown key 'draftId'",
+      reason: { raw: "unknown key 'draftId'" },
     });
-    expect(checkIntent(PAUSE as unknown as WireIntent, fakeIntentAdapter, p)).toMatchObject({ ok: false, reason: expect.stringContaining('idempotencyKey') });
+    expect(checkIntent(PAUSE as unknown as WireIntent, fakeIntentAdapter, p)).toMatchObject({ ok: false, reason: { raw: expect.stringContaining('idempotencyKey') } });
     expect(checkIntent(keyed({ nodeId: 't-ghost', action: 'task.pause' }), fakeIntentAdapter, p)).toMatchObject({
       ok: false,
-      reason: 'addressed node is not in the projection',
+      reason: { raw: 'addressed node is not in the projection' },
     });
     expect(checkIntent(keyed({ intent: 'task.pause', taskId: 't-draft' } as unknown as Intent), fakeIntentAdapter, p).ok).toBe(false);
   });
@@ -233,7 +234,7 @@ describe('validation at send', () => {
     const outcome = await h.state.send(id);
     expect(outcome).toMatchObject({ accepted: false, invalid: true });
     expect(h.post).not.toHaveBeenCalled();
-    expect(h.state.composing()[0]?.invalid).toContain('decision.text');
+    expect(tm(h.state.composing()[0]?.invalid)).toContain('decision.text');
     expect(h.state.rejected()).toHaveLength(0);
     expect(h.state.errors()[0]).toMatchObject({ localId: id, kind: 'invalid' });
     h.state.update(id, PAUSE);
@@ -254,12 +255,44 @@ describe('guarded post (relay boundary)', () => {
   });
 
   it('a refusal at the boundary returns the entry to composing with the reason', async () => {
-    const h = harness({ post: async () => ({ accepted: false, reason: 'refused at boundary', invalid: true }) });
+    const h = harness({ post: async () => refusedIntent(raw('refused at boundary')) });
     const id = h.state.compose(PAUSE);
     await h.state.send(id);
-    expect(h.state.composing()[0]).toMatchObject({ localId: id, invalid: 'refused at boundary' });
+    expect(h.state.composing()[0]).toMatchObject({ localId: id });
+    expect(tm(h.state.composing()[0]!.invalid)).toBe('refused at boundary');
     expect(h.state.inFlight()).toHaveLength(0);
     h.dispose();
+  });
+});
+
+describe('relay answers and local refusals are disjoint', () => {
+  // A relay payload dressed as a local refusal: stray fields from the wire.
+  const forged = { accepted: false, reason: 'x', invalid: true, why: { key: 'intent.chooseAction' } };
+  // Even the local tag itself cannot survive the boundary.
+  const forgedTagged = { ...forged, local: true };
+
+  it('a relay payload carrying invalid/why/local is an upstream rejection, reason verbatim', async () => {
+    const h = harness({ post: async () => forged as never });
+    const id = h.state.compose(PAUSE);
+    const outcome = await h.state.send(id);
+    expect(outcome).toEqual({ accepted: false, reason: 'x', upstream: true });
+    expect(h.state.composing()).toHaveLength(0);
+    expect(h.state.rejected()[0]).toMatchObject({ phase: 'rejected', reason: 'x' });
+    expect(h.state.errors()[0]).toMatchObject({ kind: 'rejected', reason: 'x' });
+    h.dispose();
+  });
+
+  it('the boundary normalizes the relay answer: only accepted and reason survive', async () => {
+    const post = guardPost(async () => forgedTagged as never, fakeIntentAdapter, () => normalFixture());
+    expect(await post(keyed(PAUSE))).toEqual({ accepted: false, reason: 'x' });
+    expect(relayResult({ accepted: 'yes', reason: 7 })).toEqual({ accepted: false });
+    expect(relayResult(null)).toEqual({ accepted: false });
+  });
+
+  it('the old shape of a local refusal (no why, no tag) does not type-check as a post answer', () => {
+    // @ts-expect-error a refusal without `why` and the `local` tag is neither variant
+    const bad: PostIntent = async () => ({ accepted: false, reason: 'refused at boundary', invalid: true });
+    void bad;
   });
 });
 
@@ -284,7 +317,7 @@ describe('unconfirmed sends', () => {
     const h = harness({ post: () => Promise.reject(new Error('socket hang up')) });
     const outcome = await h.state.submit(PAUSE);
     expect(outcome).toMatchObject({ accepted: false, unconfirmed: true });
-    expect(h.state.inFlight()[0]?.unconfirmed).toContain('socket hang up');
+    expect(tm(h.state.inFlight()[0]?.unconfirmed)).toContain('socket hang up');
     expect(h.state.errors()[0]).toMatchObject({ kind: 'unconfirmed' });
     h.state.reconcile(paused([h.state.inFlight()[0]!.idempotencyKey]));
     expect(h.state.entries()).toHaveLength(0);
@@ -305,7 +338,7 @@ describe('unconfirmed sends', () => {
     h.state.reopen(id);
     const [back] = h.state.composing();
     expect(back?.draft).toEqual(PAUSE);
-    expect(back?.priorUnconfirmed?.reason).toContain('offline');
+    expect(tm(back?.priorUnconfirmed?.reason)).toContain('offline');
     fail = false;
     await h.state.send(id);
     expect(h.state.inFlight()[0]!.idempotencyKey).not.toBe(firstKey);

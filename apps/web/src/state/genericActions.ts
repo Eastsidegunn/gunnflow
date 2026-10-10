@@ -5,20 +5,23 @@
  * met). No risk tiers, no action lists, no cockpit mode.
  */
 import type { ResolvedAction } from '../canvas/parts.js';
+import { t } from '../i18n/index.js';
 
-export type ActionGate = { runnable: true } | { runnable: false; reason: string };
+/** Why an action cannot run: `code` is stable for logic; `reason` is display text (current locale, or received). */
+export type ActionGateCode = 'upstream' | 'fallback' | 'blocked' | 'needsInput';
+export type ActionGate = { runnable: true } | { runnable: false; reason: string; code: ActionGateCode };
 
 export function actionGate(action: ResolvedAction, preconditionsMet = true): ActionGate {
-  if (action.level !== 'enabled') return { runnable: false, reason: 'disabled by upstream' };
-  if (action.kind === 'fallback' && !action.usable) return { runnable: false, reason: action.reason ?? 'needs more than a click' };
-  if (action.kind === 'assembled' && action.blocked) return { runnable: false, reason: action.blocked };
-  if (!preconditionsMet) return { runnable: false, reason: 'fill in what this action requires' };
+  if (action.level !== 'enabled') return { runnable: false, reason: t('action.disabledByUpstream'), code: 'upstream' };
+  if (action.kind === 'fallback' && !action.usable) return { runnable: false, reason: action.reason ?? t('action.needsMoreThanClick'), code: 'fallback' };
+  if (action.kind === 'assembled' && action.blocked) return { runnable: false, reason: action.blocked, code: 'blocked' };
+  if (!preconditionsMet) return { runnable: false, reason: t('action.fillIn'), code: 'needsInput' };
   return { runnable: true };
 }
 
 /** Opening the panel for an action: the level gates it; what it requires is collected there. */
 export function openGate(action: ResolvedAction): ActionGate {
-  if (action.level !== 'enabled') return { runnable: false, reason: 'disabled by upstream' };
+  if (action.level !== 'enabled') return { runnable: false, reason: t('action.disabledByUpstream'), code: 'upstream' };
   return { runnable: true };
 }
 

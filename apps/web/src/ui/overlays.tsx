@@ -4,6 +4,7 @@ import type { WorkspaceStores } from '../state/stores.js';
 import { interruptNodes } from '../state/attention.js';
 import { escStack } from '../state/escStack.js';
 import type { EntryError } from '../state/pendingIntents.js';
+import { t } from '../i18n/index.js';
 
 /** Charter §19.4 — quiet first-run, no onboarding dashboard. */
 export function EmptyState(props: {
@@ -13,7 +14,7 @@ export function EmptyState(props: {
   const [name, setName] = createSignal('');
   return (
     <div class="empty-state" data-testid="empty-state">
-      <h1>What are we working on?</h1>
+      <h1>{t('overlay.emptyTitle')}</h1>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -22,12 +23,12 @@ export function EmptyState(props: {
       >
         <input
           data-testid="mission-name"
-          placeholder="Describe the mission…"
+          placeholder={t('overlay.missionPlaceholder')}
           value={name()}
           onInput={(e) => setName(e.currentTarget.value)}
         />
         <button type="submit" data-testid="start-mission" disabled={!name().trim()}>
-          + Start a mission
+          {t('overlay.startMission')}
         </button>
       </form>
     </div>
@@ -52,26 +53,26 @@ export function RelayErrorToasts(props: { stores: WorkspaceStores }) {
           <div class="toast" data-testid="relay-error" data-kind={err.kind}>
             <span>
               <Show when={err.kind === 'invalid'}>
-                <span class="toast-chrome">Not sent — </span>
+                <span class="toast-chrome">{t('overlay.notSent')} — </span>
               </Show>
               <Show when={err.kind === 'unconfirmed'}>
-                <span class="toast-chrome">Delivery unconfirmed (may have reached upstream) — </span>
+                <span class="toast-chrome">{t('overlay.unconfirmed')} — </span>
               </Show>
               <Show when={err.kind === 'rejected' && err.afterReconcile}>
-                <span class="toast-chrome">Rejected after it appeared applied — </span>
+                <span class="toast-chrome">{t('overlay.rejectedAfterApplied')} — </span>
               </Show>
-              <Show when={err.reason !== undefined} fallback={<span class="toast-chrome">No reason given</span>}>
+              <Show when={err.reason !== undefined} fallback={<span class="toast-chrome">{t('overlay.noReason')}</span>}>
                 {err.reason}
               </Show>
             </span>
             <Show when={err.kind !== 'invalid'}>
               <button data-testid="relay-error-restore" onClick={() => pendingIntents.reopen(err.localId)}>
-                Restore
+                {t('overlay.restore')}
               </button>
             </Show>
             <button
               onClick={() => setHidden((s) => new Set([...s, keyOf(err)]))}
-              aria-label="Dismiss"
+              aria-label={t('overlay.dismiss')}
             >
               ✕
             </button>
@@ -98,18 +99,17 @@ export function SurfacePlaceholder(props: {
           <div class="modal" data-testid="surface-placeholder" role="dialog" onClick={(e) => e.stopPropagation()}>
             <h2>{label(s().surface)}</h2>
             <p>
-              Target: <code>{s().id}</code>
+              {t('overlay.target')} <code>{s().id}</code>
             </p>
             <Show when={s().surface.startsWith('privileged:')}>
               <p class="privileged-note" data-testid="privileged-note">
-                Privileged intervention — requires impact explanation, a reason, and
-                confirmation. This flow is a later surface; nothing was executed.
+                {t('overlay.privilegedNote')}
               </p>
             </Show>
             <Show when={!s().surface.startsWith('privileged:')}>
-              <p class="hint">This surface is a later milestone. (Entry point only.)</p>
+              <p class="hint">{t('overlay.laterMilestone')}</p>
             </Show>
-            <button onClick={props.onClose}>Close</button>
+            <button onClick={props.onClose}>{t('overlay.close')}</button>
           </div>
         </div>
       )}
@@ -118,12 +118,12 @@ export function SurfacePlaceholder(props: {
 }
 
 function label(surface: string): string {
-  if (surface === 'inspector') return 'Inspector (L1)';
-  if (surface === 'execution') return 'Execution (L2)';
-  if (surface === 'terminal') return 'Live Terminal (#4)';
-  if (surface === 'approval') return 'Approval';
-  if (surface === 'deliverable') return 'Deliverable View';
-  if (surface.startsWith('privileged:')) return 'Privileged flow entry';
+  if (surface === 'inspector') return t('overlay.surface.inspector');
+  if (surface === 'execution') return t('overlay.surface.execution');
+  if (surface === 'terminal') return t('overlay.surface.terminal');
+  if (surface === 'approval') return t('overlay.surface.approval');
+  if (surface === 'deliverable') return t('overlay.surface.deliverable');
+  if (surface.startsWith('privileged:')) return t('overlay.surface.privileged');
   return surface;
 }
 
@@ -165,7 +165,7 @@ export function NotificationCenter(props: { stores: WorkspaceStores; onGo: (id: 
       <button
         data-testid="notifications-toggle"
         aria-expanded={open()}
-        aria-label={`Notifications: ${current().size} needing you`}
+        aria-label={t('overlay.notificationsLabel', { count: current().size })}
         classList={{ alerting: current().size > 0 }}
         onClick={() => setOpen(!open())}
       >
@@ -175,14 +175,14 @@ export function NotificationCenter(props: { stores: WorkspaceStores; onGo: (id: 
         </Show>
       </button>
       <Show when={open()}>
-        <div class="notifications-panel" data-testid="notifications-panel" role="dialog" aria-label="Notifications">
-          <Show when={current().size > 0} fallback={<p class="hint">Nothing needs you right now.</p>}>
+        <div class="notifications-panel" data-testid="notifications-panel" role="dialog" aria-label={t('overlay.notifications')}>
+          <Show when={current().size > 0} fallback={<p class="hint">{t('overlay.nothingNeedsYou')}</p>}>
             <For each={[...current()]}>
               {([id, label]) => (
                 <div class="notification-row" data-testid={`notification-${id}`}>
                   <span class="notification-label">⚠ {label}</span>
                   <button data-testid={`notification-go-${id}`} onClick={() => { props.onGo(id); setOpen(false); }}>
-                    Go to node
+                    {t('overlay.goToNode')}
                   </button>
                 </div>
               )}

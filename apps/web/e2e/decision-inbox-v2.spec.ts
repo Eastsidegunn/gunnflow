@@ -81,9 +81,9 @@ test('groups: the toggle counts per group; interrupt groups open, the ambient gr
   await expect(page.getByTestId('decision-inbox-groups')).toHaveText('Decide 1 · Do 2 · Check 1');
   // The total beside the groups: nodes with an interrupt-mapped cause (the ambient Check row is not counted).
   await expect(page.getByTestId('decision-inbox-total')).toHaveText('3');
-  await expect(toggle).toHaveAttribute('aria-label', '결정함: 3 (Decide 1 · Do 2 · Check 1)');
+  await expect(toggle).toHaveAttribute('aria-label', 'Decisions: 3 (Decide 1 · Do 2 · Check 1)');
   // This upstream sends its own count (one waiting gate): the strip shows that, not the inbox total.
-  await expect(page.getByTestId('strip-needsyou')).toHaveText('◆ 1 need you');
+  await expect(page.getByTestId('strip-needsyou')).toHaveText('◆ 1 needs you');
   await expect(page.getByTestId('strip-needsyou')).toHaveAttribute('data-source', 'received');
   await expect(page.getByTestId('decision-inbox-group-0')).toHaveAttribute('data-mechanism', 'interrupt');
   await expect(page.getByTestId('decision-inbox-group-1')).toHaveAttribute('data-mechanism', 'interrupt');
@@ -113,8 +113,8 @@ test('groups: the toggle counts per group; interrupt groups open, the ambient gr
   await expect(page.getByTestId('inbox-row-c-publish')).toHaveAttribute('data-selected', 'yes');
 
   // Waiting time from the received attention.since (fixed simulator clock: days ago).
-  await expect(page.getByTestId('inbox-since-c-publish')).toHaveText(/ · \d+일 전$/);
-  await expect(page.getByTestId('inbox-detail-since')).toHaveText(/\d+일 전$/);
+  await expect(page.getByTestId('inbox-since-c-publish')).toHaveText(/ · \d+d ago$/);
+  await expect(page.getByTestId('inbox-detail-since')).toHaveText(/\d+d ago$/);
 });
 
 test('action bar: config labels, primary first, required reason expands in place, optional primary note inline', async ({ page }) => {
@@ -128,13 +128,13 @@ test('action bar: config labels, primary first, required reason expands in place
   const approve = page.getByTestId('generic-send-gate.approve');
   await expect(approve).toHaveText('Approve');
   await expect(approve).toHaveClass(/primary/);
-  await expect(page.getByTestId('generic-text-gate.approve')).toHaveAttribute('placeholder', 'Approve 메모 (선택)');
+  await expect(page.getByTestId('generic-text-gate.approve')).toHaveAttribute('placeholder', 'Approve note (optional)');
   // No label in the config: the raw action name. Its optional reason is not the inline one,
   // so the button opens an expand-in-place form (it never sends a text it does not show).
   await expect(page.getByTestId('generic-open-gate.reject')).toHaveText('gate.reject');
   await expect(page.getByTestId('generic-send-gate.reject')).toHaveCount(0);
   await page.getByTestId('generic-open-gate.reject').click();
-  await expect(page.getByTestId('generic-text-gate.reject')).toHaveAttribute('placeholder', 'gate.reject 사유 (선택)');
+  await expect(page.getByTestId('generic-text-gate.reject')).toHaveAttribute('placeholder', 'gate.reject reason (optional)');
   // Optional: 보내기 runs with the field empty.
   await expect(page.getByTestId('generic-send-gate.reject')).toBeEnabled();
   await page.getByTestId('generic-cancel-gate.reject').click();
@@ -147,9 +147,9 @@ test('action bar: config labels, primary first, required reason expands in place
   const field = page.getByTestId('action-expand-gate.requestChanges');
   await expect(field).toBeVisible();
   const reason = page.getByTestId('generic-text-gate.requestChanges');
-  await expect(reason).toHaveAttribute('placeholder', 'Request changes 사유');
+  await expect(reason).toHaveAttribute('placeholder', 'Request changes reason');
   const sendReason = page.getByTestId('generic-send-gate.requestChanges');
-  await expect(sendReason).toHaveText('보내기');
+  await expect(sendReason).toHaveText('Send');
   await expect(sendReason).toBeDisabled();
   await reason.fill('Tighten the headline first.');
   await expect(sendReason).toBeEnabled();
@@ -166,9 +166,9 @@ test('action bar: config labels, primary first, required reason expands in place
   await expect(done).toHaveText('Report done');
   await expect(done).toHaveClass(/primary/);
   await expect(done).toBeEnabled();
-  await expect(page.getByTestId('generic-text-chore.done')).toHaveAttribute('placeholder', 'Report done 메모 (선택)');
+  await expect(page.getByTestId('generic-text-chore.done')).toHaveAttribute('placeholder', 'Report done note (optional)');
   await page.getByTestId('generic-open-chore.cannot').click();
-  await expect(page.getByTestId('generic-text-chore.cannot')).toHaveAttribute('placeholder', 'Cannot do 사유');
+  await expect(page.getByTestId('generic-text-chore.cannot')).toHaveAttribute('placeholder', 'Cannot do reason');
 });
 
 test('copy box: line numbers, visible line-feed marker, copy writes the exact bytes and states lines/bytes', async ({ page }) => {
@@ -190,12 +190,12 @@ test('copy box: line numbers, visible line-feed marker, copy writes the exact by
   await expect(eol).toHaveAttribute('data-mark', '⏎');
   // The box holds exactly the received string (markers are drawn, not inserted).
   expect(await page.getByTestId('copy-box-2-code').evaluate((el) => el.textContent)).toBe(COMMAND);
-  await expect(box).toContainText('Gunnflow는 명령을 실행하지 않습니다 — 터미널에서 실행하세요');
+  await expect(box).toContainText('Gunnflow does not run commands — run it in your terminal');
 
   const copy = page.getByTestId('copy-box-2-copy');
-  await expect(copy).toHaveText('복사');
+  await expect(copy).toHaveText('Copy');
   await copy.click();
-  await expect(copy).toHaveText('✓ 복사됨 · 2줄 · 67바이트');
+  await expect(copy).toHaveText('✓ Copied · 2 lines · 67 bytes');
   expect(await page.evaluate(() => (window as unknown as { __clipboardWrites: string[] }).__clipboardWrites)).toEqual([COMMAND]);
 
   // The configured label folds (folded, never hidden): one line that opens in place.
@@ -212,8 +212,8 @@ test('copy box: a refused clipboard says so and selects the text', async ({ page
   await page.getByTestId('decision-inbox-toggle').click();
   await page.getByTestId('inbox-row-c-publish').click();
   await page.getByTestId('copy-box-2-copy').click();
-  await expect(page.getByTestId('copy-box-2-failed')).toHaveText('복사 실패 — 직접 선택해 복사하세요');
-  await expect(page.getByTestId('copy-box-2-copy')).toHaveText('복사');
+  await expect(page.getByTestId('copy-box-2-failed')).toHaveText('Copy failed — select the text and copy it yourself');
+  await expect(page.getByTestId('copy-box-2-copy')).toHaveText('Copy');
   expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe(COMMAND);
 });
 
@@ -222,7 +222,7 @@ test('no declared action: the Korean notice instead of buttons', async ({ page }
   await page.getByTestId('decision-inbox-toggle').click();
   await page.getByTestId('inbox-row-c-silent').click();
   await expect(page.getByTestId('inbox-detail-title')).toHaveText('Look at the shared drive');
-  await expect(page.getByTestId('no-actions')).toHaveText('이 항목에 상류가 선언한 행동이 없습니다');
+  await expect(page.getByTestId('no-actions')).toHaveText('Upstream declares no actions for this item');
   await expect(page.getByTestId('action-bar')).toHaveCount(0);
 });
 

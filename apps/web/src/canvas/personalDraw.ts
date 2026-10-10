@@ -10,6 +10,7 @@ import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import type { LinkEnd, PersonalBox, PersonalDoc, PersonalSticky } from '../personal/schema.js';
 import type { Camera } from '../state/viewState.js';
 import { PERSONAL_STYLE } from './tokens.js';
+import { msg, t, tn } from '../i18n/index.js';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 export const RESIZE_HANDLE = 12;
@@ -81,8 +82,8 @@ function drawBox(ctx: CanvasRenderingContext2D, b: PersonalBox, open: boolean, n
   ctx.stroke();
   // Header chip: the box's label, marked personal.
   ctx.font = DEFAULT_THEME.fonts.personalHeader;
-  const label = `▢ ${b.label || '(untitled)'}`;
-  const tag = ` · ${PERSONAL_STYLE.label}`;
+  const label = `▢ ${b.label || t('personal.untitled')}`;
+  const tag = ` · ${t('personal.tag')}`;
   const textW = Math.min(b.w - 16, ctx.measureText(label).width + ctx.measureText(tag).width + 16);
   ctx.fillStyle = PERSONAL_STYLE.chip;
   ctx.fillRect(b.x, b.y, textW, 24);
@@ -96,7 +97,7 @@ function drawBox(ctx: CanvasRenderingContext2D, b: PersonalBox, open: boolean, n
     const missing = b.members.filter((m) => !nodeRect(m)).length;
     ctx.font = DEFAULT_THEME.fonts.personalMeta;
     ctx.fillStyle = PERSONAL_STYLE.color;
-    const info = `${b.members.length} filed${missing > 0 ? ` · ${missing} missing` : ''}`;
+    const info = `${tn('personal.filed', b.members.length)}${missing > 0 ? ` · ${tn('personal.missing', missing)}` : ''}`;
     ctx.fillText(info, b.x + b.w - ctx.measureText(info).width - 10, b.y + 16);
   }
   handle(ctx, b);
@@ -123,10 +124,10 @@ function drawSticky(ctx: CanvasRenderingContext2D, s: PersonalSticky, open: bool
   ctx.stroke();
   ctx.fillStyle = PERSONAL_STYLE.color;
   ctx.font = DEFAULT_THEME.fonts.personalChip;
-  ctx.fillText(s.kind === 'mermaid' ? `◇ diagram · ${PERSONAL_STYLE.label}` : `✎ ${PERSONAL_STYLE.label}`, s.x + 10, s.y + 14);
+  ctx.fillText(s.kind === 'mermaid' ? `◇ ${t('personal.diagramTag')} · ${t('personal.tag')}` : `✎ ${t('personal.tag')}`, s.x + 10, s.y + 14);
   if (s.kind === 'mermaid') {
     const area = { x: s.x + 6, y: s.y + DIAGRAM_HEADER, w: s.w - 12, h: s.h - DIAGRAM_HEADER - 6 };
-    const entry = s.text.trim() ? diagram(s.text) : ({ state: 'error', reason: 'empty diagram source' } as DiagramEntry);
+    const entry = s.text.trim() ? diagram(s.text) : ({ state: 'error', reason: msg('personal.diagram.emptySource') } as DiagramEntry);
     if (entry.state === 'ok' && entry.image && entry.width > 0) {
       ctx.fillStyle = DEFAULT_THEME.canvas.paper;
       ctx.fillRect(area.x, area.y, area.w, area.h);
@@ -139,10 +140,10 @@ function drawSticky(ctx: CanvasRenderingContext2D, s: PersonalSticky, open: bool
       ctx.fillStyle = PERSONAL_STYLE.text;
       const lines =
         entry.state === 'pending'
-          ? ['rendering…']
+          ? [t('personal.diagram.rendering')]
           : entry.state === 'error'
-            ? [`Renderer unavailable — ${entry.reason}`, ...s.text.split('\n')]
-            : ['rendering…'];
+            ? [t('personal.diagram.unavailable', { reason: entry.reason }), ...s.text.split('\n')]
+            : [t('personal.diagram.rendering')];
       wrap(ctx, lines.join('\n'), area.w - 8, Math.max(1, Math.floor(area.h / 15))).forEach((line, i) =>
         ctx.fillText(line, area.x + 4, area.y + 14 + i * 15),
       );
@@ -150,7 +151,7 @@ function drawSticky(ctx: CanvasRenderingContext2D, s: PersonalSticky, open: bool
   } else {
     ctx.fillStyle = PERSONAL_STYLE.text;
     ctx.font = DEFAULT_THEME.fonts.personalBody;
-    const lines = wrap(ctx, s.text || '(empty)', s.w - 20, Math.max(1, Math.floor((s.h - 30) / 15)));
+    const lines = wrap(ctx, s.text || t('personal.empty'), s.w - 20, Math.max(1, Math.floor((s.h - 30) / 15)));
     lines.forEach((line, i) => ctx.fillText(line, s.x + 10, s.y + 34 + i * 15));
   }
   handle(ctx, s);
@@ -209,7 +210,7 @@ function drawLinks(ctx: CanvasRenderingContext2D, input: PersonalDrawInput) {
       ctx.lineTo(end.x - 6, end.y + 6);
       ctx.stroke();
       ctx.font = DEFAULT_THEME.fonts.pendingLabel;
-      ctx.fillText('node gone', end.x + 10, end.y + 4);
+      ctx.fillText(t('personal.link.nodeGone'), end.x + 10, end.y + 4);
     }
   }
 }

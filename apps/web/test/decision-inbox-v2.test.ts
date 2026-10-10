@@ -1,11 +1,12 @@
 // 결정함 v2 pure logic: display groups from wiring data (never a reading of a
 // cause or group name), waiting time from the received `since`, the
 // exact-bytes copy box tokenization, and the inbox-aside camera framing.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocale } from '../src/i18n/index.js';
 import type { NodeProjection } from '@gunnflow/contract';
 import { WIRING_SCHEMA_VERSION, type WiringConfig } from '@gunnflow/contract/wiring';
 import {
-  DEFAULT_GROUP_NAME,
+  defaultGroupName,
   configGroups,
   groupKey,
   groupName,
@@ -321,7 +322,8 @@ describe('display groups (wiring attention[].group)', () => {
 
   it('names, fold keys and starting folds: interrupt open, ambient folded', () => {
     expect(groupName({ name: 'C', mechanism: 'ambient' })).toBe('C');
-    expect(groupName({ name: null, mechanism: 'ambient' })).toBe(DEFAULT_GROUP_NAME);
+    expect(groupName({ name: null, mechanism: 'ambient' })).toBe(defaultGroupName());
+    expect(defaultGroupName()).toBe('Other');
     expect(groupKey({ name: null, mechanism: 'ambient' })).not.toBe(groupKey({ name: 'default', mechanism: 'ambient' }));
     expect(groupStartsOpen({ name: 'A', mechanism: 'interrupt' })).toBe(true);
     expect(groupStartsOpen({ name: 'C', mechanism: 'ambient' })).toBe(false);
@@ -344,7 +346,21 @@ describe('waiting time (attention.since)', () => {
   const NOW = Date.parse('2026-10-08T12:00:00Z');
   const ago = (ms: number) => new Date(NOW - ms).toISOString();
 
-  it('relative steps: 방금 / n분 전 / n시간 전 / n일 전', () => {
+  afterEach(() => setLocale('en', { persist: false }));
+
+  it('relative steps (en): just now / nm ago / nh ago / nd ago', () => {
+    expect(relativeSince(ago(0), NOW)).toBe('just now');
+    expect(relativeSince(ago(59_999), NOW)).toBe('just now');
+    expect(relativeSince(ago(60_000), NOW)).toBe('1m ago');
+    expect(relativeSince(ago(59 * 60_000 + 59_000), NOW)).toBe('59m ago');
+    expect(relativeSince(ago(60 * 60_000), NOW)).toBe('1h ago');
+    expect(relativeSince(ago(23 * 3_600_000 + 59 * 60_000), NOW)).toBe('23h ago');
+    expect(relativeSince(ago(24 * 3_600_000), NOW)).toBe('1d ago');
+    expect(relativeSince(ago(10 * 86_400_000), NOW)).toBe('10d ago');
+  });
+
+  it('relative steps (ko): 방금 / n분 전 / n시간 전 / n일 전', () => {
+    setLocale('ko', { persist: false });
     expect(relativeSince(ago(0), NOW)).toBe('방금');
     expect(relativeSince(ago(59_999), NOW)).toBe('방금');
     expect(relativeSince(ago(60_000), NOW)).toBe('1분 전');
@@ -356,8 +372,8 @@ describe('waiting time (attention.since)', () => {
     expect(relativeSince(ago(10 * 86_400_000), NOW)).toBe('10일 전');
   });
 
-  it('a future time reads as 방금; absent or unparseable shows nothing', () => {
-    expect(relativeSince(ago(-120_000), NOW)).toBe('방금');
+  it('a future time reads as just now; absent or unparseable shows nothing', () => {
+    expect(relativeSince(ago(-120_000), NOW)).toBe('just now');
     expect(relativeSince(undefined, NOW)).toBeNull();
     expect(relativeSince('not a time', NOW)).toBeNull();
     expect(relativeSince('', NOW)).toBeNull();
@@ -396,7 +412,7 @@ describe('copy box: exact bytes, invisible characters made visible', () => {
     expect(lines[1]!.tokens).toEqual([{ kind: 'text', raw: 'npm publish packages/contract/gunnflow-contract-0.3.2.tgz --access public' }]);
     expect(lineCount(cmd)).toBe(2);
     expect(utf8Bytes(cmd)).toBe(83);
-    expect(copiedStatement(cmd)).toBe('✓ 복사됨 · 2줄 · 83바이트');
+    expect(copiedStatement(cmd)).toBe('✓ Copied · 2 lines · 83 bytes');
     roundTrip(cmd);
   });
 
@@ -404,7 +420,11 @@ describe('copy box: exact bytes, invisible characters made visible', () => {
     expect(tokenizeCopyText('')).toEqual([]);
     expect(lineCount('')).toBe(0);
     expect(utf8Bytes('')).toBe(0);
-    expect(copiedStatement('')).toBe('✓ 복사됨 · 0줄 · 0바이트');
+    expect(copiedStatement('')).toBe('✓ Copied · 0 lines · 0 bytes');
+    setLocale('ko', { persist: false });
+    expect(copiedStatement('a')).toBe('✓ 복사됨 · 1줄 · 1바이트');
+    setLocale('en', { persist: false });
+    expect(copiedStatement('a')).toBe('✓ Copied · 1 line · 1 byte');
   });
 
   it('line counting: a trailing line feed opens no new line; blank lines count', () => {
@@ -505,7 +525,7 @@ describe('copy box: exact bytes, invisible characters made visible', () => {
     expect(utf8Bytes(String.fromCodePoint(0xfeff))).toBe(3);
     expect(utf8Bytes(String.fromCodePoint(0))).toBe(1);
     expect(utf8Bytes('\r\n')).toBe(2);
-    expect(copiedStatement('배포\n완료 😀\n')).toBe('✓ 복사됨 · 2줄 · 19바이트'); // 6 + 1 + 6 + 1 + 4 + 1
+    expect(copiedStatement('배포\n완료 😀\n')).toBe('✓ Copied · 2 lines · 19 bytes'); // 6 + 1 + 6 + 1 + 4 + 1
   });
 
   it('round-trips arbitrary mixtures exactly (the copy writes what the box shows)', () => {

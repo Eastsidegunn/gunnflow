@@ -23,6 +23,7 @@ import { actionGate, opensPanel } from '../state/genericActions.js';
 import { workspaceRoot } from '../state/workspaceRoot.js';
 import { manageFocus, focusables } from './focusScope.js';
 import { escStack } from '../state/escStack.js';
+import { t } from '../i18n/index.js';
 
 export type ContextTarget =
   | { kind: 'empty' }
@@ -80,7 +81,7 @@ export function CanvasContextMenu(props: {
       raw: a.action,
       danger: DANGER_NAME.test(a.action),
       disabled,
-      reason: disabled ? ((gate as { reason?: string }).reason ?? 'disabled by upstream') : undefined,
+      reason: disabled ? ((gate as { reason?: string }).reason ?? t('action.disabledByUpstream')) : undefined,
       run: disabled
         ? undefined
         : () => {
@@ -95,39 +96,39 @@ export function CanvasContextMenu(props: {
   };
 
   const items = createMemo<Item[]>(() => {
-    const t = props.state.target;
+    const tgt = props.state.target;
     const w = props.state.world;
     const out: Item[] = [];
-    if (t.kind === 'empty') {
+    if (tgt.kind === 'empty') {
       const root = workspaceRoot(nodes()).root;
       if (root) for (const a of resolveParts(root, wiring.config).actions) out.push(actionItem(root, a));
       out.push(
-        { id: 'context-item-personal-note', label: 'Note', run: () => { const id = personal.addSticky(w.x, w.y); if (id) { selection.clear(); personal.setOpenSticky(id); } } },
-        { id: 'context-item-personal-diagram', label: 'Diagram', run: () => { const id = personal.addSticky(w.x, w.y, '', 'mermaid'); if (id) { selection.clear(); personal.setOpenSticky(id); } } },
-        { id: 'context-item-personal-box', label: 'Box', run: () => { personal.addBox(w.x, w.y); } },
-        { id: 'context-item-personal-list', label: 'Personal items…', run: () => props.onOpenPersonalList() },
+        { id: 'context-item-personal-note', label: t('menu.note'), run: () => { const id = personal.addSticky(w.x, w.y); if (id) { selection.clear(); personal.setOpenSticky(id); } } },
+        { id: 'context-item-personal-diagram', label: t('menu.diagram'), run: () => { const id = personal.addSticky(w.x, w.y, '', 'mermaid'); if (id) { selection.clear(); personal.setOpenSticky(id); } } },
+        { id: 'context-item-personal-box', label: t('menu.box'), run: () => { personal.addBox(w.x, w.y); } },
+        { id: 'context-item-personal-list', label: t('menu.personalItems'), run: () => props.onOpenPersonalList() },
       );
-    } else if (t.kind === 'node') {
-      const node = nodeOf(t.id);
+    } else if (tgt.kind === 'node') {
+      const node = nodeOf(tgt.id);
       if (node) {
         for (const a of resolveParts(node, wiring.config).actions) {
           if (a.action === 'edge.rewire') continue; // its own entry below
           out.push(actionItem(node, a));
         }
         if (node.capabilities.some((c) => c.action === 'edge.rewire' && c.level !== 'hidden')) {
-          out.push({ id: 'context-item-rewire', label: 'Rewire from here', run: () => props.onEnterRewire(node.id) });
+          out.push({ id: 'context-item-rewire', label: t('menu.rewire'), run: () => props.onEnterRewire(node.id) });
         }
         out.push(
-          { id: 'context-item-personal-note', label: 'Note on this node', run: () => { selection.select(node.id); focusLater('personal-note-text'); } },
-          { id: 'context-item-personal-link', label: 'Link to…', run: () => personal.setConnectFrom({ kind: 'node', id: node.id }) },
+          { id: 'context-item-personal-note', label: t('menu.noteOnNode'), run: () => { selection.select(node.id); focusLater('personal-note-text'); } },
+          { id: 'context-item-personal-link', label: t('menu.linkTo'), run: () => personal.setConnectFrom({ kind: 'node', id: node.id }) },
         );
       }
     } else {
-      const personalKind = t.kind; // 'sticky' | 'box'
+      const personalKind = tgt.kind; // 'sticky' | 'box'
       out.push(
-        { id: 'context-item-personal-edit', label: 'Edit', run: () => { selection.clear(); personal.setOpen({ kind: personalKind, id: t.id }); } },
-        { id: 'context-item-personal-link', label: 'Link to…', run: () => personal.setConnectFrom({ kind: personalKind, id: t.id }) },
-        { id: 'context-item-personal-delete', label: 'Delete', danger: true, run: () => (personalKind === 'sticky' ? personal.removeSticky(t.id) : personal.removeBox(t.id)) },
+        { id: 'context-item-personal-edit', label: t('menu.edit'), run: () => { selection.clear(); personal.setOpen({ kind: personalKind, id: tgt.id }); } },
+        { id: 'context-item-personal-link', label: t('menu.linkTo'), run: () => personal.setConnectFrom({ kind: personalKind, id: tgt.id }) },
+        { id: 'context-item-personal-delete', label: t('menu.delete'), danger: true, run: () => (personalKind === 'sticky' ? personal.removeSticky(tgt.id) : personal.removeBox(tgt.id)) },
       );
     }
     // Danger items sink together; the ring rotation puts their block at the bottom.
@@ -248,7 +249,7 @@ export function CanvasContextMenu(props: {
   const hub = createMemo(() => {
     const at = highlight();
     const item = at !== null ? items()[at] : undefined;
-    if (!item) return holding() ? 'release to cancel' : '';
+    if (!item) return holding() ? t('menu.releaseToCancel') : '';
     return item.reason ? `${item.label} — ${item.reason}` : item.label;
   });
 

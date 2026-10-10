@@ -41,6 +41,7 @@ import { glyphChar, toneColor } from '../canvas/tokens.js';
 import { resolveParts } from '../canvas/parts.js';
 import { keyOwnerFocus, manageFocus } from './focusScope.js';
 import { DetailSection, NodeActions } from './nodeParts.jsx';
+import { t } from '../i18n/index.js';
 
 /** A clock for relative waiting times: refreshed every 30 s while mounted. */
 function createNow() {
@@ -84,18 +85,18 @@ export function DecisionInboxToggle(props: { stores: WorkspaceStores; open: () =
   const total = createMemo(() => interruptCount(pending()));
   const summary = () => {
     const g = groups();
-    return g ? `${total()} (${g.map((x) => `${groupName(x)} ${x.rows.length}`).join(' · ')})` : `미결 ${pending().length}`;
+    return g ? `${total()} (${g.map((x) => `${groupName(x)} ${x.rows.length}`).join(' · ')})` : t('inbox.pendingCount', { count: pending().length });
   };
   return (
     <div class="decision-inbox-toggle">
       <button
         data-testid="decision-inbox-toggle"
         aria-expanded={props.open()}
-        aria-label={`결정함: ${summary()}`}
+        aria-label={t('inbox.toggleLabel', { summary: summary() })}
         classList={{ alerting: pending().some((r) => r.mechanism === 'interrupt') }}
         onClick={props.onToggle}
       >
-        결정함
+        {t('inbox.title')}
         <Show
           when={groups()}
           fallback={
@@ -193,7 +194,8 @@ export function DecisionInbox(props: {
       props.stores.pendingIntents.inFlight().some((e) => (e.intent as { nodeId?: unknown }).nodeId === id),
       props.stores.pendingIntents.errors().find((e) => e.nodeId === id)?.kind,
     );
-  const BADGE_LABEL: Record<IntentBadge, string> = { sending: '전송중', unconfirmed: '미확정', rejected: '거부됨' };
+  const badgeLabel = (b: IntentBadge): string =>
+    b === 'sending' ? t('inbox.badge.sending') : b === 'unconfirmed' ? t('inbox.badge.unconfirmed') : t('inbox.badge.rejected');
 
   // Focus follows the queue selection (and vice versa via each row's onFocus),
   // so Enter-on-a-row and selectedId can never diverge.
@@ -214,8 +216,8 @@ export function DecisionInbox(props: {
    */
   const ownsKeys = (owner: object, target: EventTarget | null) => {
     if (!escStack.isTop(owner)) return false;
-    const t = target instanceof Node ? target : null;
-    return keyOwnerFocus(t, rootEl ?? null, document.body);
+    const node = target instanceof Node ? target : null;
+    return keyOwnerFocus(node, rootEl ?? null, document.body);
   };
 
   onMount(() => {
@@ -245,9 +247,9 @@ export function DecisionInbox(props: {
       } else if (e.key === 'Enter') {
         // Enter enters ③ only from a queue row or the list itself; any other
         // interactive element (✕, 결정됨 toggle, action buttons) keeps Enter.
-        const t = e.target instanceof HTMLElement ? e.target : null;
-        const rowEl = t?.closest<HTMLElement>('.inbox-row') ?? null;
-        const onList = t === null || t === document.body || t.classList.contains('inbox-queue') || t.classList.contains('decision-inbox');
+        const el = e.target instanceof HTMLElement ? e.target : null;
+        const rowEl = el?.closest<HTMLElement>('.inbox-row') ?? null;
+        const onList = el === null || el === document.body || el.classList.contains('inbox-queue') || el.classList.contains('decision-inbox');
         if (!rowEl && !onList) return;
         const id = rowEl?.dataset.node ?? selectedId();
         if (!id) return;
@@ -275,7 +277,7 @@ export function DecisionInbox(props: {
         <Show when={badgeOf(p.row.id)}>
           {(b) => (
             <span class="inbox-badge" data-state={b()} data-testid={`inbox-badge-${p.row.id}`}>
-              {BADGE_LABEL[b()]}
+              {badgeLabel(b())}
             </span>
           )}
         </Show>
@@ -283,10 +285,10 @@ export function DecisionInbox(props: {
       <span class="inbox-row-meta">
         {p.row.stateValue} · {p.row.causes.join(' · ')}
         <Show when={relativeSince(p.row.since, now())}>
-          {(t) => (
+          {(age) => (
             <span class="inbox-since" data-testid={`inbox-since-${p.row.id}`} title={p.row.since}>
               {' · '}
-              {t()}
+              {age()}
             </span>
           )}
         </Show>
@@ -301,22 +303,22 @@ export function DecisionInbox(props: {
         data-motion={props.motion ?? 'enter'}
         data-testid="decision-inbox"
         role="complementary"
-        aria-label="결정함"
+        aria-label={t('inbox.title')}
         ref={(el) => {
           rootEl = el;
           onCleanup(manageFocus(el));
         }}
       >
         <header class="inbox-header">
-          <strong>결정함</strong>
+          <strong>{t('inbox.title')}</strong>
           <Show
             when={groups()}
             fallback={
               <Show
                 when={pending().length > 0}
-                fallback={<span class="hint" data-testid="inbox-pending-count" data-count="0">미결 없음</span>}
+                fallback={<span class="hint" data-testid="inbox-pending-count" data-count="0">{t('inbox.nonePending')}</span>}
               >
-                <span class="count" data-testid="inbox-pending-count" data-count={pending().length}>미결 {pending().length}</span>
+                <span class="count" data-testid="inbox-pending-count" data-count={pending().length}>{t('inbox.pendingCount', { count: pending().length })}</span>
               </Show>
             }
           >
@@ -327,7 +329,7 @@ export function DecisionInbox(props: {
             )}
           </Show>
           <span class="spacer" />
-          <button data-testid="inbox-close" aria-label="닫기" onClick={props.onClose}>✕</button>
+          <button data-testid="inbox-close" aria-label={t('common.close')} onClick={props.onClose}>✕</button>
         </header>
         <div class="inbox-columns">
           <div class="inbox-queue">
@@ -347,7 +349,7 @@ export function DecisionInbox(props: {
                         {groupOpen(g) ? '▾' : '▸'} {groupName(g)} {g.rows.length}
                       </button>
                       <Show when={groupOpen(g)}>
-                        <For each={g.rows} fallback={<p class="hint inbox-group-empty">없음</p>}>
+                        <For each={g.rows} fallback={<p class="hint inbox-group-empty">{t('inbox.groupEmpty')}</p>}>
                           {(r) => <Row row={r} />}
                         </For>
                       </Show>
@@ -358,7 +360,7 @@ export function DecisionInbox(props: {
             </Show>
             <Show when={decided().length > 0}>
               <button class="inbox-decided-toggle" data-testid="inbox-decided-toggle" aria-expanded={decidedOpen()} onClick={() => setDecidedOpen(!decidedOpen())}>
-                {decidedOpen() ? '▾' : '▸'} 결정됨 {decided().length}
+                {decidedOpen() ? '▾' : '▸'} {t('inbox.decided', { count: decided().length })}
               </button>
               <Show when={decidedOpen()}>
                 <div data-testid="inbox-decided-list">
@@ -367,10 +369,10 @@ export function DecisionInbox(props: {
               </Show>
             </Show>
             <span class="spacer" />
-            <p class="hint inbox-hints">↑↓/jk 이동 · ↵ 들어가기 · Esc 닫기 · {inboxKey().toUpperCase()} 열기(설정 가능)</p>
+            <p class="hint inbox-hints">{t('inbox.hints', { key: inboxKey().toUpperCase() })}</p>
           </div>
           <div class="inbox-detail">
-            <Show when={selectedNode()} fallback={<p class="hint" data-testid="inbox-empty">읽을 항목이 없습니다.</p>}>
+            <Show when={selectedNode()} fallback={<p class="hint" data-testid="inbox-empty">{t('inbox.empty')}</p>}>
               {(n) => (
                 <Show when={selectedId()} keyed>
                   {(_key) => (
@@ -382,10 +384,10 @@ export function DecisionInbox(props: {
                             {n().kind} · {n().state.value}
                             <Show when={selectedRow()}>{(r) => <> · {r().causes.join(' · ')}</>}</Show>
                             <Show when={relativeSince(selectedRow()?.since, now())}>
-                              {(t) => (
+                              {(age) => (
                                 <span data-testid="inbox-detail-since" title={selectedRow()?.since}>
                                   {' · '}
-                                  {t()}
+                                  {age()}
                                 </span>
                               )}
                             </Show>
@@ -395,7 +397,7 @@ export function DecisionInbox(props: {
                           data-testid="inbox-enter"
                           onClick={() => props.onEnterWork(n().id, pending().map((r) => r.id))}
                         >
-                          들어가기 ↵
+                          {t('inbox.enter')}
                         </button>
                       </header>
                       <div class="inbox-detail-body">

@@ -5,6 +5,7 @@
  * field is a placeholder: it takes focus (⌘/Ctrl+K) and does nothing yet.
  */
 import type { WorkspaceStores } from '../state/stores.js';
+import { t } from '../i18n/index.js';
 
 export function WorkspaceToolbar(props: { stores: WorkspaceStores; searchRef?: (el: HTMLInputElement) => void }) {
   void props.stores;
@@ -12,14 +13,14 @@ export function WorkspaceToolbar(props: { stores: WorkspaceStores; searchRef?: (
     <header class="toolbar">
       <span class="brand">Gunnflow</span>
       <label class="sr-only" for="workspace-search">
-        Search the workspace
+        {t('toolbar.searchLabel')}
       </label>
       <input
         id="workspace-search"
         data-testid="workspace-search"
         class="workspace-search"
         type="search"
-        placeholder="Search"
+        placeholder={t('toolbar.search')}
         ref={(el) => props.searchRef?.(el)}
       />
       <span class="spacer" />

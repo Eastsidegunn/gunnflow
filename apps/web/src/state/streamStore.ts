@@ -10,6 +10,7 @@
 import { createSignal } from 'solid-js';
 import type { StreamChunk, StreamEvent, StreamRef } from '../model/streamTypes.js';
 import { utf8Bytes } from './digest.js';
+import { t } from '../i18n/index.js';
 
 export interface StreamPartParams {
   source: { role: string };
@@ -240,7 +241,7 @@ export function chunkText(encoding: StreamRef['encoding'], data: string): string
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    return '[not decodable as UTF-8 text]';
+    return t('stream.notDecodable');
   }
 }
 

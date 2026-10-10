@@ -38,6 +38,7 @@ import { DIAGRAM_HEADER, drawPersonal, handleRect, type Rect } from './personalD
 import { STICKY_DEFAULT } from '../personal/schema.js';
 import { endpointBox as sceneEndpoint } from './genericScene.js';
 import type { LinkEnd } from '../personal/schema.js';
+import { locale, t } from '../i18n/index.js';
 import { planEmphasis } from '../state/lens.js';
 import { computeSpatialTiers, computeTiers, spatialNeighbors, type LensVerdict, type Tier } from '../state/relevance.js';
 import { computeFocusAlpha } from '../state/focus.js';
@@ -483,6 +484,8 @@ export function CanvasViewport(props: CanvasViewportProps) {
     personal.connectFrom();
     props.stores.diagrams.version();
     props.stores.prefs.prefs();
+    // The engine's own canvas text (pending…, filed counts, personal tags) follows the interface language.
+    locale();
     markDirty();
   });
 
@@ -1254,7 +1257,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
     <div class="canvas-host" data-testid="canvas-host">
       <canvas
         ref={canvas}
-        aria-label="Workspace topology canvas"
+        aria-label={t('canvas.aria')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -1282,14 +1285,14 @@ export function CanvasViewport(props: CanvasViewportProps) {
               data-testid="nested-link-popover"
               data-pinned={pop().pinned ? 'yes' : 'no'}
               role="dialog"
-              aria-label={`Relations with containers of ${titleOf(pop().id)}`}
+              aria-label={t('canvas.nested.aria', { title: titleOf(pop().id) })}
               style={{ left: `${pop().x - host().left + 12}px`, top: `${pop().y - host().top + 12}px` }}
             >
               <For each={links()}>
                 {(l, i) => (
                   <button
                     data-testid={`nested-link-${i()}`}
-                    title={`${l.type} (${l.direction === 'in' ? `${titleOf(l.other)} → this` : `this → ${titleOf(l.other)}`})`}
+                    title={l.direction === 'in' ? t('canvas.nested.titleIn', { type: l.type, other: titleOf(l.other) }) : t('canvas.nested.titleOut', { type: l.type, other: titleOf(l.other) })}
                     onClick={() => {
                       selection.select(l.other);
                       setChipPopover(null);

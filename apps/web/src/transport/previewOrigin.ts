@@ -3,6 +3,8 @@
  * is only ever loaded from this SEPARATE origin, inside a sandboxed iframe,
  * under the preview server's strict CSP. Never same-origin.
  */
+import { msg, type Msg } from '../i18n/index.js';
+
 export const PREVIEW_ORIGIN: string =
   (import.meta.env.VITE_PREVIEW_ORIGIN as string | undefined) ?? 'http://127.0.0.1:8788';
 
@@ -35,19 +37,19 @@ export function previewDownloadUrl(artifactId: string, digest: string): string {
  * (or cannot be told apart from) the page's own origin would run agent content
  * same-origin. A misconfiguration must refuse loudly, not degrade silently.
  */
-export function isolationProblem(previewOrigin: string, pageOrigin: string): string | undefined {
+export function isolationProblem(previewOrigin: string, pageOrigin: string): Msg | undefined {
   let preview: string;
   try {
     preview = new URL(previewOrigin).origin;
   } catch {
-    return `preview origin '${previewOrigin}' is not a URL`;
+    return msg('preview.notUrl', { origin: previewOrigin });
   }
-  if (preview === 'null') return `preview origin '${previewOrigin}' has no origin`;
-  if (preview === pageOrigin) return `preview origin ${preview} is this page's own origin — isolation would not hold`;
+  if (preview === 'null') return msg('preview.noOrigin', { origin: previewOrigin });
+  if (preview === pageOrigin) return msg('preview.ownOrigin', { origin: preview });
   return undefined;
 }
 
 /** The isolation check for this page. */
-export function pageIsolationProblem(): string | undefined {
+export function pageIsolationProblem(): Msg | undefined {
   return isolationProblem(PREVIEW_ORIGIN, typeof window === 'undefined' ? '' : window.location.origin);
 }

@@ -27,6 +27,8 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:5173',
+    // The interface language follows the browser when nothing is stored: pin it so runs are deterministic.
+    locale: 'en-US',
   },
   webServer: [
     {

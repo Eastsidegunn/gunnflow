@@ -2,6 +2,7 @@
 // detection, byte limit, body encoding, send-boundary recheck, attestation,
 // digest reconcile, rejection → Restore keeps the buffer, gate reason drafts.
 import { describe, expect, it, vi } from 'vitest';
+import { tm } from '../src/i18n/index.js';
 import { createRoot } from 'solid-js';
 import {
   FakeWorkspaceStream,
@@ -71,7 +72,7 @@ const shown = (text: string) => ({ isConnected: true, textContent: text });
 async function bufferFromFixture(body?: string): Promise<EditBuffer> {
   const { ref, b64, cap } = fixtureBase();
   const fixed = await fixBase(ref, b64, cap.edit!.mediaTypes);
-  if (!fixed.ok) throw new Error(fixed.reason);
+  if (!fixed.ok) throw new Error(tm(fixed.reason));
   return {
     baseArtifactId: ref.id,
     mediaType: ref.mediaType,
@@ -85,7 +86,7 @@ async function renderedToken(text: string): Promise<{ token: DisplayToken; diges
   const bytes = utf8Bytes(text);
   const ref: ArtifactRef = { id: 'a', mediaType: 'text/plain', digest: fakeSha256Hex(bytes), access: { kind: 'snapshot' } };
   const fixed = await fixBase(ref, fakeBytesToBase64(bytes), ['text/plain']);
-  if (!fixed.ok) throw new Error(fixed.reason);
+  if (!fixed.ok) throw new Error(tm(fixed.reason));
   return { token: markRendered(fixed.pinned, shown(fixed.text))!, digest: fixed.digest };
 }
 
@@ -139,9 +140,9 @@ describe('base pinning', () => {
 
   it('bytes that do not round-trip through UTF-8 losslessly cannot be a base', async () => {
     const bom = snapshot(new Uint8Array([0xef, 0xbb, 0xbf, 0x68, 0x69]));
-    expect(await fixBase(bom.ref, bom.b64, TYPES)).toEqual({ ok: false, reason: 'byte order mark present' });
+    expect(await fixBase(bom.ref, bom.b64, TYPES)).toEqual({ ok: false, reason: { key: 'editorCheck.bomPresent' } });
     const latin1 = snapshot(new Uint8Array([0x63, 0x61, 0x66, 0xe9]));
-    expect(await fixBase(latin1.ref, latin1.b64, TYPES)).toEqual({ ok: false, reason: 'bytes are not valid UTF-8' });
+    expect(await fixBase(latin1.ref, latin1.b64, TYPES)).toEqual({ ok: false, reason: { key: 'editorCheck.notUtf8' } });
   });
 
   it('bytes that do not hash to the declared digest cannot be a base', async () => {
@@ -165,7 +166,7 @@ describe('display records', () => {
     const bytes = utf8Bytes('the base');
     const ref: ArtifactRef = { id: 'a', mediaType: 'text/plain', digest: fakeSha256Hex(bytes), access: { kind: 'snapshot' } };
     const fixed = await fixBase(ref, fakeBytesToBase64(bytes), ['text/plain']);
-    if (!fixed.ok) throw new Error(fixed.reason);
+    if (!fixed.ok) throw new Error(tm(fixed.reason));
     expect(markRendered(fixed.pinned, { isConnected: false, textContent: 'the base' })).toBeUndefined();
     expect(markRendered(fixed.pinned, { isConnected: true, textContent: 'something else' })).toBeUndefined();
     expect(markRendered(fixed.pinned, shown('the base'))).toBeDefined();
@@ -210,8 +211,8 @@ describe('send conditions', () => {
   it('body encoding: leading BOM and unpaired surrogates block send; CRLF → LF is shown, not blocked', async () => {
     const { token, digest } = await renderedToken('a\r\nb\r\n');
     const base = { currentDigest: digest, baseText: 'a\r\nb\r\n', maxBytes: 100, writable: true };
-    expect(editorSendState({ ...base, buffer: buffer('﻿x', token) }).encodingProblem).toContain('byte order mark');
-    expect(editorSendState({ ...base, buffer: buffer('x\uD800y', token) }).encodingProblem).toContain('surrogate');
+    expect(tm(editorSendState({ ...base, buffer: buffer('﻿x', token) }).encodingProblem)).toContain('byte order mark');
+    expect(tm(editorSendState({ ...base, buffer: buffer('x\uD800y', token) }).encodingProblem)).toContain('surrogate');
     expect(editorSendState({ ...base, buffer: buffer('x😀', token) }).encodingProblem).toBeNull();
     const lf = editorSendState({ ...base, buffer: buffer('a\nb\nc\n', token) });
     expect(lf).toMatchObject({ lineEndingsConverted: true, canSend: true });
@@ -332,7 +333,7 @@ describe('send-boundary recheck (current projection)', () => {
       const id = h.state.compose(EDIT_DRAFT, buf);
       const outcome = await h.state.send(id);
       expect(outcome).toMatchObject({ accepted: false, invalid: true });
-      expect(h.state.composing()[0]!.invalid).toContain(reason);
+      expect(tm(h.state.composing()[0]!.invalid)).toContain(reason);
       expect(h.relay.sent).toHaveLength(0);
       h.dispose();
     }
@@ -362,7 +363,7 @@ describe('send-boundary recheck (current projection)', () => {
       h.upstreamChange(setArtifact(patch));
       const outcome = await h.state.send(h.state.compose(EDIT_DRAFT, buf));
       expect(outcome).toMatchObject({ invalid: true });
-      expect(h.state.composing()[0]!.invalid).toContain(reason);
+      expect(tm(h.state.composing()[0]!.invalid)).toContain(reason);
       expect(h.relay.sent).toHaveLength(0);
       h.dispose();
     }

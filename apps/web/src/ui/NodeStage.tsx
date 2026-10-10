@@ -14,6 +14,7 @@ import { taskCapabilities } from '../model/selectors.js';
 import { ArtifactViewer } from './ArtifactViewer.jsx';
 import { PersonalNoteSection } from '../personal/PersonalUi.jsx';
 import { DetailSection, NodeActions } from './nodeParts.jsx';
+import { t } from '../i18n/index.js';
 
 export function NodeStage(props: {
   stores: WorkspaceStores;
@@ -47,7 +48,7 @@ export function NodeStage(props: {
       {(_) => {
         const v = () => ({ n: node()!, r: resolved()! });
         return (
-          <aside class="node-stage" data-motion={props.motion ?? 'enter'} data-testid="node-stage" data-node={v().n.id} aria-label={`Node ${v().n.label ?? v().n.id}`} onDblClick={onStageDblClick}>
+          <aside class="node-stage" data-motion={props.motion ?? 'enter'} data-testid="node-stage" data-node={v().n.id} aria-label={t('stage.label', { node: v().n.label ?? v().n.id })} onDblClick={onStageDblClick}>
             {/* Keyed on the node: picking another node keeps the stage in place and crossfades its content. */}
             <Show when={props.nodeId} keyed>
               {(_key) => (
@@ -60,14 +61,14 @@ export function NodeStage(props: {
                       </p>
                       <Show when={v().n.attention.length > 0}>
                         <p class="hint" data-testid="node-stage-attention">
-                          attention: {v().n.attention.map((a) => a.cause).join(', ')}
+                          {t('stage.attention', { causes: v().n.attention.map((a) => a.cause).join(', ') })}
                         </p>
                       </Show>
                     </div>
                     <button class="stage-enter" data-testid="stage-enter" onClick={() => props.onEnterWork(v().n.id)}>
-                      들어가기 ↵
+                      {t('stage.enter')}
                     </button>
-                    <button data-testid="node-stage-close" aria-label="Close" onClick={props.onClose}>
+                    <button data-testid="node-stage-close" aria-label={t('common.close')} onClick={props.onClose}>
                       ✕
                     </button>
                   </header>
@@ -85,7 +86,7 @@ export function NodeStage(props: {
                             testIdPrefix="generic-viewer"
                           />
                         ) : d.part === 'stream' && d.streamId ? (
-                          <p class="hint">stream {d.streamId}</p>
+                          <p class="hint">{t('work.stream', { id: d.streamId! })}</p>
                         ) : null
                       }
                     </For>
@@ -94,7 +95,7 @@ export function NodeStage(props: {
                     <PersonalNoteSection personal={props.stores.personal} nodeId={v().n.id} />
                     <NodeActions stores={props.stores} node={v().n} resolved={v().r} />
                   </div>
-                  <footer class="stage-foot hint">Enter 들어가기 · Esc 닫기</footer>
+                  <footer class="stage-foot hint">{t('stage.foot')}</footer>
                 </div>
               )}
             </Show>
@@ -112,7 +113,7 @@ export function NodeStage(props: {
    */
   function DomainQuickSection(q: { nodeId: string }) {
     const p = () => projectionStore.projection();
-    const task = () => p().tasks.find((t) => t.id === q.nodeId);
+    const task = () => p().tasks.find((x) => x.id === q.nodeId);
     const gate = () => p().gates.find((g) => g.id === q.nodeId);
     const deliverable = () => p().deliverables.find((d) => d.id === q.nodeId);
     const aff = (action: 'pause' | 'resume' | 'cancel') =>
@@ -120,33 +121,33 @@ export function NodeStage(props: {
     return (
       <>
         <Show when={task()}>
-          {(t) => (
+          {(tk) => (
             <>
-              <p class="state" data-testid="sel-state">{t().state}</p>
-              <Show when={t().currentAction}><p class="hint">{t().currentAction}</p></Show>
-              <Show when={t().blockedReason}>
-                <p class="blocked-reason" data-testid="blocked-reason">{t().blockedReason}</p>
+              <p class="state" data-testid="sel-state">{tk().state}</p>
+              <Show when={tk().currentAction}><p class="hint">{tk().currentAction}</p></Show>
+              <Show when={tk().blockedReason}>
+                <p class="blocked-reason" data-testid="blocked-reason">{tk().blockedReason}</p>
               </Show>
               <div class="actions">
-                <button data-testid="enter-inspector" onClick={() => props.onEnterSurface?.('inspector', t().id)}>
-                  Inspector →
+                <button data-testid="enter-inspector" onClick={() => props.onEnterSurface?.('inspector', tk().id)}>
+                  {t('stage.inspector')}
                 </button>
-                <Show when={t().state === 'running' && aff('pause') !== 'hidden'}>
+                <Show when={tk().state === 'running' && aff('pause') !== 'hidden'}>
                   <button data-testid="pause-task" disabled={aff('pause') !== 'enabled'}
-                    onClick={() => void pendingIntents.submit({ nodeId: t().id, action: 'task.pause' })}>
-                    Pause
+                    onClick={() => void pendingIntents.submit({ nodeId: tk().id, action: 'task.pause' })}>
+                    {t('stage.pause')}
                   </button>
                 </Show>
-                <Show when={(t().state === 'queued' || t().state === 'paused') && aff('resume') !== 'hidden'}>
+                <Show when={(tk().state === 'queued' || tk().state === 'paused') && aff('resume') !== 'hidden'}>
                   <button data-testid="resume-task" disabled={aff('resume') !== 'enabled'}
-                    onClick={() => void pendingIntents.submit({ nodeId: t().id, action: 'task.resume' })}>
-                    Resume
+                    onClick={() => void pendingIntents.submit({ nodeId: tk().id, action: 'task.resume' })}>
+                    {t('stage.resume')}
                   </button>
                 </Show>
                 <Show when={aff('cancel') !== 'hidden'}>
                   <button data-testid="cancel-task" class="privileged" disabled={aff('cancel') !== 'enabled'}
-                    onClick={() => props.onEnterSurface?.('privileged:cancel', t().id)}>
-                    Cancel…
+                    onClick={() => props.onEnterSurface?.('privileged:cancel', tk().id)}>
+                    {t('stage.cancel')}
                   </button>
                 </Show>
               </div>
@@ -159,7 +160,7 @@ export function NodeStage(props: {
               <Show when={g().requestedAction}><p class="hint">{g().requestedAction}</p></Show>
               <div class="actions">
                 <button data-testid="enter-approval" onClick={() => props.onEnterSurface?.('approval', g().id)}>
-                  Open gate →
+                  {t('stage.openGate')}
                 </button>
               </div>
             </>
@@ -169,7 +170,7 @@ export function NodeStage(props: {
           {(d) => (
             <div class="actions">
               <button data-testid="enter-deliverable" onClick={() => props.onEnterSurface?.('deliverable', d().id)}>
-                Open deliverable →
+                {t('stage.openDeliverable')}
               </button>
             </div>
           )}

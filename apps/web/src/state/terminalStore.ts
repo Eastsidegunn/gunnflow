@@ -19,6 +19,8 @@ import {
   type SendOutcome,
 } from './pendingIntents.js';
 import { dropAllStreams } from '../transport/streamChannel.js';
+import { msg, raw, tm, type Msg } from '../i18n/index.js';
+import { refusedIntent, type RefusedIntent } from './intentValidator.js';
 
 /** 'unsupported' = the upstream does not provide a terminal surface (BFF 501). */
 export type TerminalConnection = 'connecting' | 'live' | 'lost' | 'replay' | 'unsupported';
@@ -31,10 +33,15 @@ function intentOf(e: PendingEntry): Draft {
   return e.phase === 'composing' ? e.draft : e.intent;
 }
 
+/** A refusal made here, before anything is sent: always a message (`why`), never a bare string. */
+const refuseLocally = (key: 'terminal.refused.noSession' | 'terminal.refused.noDraft'): RefusedIntent => refusedIntent(msg(key));
+
 export function createTerminalStore(pending: PendingIntentState) {
   const [session, setSession] = createSignal<SessionProjection | null>(null);
   const [connection, setConnection] = createSignal<TerminalConnection>('connecting');
-  const [unsupported, setUnsupported] = createSignal<string | null>(null);
+  // The upstream's own reason verbatim, or the engine's fallback (translated when read).
+  const [unsupportedMsg, setUnsupported] = createSignal<Msg | null>(null);
+  const unsupported = (): string | null => tm(unsupportedMsg());
 
   const forSession = (kind: 'session.stdin' | 'session.kill') => (e: PendingEntry) => {
     const i = intentOf(e);
@@ -47,7 +54,7 @@ export function createTerminalStore(pending: PendingIntentState) {
     pending.composing().filter(isStdin).at(-1) as (ComposingEntry & { draft: StdinIntent }) | undefined;
 
   /** A confirming channel is gone: in-flight stdin/kill cannot be confirmed from here. */
-  const markUnconfirmed = (reason: string) =>
+  const markUnconfirmed = (reason: Msg) =>
     pending.markUnconfirmed((e) => isStdin(e) || isKill(e), reason);
 
   /** The composer's text is a composing entry: it returns with Restore after a refusal. */
@@ -63,10 +70,10 @@ export function createTerminalStore(pending: PendingIntentState) {
     session,
     connection,
     unsupported,
-    markUnsupported(reason: string) {
+    markUnsupported(reason: Msg) {
       setUnsupported(reason);
       setConnection('unsupported');
-      markUnconfirmed('terminal not supported by upstream');
+      markUnconfirmed(msg('terminal.unconfirmed.unsupported'));
     },
 
     /** Sent or refused stdin for this session, in order (local echo rows). */
@@ -90,23 +97,23 @@ export function createTerminalStore(pending: PendingIntentState) {
     },
     markLost() {
       setConnection('lost');
-      markUnconfirmed('connection lost');
+      markUnconfirmed(msg('terminal.unconfirmed.connectionLost'));
     },
     markUnconfirmed,
 
     /** Operator stdin: composing → send (the single transition) → in-flight until echoed. */
     async submitStdin(input?: string): Promise<SendOutcome> {
       const s = session();
-      if (!s) return { accepted: false, reason: 'no session' };
+      if (!s) return refuseLocally('terminal.refused.noSession');
       if (input !== undefined) setStdinDraft(input);
       const draft = composingStdin();
-      if (!draft) return { accepted: false, reason: 'no stdin draft' };
+      if (!draft) return refuseLocally('terminal.refused.noDraft');
       return pending.send(draft.localId);
     },
 
     submitKill(reason: string): Promise<SendOutcome> {
       const s = session();
-      if (!s) return Promise.resolve({ accepted: false, reason: 'no session' });
+      if (!s) return Promise.resolve(refuseLocally('terminal.refused.noSession'));
       return pending.submit({ intent: 'session.kill', sessionId: s.id, reason });
     },
   };
@@ -115,12 +122,12 @@ export function createTerminalStore(pending: PendingIntentState) {
 export type TerminalStore = ReturnType<typeof createTerminalStore>;
 
 /** A connection the browser gave up on may have been refused as unsupported (501 + reason). */
-export async function unsupportedReason(url: string): Promise<string | null> {
+export async function unsupportedReason(url: string): Promise<Msg | null> {
   try {
     const res = await fetch(url);
     if (res.status !== 501) return null;
     const body = (await res.json()) as { unsupported?: unknown };
-    return typeof body.unsupported === 'string' ? body.unsupported : 'not supported by upstream';
+    return typeof body.unsupported === 'string' ? raw(body.unsupported) : msg('terminal.unsupportedFallback');
   } catch {
     return null;
   }

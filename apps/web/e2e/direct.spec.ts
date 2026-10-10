@@ -81,8 +81,8 @@ test('direct: the wire sends no counts — "need you" and the inbox total are co
     await expect(strip).toHaveAttribute('data-source', 'view');
     await expect(page.getByTestId('decision-inbox-total')).toHaveText('4');
     await expect(page.getByTestId('decision-inbox-groups')).toHaveText('Decide 1 · Do 2 · Blocked 1');
-    await expect(page.getByTestId('decision-inbox-toggle')).toHaveText('결정함4 (Decide 1 · Do 2 · Blocked 1)');
-    await expect(page.getByTestId('decision-inbox-toggle')).toHaveAttribute('aria-label', '결정함: 4 (Decide 1 · Do 2 · Blocked 1)');
+    await expect(page.getByTestId('decision-inbox-toggle')).toHaveText('Decisions4 (Decide 1 · Do 2 · Blocked 1)');
+    await expect(page.getByTestId('decision-inbox-toggle')).toHaveAttribute('aria-label', 'Decisions: 4 (Decide 1 · Do 2 · Blocked 1)');
     await page.screenshot({ path: test.info().outputPath('needs-you-direct.png') });
   } finally {
     rmSync(file, { force: true });

@@ -24,6 +24,10 @@ import {
   type LayoutProvider,
   type Positions,
 } from '../canvas/layoutGraph.js';
+import { msgOf, tm, type Msg } from '../i18n/index.js';
+
+/** Why the fallback shows: a catalog message, rendered in the current language when read. */
+type Why = Msg;
 
 /** Above this many nodes the layered engine is not used; the fallback stands. */
 export const LAYERED_MAX_NODES = 1500;
@@ -37,14 +41,17 @@ export interface LayoutStateOptions {
 }
 
 const loadElkWorker = () => import('../canvas/elkLayout.js').then((m) => m.createElkWorkerProvider());
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 export function createLayoutState(options: LayoutStateOptions = {}) {
   const load = options.loadProvider ?? loadElkWorker;
   const maxNodes = options.maxNodes ?? LAYERED_MAX_NODES;
   const [positions, setPositions] = createSignal<Positions>(new Map());
   const [source, setSource] = createSignal<LayoutSource>('fallback');
-  const [reason, setReason] = createSignal<string | null>(null);
+  const [why, setReason] = createSignal<Why | null>(null);
+  const reason = (): string | null => {
+    const w = why();
+    return tm(w);
+  };
   const [withheld, setWithheld] = createSignal(0);
 
   let signature: string | null = null;
@@ -57,14 +64,14 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
   let running = false;
   let queued: { graph: LayoutGraph; gen: number } | null = null;
 
-  const show = (graph: LayoutGraph, next: Positions, from: LayoutSource, why: string | null = null) => {
+  const show = (graph: LayoutGraph, next: Positions, from: LayoutSource, why: Why | null = null) => {
     shown = { graph, positions: next };
     setPositions(next);
     setSource(from);
     setReason(why);
   };
 
-  const fail = (graph: LayoutGraph, gen: number, why: string) => {
+  const fail = (graph: LayoutGraph, gen: number, why: Why) => {
     if (gen !== generation) return;
     basis = null;
     show(graph, fallbackLayout(graph), 'fallback', why);
@@ -79,18 +86,18 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
         p = await provider;
       } catch (err) {
         provider = null; // retried on the next topology change
-        return fail(graph, gen, `layered engine unavailable: ${message(err)}`);
+        return fail(graph, gen, { key: 'layout.reason.unavailable', params: { detail: msgOf(err) } });
       }
       if (gen !== generation) return;
       let result: Positions;
       try {
         result = await p.layout(graph, basis?.positions);
       } catch (err) {
-        return fail(graph, gen, `layered pass failed: ${message(err)}`);
+        return fail(graph, gen, { key: 'layout.reason.failed', params: { detail: msgOf(err) } });
       }
       if (gen !== generation) return;
       const problem = positionsProblem(graph, result);
-      if (problem) return fail(graph, gen, `invalid layered result: ${problem}`);
+      if (problem) return fail(graph, gen, { key: 'layout.reason.invalid', params: { detail: problem } });
       const next = basis ? stabilize(graph, result, basis.graph, basis.positions) : result;
       basis = { graph, positions: next };
       show(graph, next, 'layered');
@@ -121,7 +128,7 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
       const layered = graph.nodes.length > 0 && graph.nodes.length <= maxNodes;
       if (!layered) {
         basis = null;
-        show(graph, fallback, 'fallback', graph.nodes.length > maxNodes ? `over the layered limit (${graph.nodes.length} > ${maxNodes} nodes)` : null);
+        show(graph, fallback, 'fallback', graph.nodes.length > maxNodes ? { key: 'layout.reason.overLimit', params: { count: graph.nodes.length, max: maxNodes } } : null);
         return;
       }
       const interim = shown && basis ? interimLayout(graph, fallback, shown.graph, shown.positions) : fallback;

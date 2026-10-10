@@ -8,6 +8,7 @@
 import { createSignal } from 'solid-js';
 import { WIRING_SCHEMA_VERSION, validateWiringConfig, type AttentionRule, type WiringConfig } from '@gunnflow/contract/wiring';
 import { DEFAULT_WIRING } from './defaultWiring.js';
+import { MsgError, msg } from '../i18n/index.js';
 
 export const EMPTY_WIRING: WiringConfig = { version: WIRING_SCHEMA_VERSION };
 
@@ -173,8 +174,8 @@ export function createWiringState() {
 
 export async function fetchWiringFiles(): Promise<readonly WiringFileEntry[]> {
   const res = await fetch('/api/wiring');
-  if (!res.ok) throw new Error(`wiring fetch failed (${res.status})`);
+  if (!res.ok) throw new MsgError(msg('wiring.fetchFailed', { status: res.status }));
   const body = (await res.json()) as unknown;
-  if (!Array.isArray(body)) throw new Error('wiring fetch: not a list');
+  if (!Array.isArray(body)) throw new MsgError(msg('wiring.fetchNotList'));
   return body as WiringFileEntry[];
 }

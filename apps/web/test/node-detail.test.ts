@@ -2,6 +2,7 @@
 // received items pass through untouched; 404 omits, 501 states unsupported.
 import { describe, expect, it } from 'vitest';
 import { detailViewOf } from '../src/state/nodeDetail.js';
+import { raw, setLocale, tm, type Msg } from '../src/i18n/index.js';
 
 describe('detailViewOf', () => {
   it('a valid 200 carries the detail through untouched', () => {
@@ -17,14 +18,21 @@ describe('detailViewOf', () => {
   it('a malformed 200 is never partially rendered — it becomes unavailable with the problems', () => {
     const view = detailViewOf(200, { revision: 1, items: [{ label: 'x', text: 'a', artifact: { id: 'a', mediaType: 't', access: { kind: 'snapshot' } } }] });
     expect(view.kind).toBe('unavailable');
-    expect((view as { reason: string }).reason).toContain('exactly one body');
+    expect((view as { reason: { raw: string } }).reason.raw).toContain('exactly one body');
   });
 
   it('other statuses carry the upstream reason verbatim, or name the status', () => {
     expect(detailViewOf(502, { reason: 'upstream detail fails the contract: items[0].label …' })).toEqual({
       kind: 'unavailable',
-      reason: 'upstream detail fails the contract: items[0].label …',
+      reason: { raw: 'upstream detail fails the contract: items[0].label …' },
     });
-    expect(detailViewOf(500, null)).toEqual({ kind: 'unavailable', reason: 'detail route answered 500' });
+    const own = detailViewOf(500, null);
+    expect(own).toEqual({ kind: 'unavailable', reason: { key: 'node.detailAnswered', params: { status: 500 } } });
+    // The engine's own statement follows the interface language; the upstream's reason never changes.
+    expect(tm((own as { reason: Msg }).reason)).toBe('detail route answered 500');
+    setLocale('ko', { persist: false });
+    expect(tm((own as { reason: Msg }).reason)).not.toBe('detail route answered 500');
+    expect(tm(raw('upstream text'))).toBe('upstream text');
+    setLocale('en', { persist: false });
   });
 });

@@ -6,11 +6,12 @@
  */
 import { createSignal } from 'solid-js';
 import { renderPersonalMermaid, type PersonalRender } from './client.js';
+import { msg, type Msg } from '../i18n/index.js';
 
 export type DiagramEntry =
   | { state: 'pending' }
   | { state: 'ok'; src: string; image: HTMLImageElement | null; width: number; height: number }
-  | { state: 'error'; reason: string };
+  | { state: 'error'; reason: Msg };
 
 export function createDiagramCache(previewOrigin: string, render: (source: string) => Promise<PersonalRender> = renderPersonalMermaid) {
   const entries = new Map<string, DiagramEntry>();
@@ -40,7 +41,7 @@ export function createDiagramCache(previewOrigin: string, render: (source: strin
           bump();
         };
         image.onerror = () => {
-          entries.set(source, { state: 'error', reason: 'the rendered SVG could not be loaded' });
+          entries.set(source, { state: 'error', reason: msg('personal.renderer.svgLoad') });
           bump();
         };
         image.src = src;

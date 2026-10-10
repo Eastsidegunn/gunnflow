@@ -10,6 +10,7 @@ import { For, Index, Show, createMemo } from 'solid-js';
 import type { WorkspaceStores } from '../state/stores.js';
 import type { Emphasis } from '../state/lens.js';
 import { tierEmphasis } from '../state/relevance.js';
+import { t, tn } from '../i18n/index.js';
 
 export function A11yMirror(props: { stores: WorkspaceStores }) {
   const { projectionStore, selection } = props.stores;
@@ -33,27 +34,35 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
     const list = links.get(id);
     if (!list) return undefined;
     const name = (other: string) => byId.get(other)?.label ?? other;
-    return `Relations with its containers: ${list.map((l) => (l.direction === 'in' ? `${name(l.other)} ${l.type} this` : `this ${l.type} ${name(l.other)}`)).join('; ')}`;
+    return t('a11y.containerRelations', {
+      list: list
+        .map((l) =>
+          l.direction === 'in'
+            ? t('a11y.relationIn', { other: name(l.other), type: l.type })
+            : t('a11y.relationOut', { other: name(l.other), type: l.type }),
+        )
+        .join('; '),
+    });
   };
   const entries = createMemo(() => {
     const p = projectionStore.projection();
     const emphasis = emphasisOf();
     const domain = [
-      ...p.tasks.map((t) => ({
-        id: t.id,
-        label: `${t.name} — ${t.state}${t.currentAction ? ` — ${t.currentAction}` : ''}`,
+      ...p.tasks.map((task) => ({
+        id: task.id,
+        label: `${task.name} — ${task.state}${task.currentAction ? ` — ${task.currentAction}` : ''}`,
         kind: 'task',
-        emphasis: emphasis.get(t.id) ?? 'normal',
+        emphasis: emphasis.get(task.id) ?? 'normal',
       })),
       ...p.gates.map((g) => ({
         id: g.id,
-        label: `Gate ${g.name} — ${g.state}${g.state === 'waiting' ? ` — ${g.requestedAction}` : ''}`,
+        label: `${t('a11y.gate', { name: g.name })} — ${g.state}${g.state === 'waiting' ? ` — ${g.requestedAction}` : ''}`,
         kind: 'gate',
         emphasis: emphasis.get(g.id) ?? 'normal',
       })),
       ...p.deliverables.map((d) => ({
         id: d.id,
-        label: `Deliverable ${d.title}${d.state ? ` — ${d.state}` : ''}`,
+        label: `${t('a11y.deliverable', { title: d.title })}${d.state ? ` — ${d.state}` : ''}`,
         kind: 'deliverable',
         emphasis: emphasis.get(d.id) ?? 'normal',
       })),
@@ -77,23 +86,23 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
   return (
     <>
     <p class="a11y-mirror" data-testid="generic-summary">
-      <Show when={generic()} fallback="Generic nodes: not provided by upstream.">
+      <Show when={generic()} fallback={t('a11y.genericAbsent')}>
         {(g) => (
           <>
-            Generic nodes: <span data-testid="generic-count">{g().count}</span> · kinds:{' '}
-            <span data-testid="generic-kinds">{g().kinds.join(', ')}</span> · invalid: {g().invalid}
+            {t('a11y.genericNodes')} <span data-testid="generic-count">{g().count}</span> · {t('a11y.kinds')}{' '}
+            <span data-testid="generic-kinds">{g().kinds.join(', ')}</span> · {t('a11y.invalid', { count: g().invalid })}
           </>
         )}
       </Show>{' '}
-      · wiring:{' '}
+      · {t('a11y.wiring')}{' '}
       <span data-testid="wiring-state">
         {wiring.problems.length === 0
-          ? `ok (${Object.keys(wiring.config.kinds ?? {}).length} kinds)`
-          : `merge rejected (${wiring.problems.length} problems) — default in use`}
+          ? tn('a11y.wiringOk', Object.keys(wiring.config.kinds ?? {}).length)
+          : tn('a11y.wiringRejected', wiring.problems.length)}
       </span>{' '}
-      · files: <span data-testid="wiring-files-loaded">{wiring.files.loaded.length}</span> loaded,{' '}
-      <span data-testid="wiring-files-rejected">{wiring.files.rejected.length}</span> rejected{' '}
-      · layout: <span data-testid="layout-source">{props.stores.layout.source()}</span>
+      · {t('a11y.files')} <span data-testid="wiring-files-loaded">{wiring.files.loaded.length}</span> {t('a11y.loaded')},{' '}
+      <span data-testid="wiring-files-rejected">{wiring.files.rejected.length}</span> {t('a11y.rejected')}{' '}
+      · {t('a11y.layout')} <span data-testid="layout-source">{props.stores.layout.source()}</span>
       <Show when={props.stores.layout.reason()}>
         {(r) => (
           <>
@@ -101,13 +110,13 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
           </>
         )}
       </Show>{' '}
-      · grouping withheld: <span data-testid="layout-withheld">{props.stores.layout.withheld()}</span>{' '}
-      · personal: <span data-testid="personal-notes-count">{Object.keys(props.stores.personal.doc().notes).length}</span> notes (
-      <span data-testid="personal-orphans-count">{props.stores.personal.orphans(liveIds()).length}</span> orphaned),{' '}
-      <span data-testid="personal-stickies-count">{props.stores.personal.doc().stickies.length}</span> stickies,{' '}
-      <span data-testid="personal-boxes-count">{props.stores.personal.doc().boxes.length}</span> boxes,{' '}
-      <span data-testid="personal-links-count">{props.stores.personal.doc().links.length}</span> links (
-      <span data-testid="personal-broken-count">{props.stores.personal.brokenLinks(liveIds()).length}</span> broken)
+      · {t('a11y.groupingWithheld')} <span data-testid="layout-withheld">{props.stores.layout.withheld()}</span>{' '}
+      · {t('a11y.personal')} <span data-testid="personal-notes-count">{Object.keys(props.stores.personal.doc().notes).length}</span> {tn('a11y.notes', Object.keys(props.stores.personal.doc().notes).length)} (
+      <span data-testid="personal-orphans-count">{props.stores.personal.orphans(liveIds()).length}</span> {t('a11y.orphaned')}),{' '}
+      <span data-testid="personal-stickies-count">{props.stores.personal.doc().stickies.length}</span> {tn('a11y.stickies', props.stores.personal.doc().stickies.length)},{' '}
+      <span data-testid="personal-boxes-count">{props.stores.personal.doc().boxes.length}</span> {tn('a11y.boxes', props.stores.personal.doc().boxes.length)},{' '}
+      <span data-testid="personal-links-count">{props.stores.personal.doc().links.length}</span> {tn('a11y.links', props.stores.personal.doc().links.length)} (
+      <span data-testid="personal-broken-count">{props.stores.personal.brokenLinks(liveIds()).length}</span> {t('a11y.broken')})
       <Show when={wiring.files.rejected.length > 0}>
         {' '}
         (<span data-testid="wiring-rejected-list">
@@ -116,12 +125,12 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
       </Show>
     </p>
     {/* Personal stickies: the person's own, outside lenses and filters. */}
-    <ul class="a11y-mirror" aria-label="Personal notes">
+    <ul class="a11y-mirror" aria-label={t('a11y.personalNotes')}>
       <For each={props.stores.personal.doc().stickies}>
         {(s) => (
           <li>
             <button data-testid={`sticky-${s.id}`} data-grade="personal" data-kind={s.kind} onClick={() => { props.stores.selection.clear(); props.stores.personal.setOpen({ kind: 'sticky', id: s.id }); }}>
-              {s.kind === 'mermaid' ? 'Personal diagram' : 'Personal note'}: {s.text || '(empty)'}
+              {s.kind === 'mermaid' ? t('a11y.personalDiagram') : t('a11y.personalNote')}: {s.text || t('a11y.empty')}
             </button>
           </li>
         )}
@@ -130,13 +139,13 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
         {(b) => (
           <li>
             <button data-testid={`pbox-${b.id}`} data-grade="personal" onClick={() => { props.stores.selection.clear(); props.stores.personal.setOpen({ kind: 'box', id: b.id }); }}>
-              Personal box: {b.label || '(untitled)'}
+              {t('a11y.personalBox')}: {b.label || t('a11y.untitled')}
             </button>
           </li>
         )}
       </For>
     </ul>
-    <ul class="a11y-mirror" aria-label="Workspace nodes">
+    <ul class="a11y-mirror" aria-label={t('a11y.workspaceNodes')}>
       {/* Index keeps each button's DOM node across updates — focus survives tier re-publishes. */}
       <Index each={entries()}>
         {(entry) => (

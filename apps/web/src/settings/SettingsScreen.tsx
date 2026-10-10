@@ -30,10 +30,12 @@ import {
 } from '@gunnflow/contract/wiring';
 import type { WorkspaceStores } from '../state/stores.js';
 import { EDGE_STROKE, NEUTRAL_GLYPH, NEUTRAL_TONE, glyphChar, toneColor } from '../canvas/tokens.js';
-import { DEFAULT_KEYS, KEYBINDINGS, duplicateOf, resolveKey, sanitizeKeys } from '../state/keybindings.js';
+import { DEFAULT_KEYS, KEYBINDINGS, bindingLabel, duplicateOf, resolveKey, sanitizeKeys } from '../state/keybindings.js';
+import { LOCALES, LOCALE_NAMES, isLocale, locale, msg, msgOf, raw, setLocale, t, tm, tn, type MessageKey, type Msg } from '../i18n/index.js';
 import { fetchWiringFiles } from '../wiring/loadWiring.js';
 import { loadUserWiring, removeUserWiringFile, saveUserWiring } from './client.js';
 import {
+  DEFAULT_TAB_ID,
   USER_FILE,
   attentionCauses,
   draftProblems,
@@ -56,25 +58,45 @@ import {
 } from './settingsModel.js';
 
 type Section = 'view' | 'attention' | 'viewers' | 'prefs' | 'keys';
-type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'failed'; reason: string };
+/** Rail sections and the catalog key of each one's name. */
+const SECTIONS: readonly [Section, MessageKey][] = [
+  ['view', 'settings.section.view'],
+  ['attention', 'settings.section.attention'],
+  ['viewers', 'settings.section.viewers'],
+  ['prefs', 'settings.section.prefs'],
+  ['keys', 'settings.section.keys'],
+];
+
+/** A provenance as shown: the engine's own layer names are translated, wiring file names stay verbatim. */
+function provenanceLabel(src: string): string {
+  if (src === 'my settings') return t('settings.source.mine');
+  if (src === 'default') return t('settings.source.default');
+  if (src === 'engine default') return t('settings.source.engine');
+  return src;
+}
+
+type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'failed'; reason: Msg };
 
 export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => void; motion?: 'enter' | 'exit' }) {
   const { wiring, projectionStore, prefs } = props.stores;
   const [section, setSection] = createSignal<Section>('view');
   const [draft, setDraft] = createSignal<WiringConfig>(emptyUserConfig());
-  const [loadProblem, setLoadProblem] = createSignal<string | null>(null);
+  // Problems are kept as messages and translated when shown, so they follow a language switch.
+  const [loadProblemMsg, setLoadProblem] = createSignal<Msg | null>(null);
+  const loadProblem = () => tm(loadProblemMsg());
   const [save, setSave] = createSignal<SaveState>({ kind: 'idle' });
-  const [keyProblem, setKeyProblem] = createSignal<string | null>(null);
+  const [keyProblemMsg, setKeyProblem] = createSignal<Msg | null>(null);
+  const keyProblem = () => tm(keyProblemMsg());
   // The person's current file is the starting draft.
   createResource(async () => {
     try {
-      const raw = await loadUserWiring();
-      if (raw === null) return;
-      const v = validateWiringConfig(raw);
+      const file = await loadUserWiring();
+      if (file === null) return;
+      const v = validateWiringConfig(file);
       if (v.ok) setDraft(v.config);
-      else setLoadProblem(`your settings file is invalid (${v.problems[0]}); saving will replace it`);
+      else setLoadProblem(msg('settings.loadInvalid', { problem: v.problems[0]! }));
     } catch (err) {
-      setLoadProblem(err instanceof Error ? err.message : String(err));
+      setLoadProblem(msgOf(err));
     }
   });
   const edit = (next: WiringConfig) => {
@@ -92,20 +114,20 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
   // Backend tabs come from the loaded config files themselves.
   const tabs = createMemo(() => sourceTabs(layers()));
   const [srcId, setSrcId] = createSignal<string | null>(null);
-  const activeTab = createMemo(() => tabs().find((t) => t.id === srcId()) ?? tabs()[0]!);
+  const activeTab = createMemo(() => tabs().find((x) => x.id === srcId()) ?? tabs()[0]!);
   // The workspace's nodes belong to the connected upstream: its kinds show on the first tab.
   const showsWorkspace = createMemo(() => activeTab().id === tabs()[0]!.id);
   const notOnScreen = createMemo(() => sourceUnobserved(activeTab().config, nodes()));
 
   const doSave = async () => {
-    if (problems().length > 0) return setSave({ kind: 'failed', reason: problems()[0]! });
+    if (problems().length > 0) return setSave({ kind: 'failed', reason: raw(problems()[0]!) });
     setSave({ kind: 'saving' });
     try {
       await saveUserWiring(draft());
       await wiring.refresh(fetchWiringFiles);
       setSave({ kind: 'saved' });
     } catch (err) {
-      setSave({ kind: 'failed', reason: err instanceof Error ? err.message : String(err) });
+      setSave({ kind: 'failed', reason: msgOf(err) });
     }
   };
   const resetAll = async () => {
@@ -116,7 +138,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
       await wiring.refresh(fetchWiringFiles);
       setSave({ kind: 'saved' });
     } catch (err) {
-      setSave({ kind: 'failed', reason: err instanceof Error ? err.message : String(err) });
+      setSave({ kind: 'failed', reason: msgOf(err) });
     }
   };
 
@@ -125,11 +147,11 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
     const src = () => provenance(p.table, p.k, layers(), draft());
     return (
       <span class="settings-source" data-testid={`prov-${p.table}-${p.k}`} data-mine={src() === 'my settings' ? 'yes' : 'no'}>
-        {src()}
+        {provenanceLabel(src())}
         <Show when={src() === 'my settings'}>
           {' '}
           <button class="linklike" data-testid={`reset-${p.table}-${p.k}`} onClick={() => edit(resetKey(draft(), p.table, p.k))}>
-            back to default
+            {t('settings.backToDefault')}
           </button>
         </Show>
       </span>
@@ -137,8 +159,8 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
   };
   const Shared = (p: { item: SharedKey; here: string }) => (
     <Show when={p.item.kinds.length > 1}>
-      <span class="settings-shared" title="One setting: changing it here changes it in every kind that uses it.">
-        shared by {p.item.kinds.join(' · ')}
+      <span class="settings-shared" title={t('settings.sharedTitle')}>
+        {t('settings.sharedBy', { kinds: p.item.kinds.join(' · ') })}
       </span>
     </Show>
   );
@@ -169,7 +191,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
             class="glyph-free"
             value={cur().glyph}
             maxLength={16}
-            aria-label="Glyph (any character or emoji)"
+            aria-label={t('settings.glyph')}
             data-testid={`glyph-free-${p.scope}-${p.k}`}
             onChange={(e) => {
               const v = e.currentTarget.value;
@@ -181,7 +203,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
             <input
               type="color"
               value={toneColor(cur().tone)}
-              aria-label="Tone colour"
+              aria-label={t('settings.tone')}
               data-testid={`tone-${p.scope}-${p.k}`}
               onChange={(e) => edit(setRender(draft(), p.k, { glyph: cur().glyph, tone: e.currentTarget.value }))}
             />
@@ -214,7 +236,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
         </svg>
         <span class="settings-pickers">
           <label class="seg-label">
-            line{' '}
+            {t('settings.relation.line')}{' '}
             <Seg
               options={EDGE_STYLE_IDS}
               value={style()}
@@ -223,7 +245,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
             />
           </label>
           <label class="seg-label">
-            layout{' '}
+            {t('settings.relation.layout')}{' '}
             <Seg
               options={ARRANGE_IDS}
               value={arrange()}
@@ -232,8 +254,8 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
             />
           </label>
           <Show when={arrange() === 'contain'}>
-            <label class="seg-label" title="Which end the box wraps: 'in' nests the node inside its target, 'out' nests the target inside the node">
-              nest{' '}
+            <label class="seg-label" title={t('settings.relation.nestTitle')}>
+              {t('settings.relation.nest')}{' '}
               <Seg
                 options={CONTAIN_DIRECTIONS}
                 value={direction()}
@@ -249,18 +271,18 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
   };
 
   return (
-    <div class="settings-overlay" data-motion={props.motion ?? 'enter'} data-testid="settings-screen" role="dialog" aria-label="Settings" ref={(el) => onCleanup(manageFocus(el, { trap: true }))}>
+    <div class="settings-overlay" data-motion={props.motion ?? 'enter'} data-testid="settings-screen" role="dialog" aria-label={t('settings.title')} ref={(el) => onCleanup(manageFocus(el, { trap: true }))}>
       <div class="settings-panel">
-        <button data-testid="settings-close" class="settings-close" aria-label="Close settings" onClick={props.onClose}>
+        <button data-testid="settings-close" class="settings-close" aria-label={t('settings.close')} onClick={props.onClose}>
           ✕
         </button>
 
         <aside class="settings-rail" role="tablist" aria-orientation="vertical">
-          <h1>Settings</h1>
-          <For each={[['view', 'View'], ['attention', 'Attention'], ['viewers', 'Viewers'], ['prefs', 'Preferences'], ['keys', '단축키']] as [Section, string][]}>
-            {([id, name]) => (
+          <h1>{t('settings.title')}</h1>
+          <For each={SECTIONS}>
+            {([id, nameKey]) => (
               <button role="tab" aria-selected={section() === id} classList={{ active: section() === id }} data-testid={`settings-tab-${id}`} onClick={() => setSection(id)}>
-                {name}
+                {t(nameKey)}
               </button>
             )}
           </For>
@@ -270,33 +292,33 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
           <Show when={loadProblem()}>{(p) => <p class="hint warn">{p()}</p>}</Show>
 
           <Show when={section() === 'view'}>
-            <nav class="settings-srctabs" role="tablist" aria-label="Config source">
+            <nav class="settings-srctabs" role="tablist" aria-label={t('settings.configSource')}>
               <For each={tabs()}>
-                {(t) => (
+                {(tab) => (
                   <button
                     role="tab"
-                    aria-selected={activeTab().id === t.id}
-                    classList={{ active: activeTab().id === t.id }}
-                    data-testid={`settings-src-${t.name}`}
-                    onClick={() => setSrcId(t.id)}
+                    aria-selected={activeTab().id === tab.id}
+                    classList={{ active: activeTab().id === tab.id }}
+                    data-testid={`settings-src-${tab.name}`}
+                    onClick={() => setSrcId(tab.id)}
                   >
-                    {t.name}
+                    {tab.id === DEFAULT_TAB_ID ? t('settings.source.default') : tab.name}
                   </button>
                 )}
               </For>
             </nav>
             <div class="settings-content">
               <Show when={showsWorkspace()}>
-                <For each={view().sections} fallback={<p class="hint">The workspace shows no nodes yet.</p>}>
+                <For each={view().sections} fallback={<p class="hint">{t('settings.noNodes')}</p>}>
                   {(sec) => (
                     <section class="settings-kind" data-testid={`kind-${sec.kind}`}>
                       <h2>
-                        {sec.kind} <span class="hint">· {sec.count} node{sec.count === 1 ? '' : 's'}</span>
+                        {sec.kind} <span class="hint">· {tn('settings.nodeCount', sec.count)}</span>
                       </h2>
-                      <h3>States</h3>
+                      <h3>{t('settings.states')}</h3>
                       <For each={sec.states}>{(s) => <StateRow k={s.key} scope={sec.kind} extra={<Shared item={s} here={sec.kind} />} />}</For>
                       <Show when={sec.relations.length > 0}>
-                        <h3>Relations</h3>
+                        <h3>{t('settings.relations')}</h3>
                         <For each={sec.relations}>{(r) => <RelationRow k={r.key} scope={sec.kind} extra={<Shared item={r} here={sec.kind} />} />}</For>
                       </Show>
                     </section>
@@ -306,7 +328,10 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
               <Show when={notOnScreen().states.length + notOnScreen().relations.length > 0}>
                 <details class="settings-kind" data-testid="settings-unobserved" open={!showsWorkspace()}>
                   <summary>
-                    Mapped by {activeTab().name}, not on screen now ({notOnScreen().states.length + notOnScreen().relations.length})
+                    {t('settings.unobserved', {
+                      source: activeTab().id === DEFAULT_TAB_ID ? t('settings.source.default') : activeTab().name,
+                      count: notOnScreen().states.length + notOnScreen().relations.length,
+                    })}
                   </summary>
                   <For each={notOnScreen().states}>{(k) => <StateRow k={k} scope="unobserved" />}</For>
                   <For each={notOnScreen().relations}>{(k) => <RelationRow k={k} scope="unobserved" />}</For>
@@ -317,8 +342,8 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
 
           <Show when={section() === 'attention'}>
             <div class="settings-content">
-              <p class="hint">Which causes may interrupt you; the rest stay ambient. The causes come from the backend.</p>
-              <For each={attentionCauses(nodes(), preview())} fallback={<p class="hint">No attention causes in this workspace yet.</p>}>
+              <p class="hint">{t('settings.attention.intro')}</p>
+              <For each={attentionCauses(nodes(), preview())} fallback={<p class="hint">{t('settings.attention.none')}</p>}>
                 {(k) => (
                   <div class="settings-row" data-testid={`attention-row-${k}`}>
                     <span class="settings-key">{k}</span>
@@ -340,8 +365,8 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
 
           <Show when={section() === 'viewers'}>
             <div class="settings-content">
-              <p class="hint">How each file type is shown. Only viewers the engine allows for the type are offered.</p>
-              <For each={mediaTypes(nodes(), preview())} fallback={<p class="hint">No artifacts in this workspace yet.</p>}>
+              <p class="hint">{t('settings.viewers.intro')}</p>
+              <For each={mediaTypes(nodes(), preview())} fallback={<p class="hint">{t('settings.viewers.none')}</p>}>
                 {(k) => (
                   <div class="settings-row" data-testid={`viewer-row-${k}`}>
                     <span class="settings-key">{k}</span>
@@ -349,7 +374,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                     <span class="settings-pickers">
                       <select value={viewerFor(preview(), k) ?? ''} data-testid={`viewer-${k}`} onChange={(e) => e.currentTarget.value && edit(setViewer(draft(), k, e.currentTarget.value as ViewerId))}>
                         <option value="" disabled>
-                          (engine fallback)
+                          {t('settings.viewers.fallback')}
                         </option>
                         <For each={viewerOptions(k)}>{(v) => <option value={v}>{v}</option>}</For>
                       </select>
@@ -364,10 +389,31 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
           <Show when={section() === 'prefs'}>
             <div class="settings-content">
               <p class="hint">
-                This machine only (<code>~/.gunnflow/prefs.json</code>) — ergonomics, not workspace vocabulary. Changes apply and save at once.
+                {t('settings.prefs.introBefore')}
+                <code>~/.gunnflow/prefs.json</code>
+                {t('settings.prefs.introAfter')}
               </p>
+              <div class="settings-row" data-testid="pref-row-locale">
+                <span class="settings-key">{t('settings.prefs.language')}</span>
+                <span />
+                <span class="settings-pickers">
+                  <select
+                    value={locale()}
+                    data-testid="pref-locale"
+                    aria-label={t('locale.switch')}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value;
+                      if (isLocale(v)) setLocale(v);
+                    }}
+                  >
+                    <For each={LOCALES}>{(l) => <option value={l} lang={l}>{LOCALE_NAMES[l]}</option>}</For>
+                  </select>
+                  <span class="hint">{t('settings.prefs.languageHint')}</span>
+                </span>
+                <span class="settings-source">{t('settings.prefs.thisBrowser')}</span>
+              </div>
               <div class="settings-row" data-testid="pref-row-zoom">
-                <span class="settings-key">zoom sensitivity</span>
+                <span class="settings-key">{t('settings.prefs.zoom')}</span>
                 <span />
                 <span class="settings-pickers">
                   <input
@@ -376,12 +422,12 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                     data-testid="pref-zoom-sensitivity"
                     onChange={(e) => void prefs.save({ zoomSensitivity: Number(e.currentTarget.value) })}
                   />
-                  <span class="hint">wheel factor per notch</span>
+                  <span class="hint">{t('settings.prefs.zoomHint')}</span>
                 </span>
-                <span class="settings-source">this machine</span>
+                <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
               </div>
               <div class="settings-row" data-testid="pref-row-detail">
-                <span class="settings-key">detail zoom</span>
+                <span class="settings-key">{t('settings.prefs.detailZoom')}</span>
                 <span />
                 <span class="settings-pickers">
                   <input
@@ -390,12 +436,12 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                     data-testid="pref-detail-zoom"
                     onChange={(e) => void prefs.save({ detailZoom: Number(e.currentTarget.value) })}
                   />
-                  <span class="hint">camera zoom at which node detail appears</span>
+                  <span class="hint">{t('settings.prefs.detailZoomHint')}</span>
                 </span>
-                <span class="settings-source">this machine</span>
+                <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
               </div>
               <div class="settings-row" data-testid="pref-row-lens">
-                <span class="settings-key">default lens</span>
+                <span class="settings-key">{t('settings.prefs.defaultLens')}</span>
                 <span />
                 <span class="settings-pickers">
                   <select
@@ -403,16 +449,16 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                     data-testid="pref-default-lens"
                     onChange={(e) => void prefs.save({ defaultLens: e.currentTarget.value })}
                   >
-                    <option value="all">Workspace</option>
+                    <option value="all">{t('sidebar.lensAll')}</option>
                     <For each={configLenses(preview())}>{(l) => <option value={l.id}>{l.label}</option>}</For>
-                    <option value="plan">Plan</option>
+                    <option value="plan">{t('sidebar.lensPlan')}</option>
                   </select>
-                  <span class="hint">lens selected at boot</span>
+                  <span class="hint">{t('settings.prefs.defaultLensHint')}</span>
                 </span>
-                <span class="settings-source">this machine</span>
+                <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
               </div>
               <div class="settings-row" data-testid="pref-row-pack-containers">
-                <span class="settings-key">pack containers</span>
+                <span class="settings-key">{t('settings.prefs.packContainers')}</span>
                 <span />
                 <span class="settings-pickers">
                   <input
@@ -421,19 +467,20 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                     data-testid="pref-pack-containers"
                     onChange={(e) => void prefs.save({ packContainers: e.currentTarget.checked })}
                   />
-                  <span class="hint">arrange unrelated members inside a group in rows, not one column (relayouts once)</span>
+                  <span class="hint">{t('settings.prefs.packContainersHint')}</span>
                 </span>
-                <span class="settings-source">this machine</span>
+                <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
               </div>
-              <Show when={prefs.saveProblem()}>{(r) => <p class="hint warn">not saved — {r()}</p>}</Show>
+              <Show when={prefs.saveProblem()}>{(r) => <p class="hint warn">{t('settings.notSaved', { reason: r() })}</p>}</Show>
             </div>
           </Show>
 
           <Show when={section() === 'keys'}>
             <div class="settings-content">
               <p class="hint">
-                단축키 — 이 기기 전용(<code>~/.gunnflow/prefs.json</code>, 상류로 0바이트). 엔진은 바인딩 이름만 알고,
-                키는 여기서 읽는다. 한 글자 키만 받고, 이미 쓰는 키는 거부한다.
+                {t('settings.keys.introBefore')}
+                <code>~/.gunnflow/prefs.json</code>
+                {t('settings.keys.introAfter')}
               </p>
               <For each={KEYBINDINGS}>
                 {(b) => (
@@ -444,7 +491,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                       <input
                         style={{ width: '48px', 'text-align': 'center' }}
                         value={resolveKey(prefs.prefs().keys, b.name)}
-                        aria-label={`${b.label} 단축키`}
+                        aria-label={t('settings.keys.inputLabel', { binding: bindingLabel(b) })}
                         data-testid={`key-input-${b.name}`}
                         onChange={(e) => {
                           // sanitizeKeys is the one gatekeeper (astral characters count as one key).
@@ -456,43 +503,45 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                           } else {
                             setKeyProblem(
                               dup !== null
-                                ? `'${v}'는 이미 ${dup}에 할당되어 있다 — 먼저 그 바인딩을 바꿔야 한다`
-                                : '한 글자 키만 받는다',
+                                ? msg('settings.keys.duplicate', { key: v!, binding: dup })
+                                : msg('settings.keys.oneChar'),
                             );
                             e.currentTarget.value = resolveKey(prefs.prefs().keys, b.name);
                           }
                         }}
                       />
-                      <span class="hint">{b.label} · 기본 {DEFAULT_KEYS[b.name].toUpperCase()}</span>
+                      <span class="hint">{t('settings.keys.hint', { binding: bindingLabel(b), key: DEFAULT_KEYS[b.name].toUpperCase() })}</span>
                     </span>
-                    <span class="settings-source">this machine</span>
+                    <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
                   </div>
                 )}
               </For>
               <Show when={keyProblem()}>{(r) => <p class="hint warn" data-testid="key-problem">{r()}</p>}</Show>
-              <Show when={prefs.saveProblem()}>{(r) => <p class="hint warn">not saved — {r()}</p>}</Show>
+              <Show when={prefs.saveProblem()}>{(r) => <p class="hint warn">{t('settings.notSaved', { reason: r() })}</p>}</Show>
             </div>
           </Show>
 
           <footer class="settings-foot">
             <span class="hint">
-              Saved as <code>{USER_FILE}</code>, merged last — it wins over every other file. Glyphs take any character, tones any colour; the rest are engine tokens.
+              {t('settings.foot.before')}
+              <code>{USER_FILE}</code>
+              {t('settings.foot.after')}
             </span>
             <span class="spacer" />
             <span class="settings-status" data-testid="settings-status" data-state={save().kind}>
               {(() => {
                 const s = save();
-                if (s.kind === 'failed') return `not saved — ${s.reason}`;
-                if (s.kind === 'saved') return 'saved · applied';
-                if (s.kind === 'saving') return 'saving…';
-                return dirty() ? (problems().length > 0 ? `cannot save — ${problems()[0]}` : 'unsaved changes') : '';
+                if (s.kind === 'failed') return t('settings.notSaved', { reason: s.reason });
+                if (s.kind === 'saved') return t('settings.saved');
+                if (s.kind === 'saving') return t('settings.saving');
+                return dirty() ? (problems().length > 0 ? t('settings.cannotSave', { problem: problems()[0]! }) : t('settings.unsaved')) : '';
               })()}
             </span>
             <button data-testid="settings-reset-all" onClick={() => void resetAll()}>
-              Reset all
+              {t('settings.resetAll')}
             </button>
             <button data-testid="settings-save" class="primary" disabled={!dirty() || save().kind === 'saving'} onClick={() => void doSave()}>
-              Save
+              {t('settings.save')}
             </button>
           </footer>
         </div>

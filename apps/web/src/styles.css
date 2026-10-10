@@ -367,6 +367,11 @@ input {
 .status-strip .lost { color: var(--gate); }
 .status-strip .unreachable { color: var(--gate); font-weight: 600; }
 .status-strip button { background: transparent; border-color: transparent; color: var(--subtext); }
+/* Interface language switch: a quiet corner control, the active locale in the text colour. */
+.status-strip .locale-switch { display: inline-flex; align-items: center; gap: 2px; }
+.status-strip .locale-switch button { padding: 2px 6px; font-size: 12px; }
+.status-strip .locale-switch button.active { color: var(--text); font-weight: 600; }
+.status-strip .locale-sep { opacity: 0.5; }
 .activity-tray {
   border-top: 1px solid var(--border);
   padding: 12px 14px; color: var(--subtext); font-size: 13px;

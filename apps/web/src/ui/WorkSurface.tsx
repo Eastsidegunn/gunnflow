@@ -14,6 +14,7 @@ import { advanceInQueue } from '../state/decisionInbox.js';
 import { ArtifactViewer } from './ArtifactViewer.jsx';
 import { DetailSection, NodeActions } from './nodeParts.jsx';
 import { resolveParts } from '../canvas/parts.js';
+import { t } from '../i18n/index.js';
 
 export function WorkSurface(props: {
   stores: WorkspaceStores;
@@ -47,7 +48,7 @@ export function WorkSurface(props: {
     <section class="work-surface" data-testid="work-surface">
       <Show when={props.queue && queueAt() >= 0}>
         <span class="work-queue" data-testid="work-queue">
-          대기열 {queueAt() + 1}/{props.queue!.length}
+          {t('work.queue', { at: queueAt() + 1, total: props.queue!.length })}
           <button
             data-testid="work-prev"
             disabled={queueAt() <= 0}
@@ -81,7 +82,7 @@ export function AssemblySurface(props: { stores: WorkspaceStores; nodeId: string
     return n ? resolveParts(n, wiring.config) : null;
   });
   return (
-    <Show when={node() && resolved()} fallback={<p class="hint">node not in the received projection</p>}>
+    <Show when={node() && resolved()} fallback={<p class="hint">{t('work.nodeMissing')}</p>}>
       {(_) => {
         const v = () => ({ n: node()!, r: resolved()! });
         return (
@@ -103,7 +104,7 @@ export function AssemblySurface(props: { stores: WorkspaceStores; nodeId: string
                     testIdPrefix="generic-viewer"
                   />
                 ) : d.part === 'stream' && d.streamId ? (
-                  <p class="hint">stream {d.streamId}</p>
+                  <p class="hint">{t('work.stream', { id: d.streamId! })}</p>
                 ) : null
               }
             </For>
