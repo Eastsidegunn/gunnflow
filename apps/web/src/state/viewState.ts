@@ -60,6 +60,11 @@ export function createViewState() {
       const c = camera();
       setCamera({ ...c, x: c.x - dx / c.zoom, y: c.y - dy / c.zoom });
     },
+    /** The person takes the camera (a zoom move is about to animate it): automatic fits leave it alone. */
+    takeCamera() {
+      setUserMoved(true);
+      setCameraHeld(false);
+    },
     zoomAt(factor: number, min = 0.15, max = 2.5) {
       setUserMoved(true);
       setCameraHeld(false);
