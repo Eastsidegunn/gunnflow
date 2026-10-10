@@ -31,8 +31,9 @@ job.
 import { defineConformanceSuite } from '@gunnflow/contract/conformance';
 
 defineConformanceSuite('my-backend', async () => ({
-  contractVersion: '0.5.0',
+  contractVersion: '0.6.0',
   nodes: () => myBackend.nodes(),            // { id, capabilities, artifacts, streams? }[]
+  snapshot: () => myBackend.snapshot(),      // required (0.6.0): the GET /nodes body { revision, nodes }
   relay: (intent) => myBackend.relay(intent), // check structure with validateIntent before acting
   settle: () => myBackend.idle(),             // optional: wait for asynchronous effects
   streams: {                                  // optional: for backends that declare streams
@@ -45,7 +46,8 @@ defineConformanceSuite('my-backend', async () => ({
 
 It checks: version compatibility (strict semver); node structure (kind, state, relations,
 attention, capabilities, artifacts, streams, duplicate ids within a node, real edit targets and
-evidence); refusal of intents for absent nodes, undeclared actions, out-of-schema keys,
+evidence, the bounds of the optional decorations); the whole served snapshot (`snapshotProblem`: unique ids,
+no node changed after the snapshot revision — `snapshot()` is required as of 0.6.0); refusal of intents for absent nodes, undeclared actions, out-of-schema keys,
 disabled/hidden actions, pair-rule violations and missing required inputs; the digest convention;
 streams (resync first, contiguous non-negative seq, upstream-only gaps, resume); and every optional
 surface a target claims (detail, execution). Items with no applicable node are marked skipped, but an
@@ -73,6 +75,21 @@ the digest of the artifact the backend stores. `digestOfBody(body)` is the refer
 `CONTRACT_VERSION` is semver. While in 0.x, a different minor is treated as incompatible (the suite
 checks that major.minor match), so a consumer claims `contractVersion: '<major>.<minor>.x'`.
 
+- **0.6.0** — node: optional decorations, each an upstream-stated fact (absent = that decoration is
+  omitted, never inferred): `shortName` (far-zoom name, 1–32 code points, one line), `summary`
+  (1–200 code points, one line, plain text like the label; "one line" refuses LF, VT, FF, CR, NEL,
+  U+2028 and U+2029), `active` (absent = unknown, not false),
+  `lastActivityTs` (ms epoch, integer > 0), `changedAtRevision` (integer ≥ 1; the node's own last
+  change — containers do not roll up), `originNodeId` (not the node's own id; draws no edge, may
+  name a node absent from the snapshot), `steps` (`{ done, total }` integers, 0 ≤ done ≤ total,
+  total ≥ 1; display only — the engine never computes progress). Snapshot rule: a node's
+  `changedAtRevision` must not exceed the snapshot `revision` — `snapshotNodeProblem` /
+  `snapshotProblem`; a node breaking it is not shown, the rest of the snapshot stands. Wiring: a
+  relation may state its `role` (`waits_on` · `blocks` · `supports` · `produces` · `contains`, read
+  source → target); helper `relationRoleFor`; `arrange` stays the layout authority. Conformance:
+  `ConformanceTarget.snapshot()` is now required and checked with `snapshotProblem`. Every existing
+  config stays valid. **0.5 consumers reject nodes carrying the new keys** (unknown keys are
+  refused), so a backend must not emit them to a 0.5 cockpit. Claim `0.6.x`.
 - **0.5.0** — wiring: a kind may state its node `shape` (`rect` · `pill` · `circle` · `diamond` ·
   `hexagon`, and `band` for containers) and a `size` factor (0.5–3); `parts` becomes optional;
   helper `kindShape`. Presentation only. Every existing config stays valid. Node, detail and intent

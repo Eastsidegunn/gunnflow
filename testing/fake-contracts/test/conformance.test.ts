@@ -16,14 +16,15 @@ import {
   buildExecutionFixture,
   fakePtyBuffer,
   fakePtyFeed,
-  normalFixture,
   projectNodes,
   toExecutionSnapshot,
+  viewsFixture,
 } from '../src/index.js';
 import { detailOf } from '../src/details.js';
 
 function simulatorTarget(): ConformanceTarget {
-  const workspace = new FakeWorkspaceStream(normalFixture());
+  // The normal scenario with the optional node decorations, so the suite checks them too.
+  const workspace = new FakeWorkspaceStream(viewsFixture());
   const relay = new NullIntentRelay(workspace);
   const session = buildExecutionFixture().sessions[0]!;
   const pty = new FakePtyStream(session, fakePtyBuffer(session.id));
@@ -57,6 +58,10 @@ function simulatorTarget(): ConformanceTarget {
     },
     features: { edit: true, streams: true },
     nodes,
+    snapshot: () => {
+      const p = workspace.current();
+      return { revision: p.revision, nodes: projectNodes(p) };
+    },
     async relay(intent) {
       // The contract's structure checks run before anything reaches the simulator.
       const check = validateIntent(intent, lookupCapability(nodes().find((n) => n.id === intent.nodeId), intent.action));

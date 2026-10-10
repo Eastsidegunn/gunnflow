@@ -28,6 +28,17 @@ interface ExecutionSnapshot { sessions: ExecutionSession[]; events: ExecutionEve
 `nodeProblem`을 통과해야 한다(통과 못 한 노드는 cockpit이 표시하지 않고 사유를 남긴다).
 이 엔드포인트가 200을 주지 않으면 BFF는 기동을 거부한다.
 
+노드는 선택 장식 필드(0.6.0)를 실을 수 있다 — 모두 백엔드가 진술한 사실이다:
+`shortName`(원거리 이름, 1–32 코드포인트, 줄바꿈 없음), `summary`(한 줄 요약, 1–200 코드포인트,
+줄바꿈 없음, label과 같은 지위의 평문 — 줄바꿈 = LF·VT·FF·CR·NEL·U+2028·U+2029), `active`(지금 활성; 부재 = 모름이지 false가 아님),
+`lastActivityTs`(ms epoch, 양의 정수), `changedAtRevision`(이 노드 자신의 projection이 마지막으로
+바뀐 revision, 1 이상 정수 — 컨테이너로 집계하지 않는다), `originNodeId`(이 노드가 비롯된 노드,
+자기 id 불가, 엣지를 그리지 않고 스냅샷에 없는 노드를 가리켜도 된다), `steps`(`{ done, total }`
+정수, 0 ≤ done ≤ total, total ≥ 1, 표시 전용 — 엔진은 진행률을 계산하지 않는다).
+스냅샷 규칙: `changedAtRevision` ≤ 그 스냅샷의 `revision`(`snapshotNodeProblem`/`snapshotProblem`).
+어긴 노드만 표시되지 않고 사유가 남는다 — 스냅샷 전체는 유지된다. 필드가 없으면 그 장식만 생략될
+뿐이다. 0.5 소비자는 이 키를 가진 노드를 거부하므로(미지 키 엄격) 0.5 cockpit에는 보내지 않는다.
+
 ## GET /stream (SSE)
 
 - 표준 SSE 프레이밍(HTML 표준): LF·CRLF·CR 줄끝, 빈 줄로 이벤트 종료, 여러 `data:` 줄은 LF로 결합,

@@ -12,11 +12,13 @@ import { WORKSPACE_ROOT_KIND, type NodeProjection } from '@gunnflow/contract';
 import {
   VIEWER_IDS,
   WIRING_SCHEMA_VERSION,
+  relationRoleFor,
   validateWiringConfig,
   type ArrangeId,
   type AttentionMechanism,
   type ContainDirection,
   type EdgeStyleId,
+  type RelationRole,
   type ViewerId,
   type WiringConfig,
 } from '@gunnflow/contract/wiring';
@@ -147,8 +149,21 @@ export function provenance(table: Table, key: string, layers: readonly Layer[], 
 export function setRender(d: WiringConfig, key: string, value: { glyph: string; tone: string }): WiringConfig {
   return { ...d, render: { ...(d.render ?? {}), [key]: value } };
 }
-export function setRelation(d: WiringConfig, key: string, value: { style: EdgeStyleId; arrange?: ArrangeId; direction?: ContainDirection }): WiringConfig {
+export function setRelation(
+  d: WiringConfig,
+  key: string,
+  value: { style: EdgeStyleId; arrange?: ArrangeId; direction?: ContainDirection; role?: RelationRole },
+): WiringConfig {
   return { ...d, relations: { ...(d.relations ?? {}), [key]: value } };
+}
+/**
+ * The effective role of a relation, as an entry fragment. A relation entry
+ * replaces the earlier layers' entry whole, so a style or layout edit must
+ * carry the role forward or the edit would silently drop it.
+ */
+export function keptRole(effective: WiringConfig, key: string): { role?: RelationRole } {
+  const role = relationRoleFor(effective, key);
+  return role ? { role } : {};
 }
 export function setAttention(d: WiringConfig, cause: string, mechanism: AttentionMechanism): WiringConfig {
   const rules = [...(d.attention ?? [])];

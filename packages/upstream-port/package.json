@@ -1,6 +1,6 @@
 {
   "name": "@gunnflow/upstream-port",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "The Gunnflow BFF's single upstream wiring port: the transport-shaped interface an in-process upstream implements, plus a small error class for an unsupported detail surface.",
   "license": "MIT",
@@ -51,7 +51,7 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "peerDependencies": {
-    "@gunnflow/contract": "^0.3.1 || ^0.4.0 || ^0.5.0"
+    "@gunnflow/contract": "^0.3.1 || ^0.4.0 || ^0.5.0 || ^0.6.0"
   },
   "devDependencies": {
     "@gunnflow/contract": "workspace:*",

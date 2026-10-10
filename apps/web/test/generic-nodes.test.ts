@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRoot } from 'solid-js';
 import { createFakeUpstream, normalFixture, projectNodes } from '@gunnflow-testing/fake-contracts';
-import { coveredActions } from '@gunnflow/contract/wiring';
+import { coveredActions, relationRoleFor } from '@gunnflow/contract/wiring';
 import { normalizeNodes, normalizeProjection } from '../src/model/normalize.js';
 import { createProjectionStore } from '../src/state/projectionStore.js';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
@@ -15,9 +15,9 @@ describe('generic node intake', () => {
       id: 'n1', kind: 'deliverable', state: { value: 'ready' }, relations: [], capabilities: [], attention: [],
       artifacts: [{ id: 'a1', mediaType: 'text/html', access: { kind: 'live', url } }],
     });
-    const clean = normalizeNodes({ nodes: [node('https://preview.example/a')] })!;
+    const clean = normalizeNodes({ nodes: [node('https://preview.example/a')] }, 1)!;
     expect(clean.nodes.map((n) => n.id)).toEqual(['n1']);
-    const leaked = normalizeNodes({ nodes: [node('https://alice:s3cret@preview.example/a')] })!;
+    const leaked = normalizeNodes({ nodes: [node('https://alice:s3cret@preview.example/a')] }, 1)!;
     expect(leaked.nodes).toEqual([]);
     expect(leaked.invalid).toHaveLength(1);
     expect(leaked.invalid[0]!.problem).toContain('must not carry credentials');
@@ -29,22 +29,32 @@ describe('generic node intake', () => {
     const body = createFakeUpstream('normal').snapshot().body;
     const domain = normalizeProjection(body);
     expect('nodes' in domain).toBe(false);
-    const generic = normalizeNodes(body)!;
+    const generic = normalizeNodes(body, domain.revision)!;
     expect(generic.invalid).toEqual([]);
     expect(generic.nodes).toEqual(projectNodes(normalFixture()));
   });
 
   it('absent nodes stay absent; malformed nodes are listed, not repaired', () => {
-    expect(normalizeNodes({ tasks: [] })).toBeNull();
-    const generic = normalizeNodes({ nodes: [projectNodes(normalFixture())[0], { id: 'x', kind: 'k' }] })!;
+    expect(normalizeNodes({ tasks: [] }, 1)).toBeNull();
+    const generic = normalizeNodes({ nodes: [projectNodes(normalFixture())[0], { id: 'x', kind: 'k' }] }, 1)!;
     expect(generic.nodes).toHaveLength(1);
     expect(generic.invalid).toEqual([{ index: 1, problem: expect.stringContaining('state') }]);
+  });
+
+  it('a node changed after the carrying snapshot revision is listed invalid; the rest of the snapshot stands', () => {
+    const body = createFakeUpstream('views').snapshot().body as { revision: number; nodes: { id: string; changedAtRevision?: number }[] };
+    expect(normalizeNodes(body, body.revision)!.invalid).toEqual([]);
+    const ahead = { ...body, nodes: body.nodes.map((n) => (n.id === 't-build' ? { ...n, changedAtRevision: body.revision + 1 } : n)) };
+    const generic = normalizeNodes(ahead, body.revision)!;
+    expect(generic.nodes.map((n) => n.id)).not.toContain('t-build');
+    expect(generic.nodes).toHaveLength(body.nodes.length - 1);
+    expect(generic.invalid).toEqual([{ index: body.nodes.findIndex((n) => n.id === 't-build'), problem: expect.stringContaining('changedAtRevision') }]);
   });
 
   it('the projection store keeps generic nodes in their own field', () => {
     const h = createRoot((dispose) => ({ store: createProjectionStore(), dispose }));
     const body = createFakeUpstream('normal').snapshot().body;
-    h.store.applyUpstream(normalizeProjection(body), normalizeNodes(body));
+    h.store.applyUpstream(normalizeProjection(body), normalizeNodes(body, normalizeProjection(body).revision));
     expect(h.store.genericNodes()?.nodes.length).toBeGreaterThan(0);
     expect(h.store.projection().tasks.length).toBeGreaterThan(0);
     h.store.applyUpstream(normalizeProjection({}));
@@ -54,6 +64,11 @@ describe('generic node intake', () => {
 });
 
 describe('wiring config loading', () => {
+  it('the default config states the simulator relation roles (dependency blocks, produces produces)', () => {
+    expect(relationRoleFor(DEFAULT_WIRING, 'dependency')).toBe('blocks');
+    expect(relationRoleFor(DEFAULT_WIRING, 'produces')).toBe('produces');
+  });
+
   it('the default config validates and every kind the simulator emits has an assembly', () => {
     const logs: string[] = [];
     const loaded = loadWiring(DEFAULT_WIRING, (m) => logs.push(m));
