@@ -66,12 +66,16 @@ export function transitionCause(prev: TransitionKey | null, next: TransitionKey)
 /* ---- size: the tier's spatial output ------------------------------------- */
 
 /** Every node's box size from a tier map (theme geometry data). */
+/** Every node's tier-1 size: one size for all, or per node (a kind's shape and size factor). */
+export type BaseSize = Size | ((id: string) => Size);
+const baseOf = (node: BaseSize, id: string): Size => (typeof node === 'function' ? node(id) : node);
+
 export function tierSizes(
   tiers: ReadonlyMap<string, Tier>,
-  geometry: { node: Size; tierScale: readonly number[] },
+  geometry: { node: BaseSize; tierScale: readonly number[] },
 ): Map<string, Size> {
   const out = new Map<string, Size>();
-  for (const [id, tier] of tiers) out.set(id, sizeForTier(tier, geometry.node, geometry.tierScale));
+  for (const [id, tier] of tiers) out.set(id, sizeForTier(tier, baseOf(geometry.node, id), geometry.tierScale));
   return out;
 }
 
@@ -85,11 +89,11 @@ export function tierSizes(
 export function displaySizes(
   spatial: ReadonlyMap<string, Tier>,
   ambientBaked: ReadonlyMap<string, Size>,
-  geometry: { node: Size; tierScale: readonly number[] },
+  geometry: { node: BaseSize; tierScale: readonly number[] },
 ): Map<string, Size> {
   const out = new Map<string, Size>();
   for (const [id, tier] of spatial) {
-    const person = sizeForTier(tier, geometry.node, geometry.tierScale);
+    const person = sizeForTier(tier, baseOf(geometry.node, id), geometry.tierScale);
     const baked = ambientBaked.get(id);
     out.set(id, baked && baked.w > person.w ? { ...baked } : person);
   }
@@ -107,7 +111,7 @@ export interface SpaceInputs {
   sizes: ReadonlyMap<string, Size>;
   /** User-dragged positions: a pin holds POSITION — never pushed, never overridden. Its size follows tier (clamped like any). */
   pins: ReadonlyMap<string, Point>;
-  baseSize: Size;
+  baseSize: BaseSize;
   /** Theme geometry: the breathing margin a grown node claims — the first thing to yield when space is short. */
   margin: number;
   /** Theme geometry: how many siblings a growth may shift aside per direction. */
@@ -133,8 +137,8 @@ export function spaceTargets(i: SpaceInputs): Map<string, Rect> {
   const desired = new Map<string, Size>();
   const pinned = new Set<string>();
   for (const [id, p] of i.base) {
-    const alloc = i.lockedSizes.get(id) ?? i.baseSize;
-    const want = i.sizes.get(id) ?? i.baseSize;
+    const alloc = i.lockedSizes.get(id) ?? baseOf(i.baseSize, id);
+    const want = i.sizes.get(id) ?? baseOf(i.baseSize, id);
     const pin = i.pins.get(id);
     if (pin) pinned.add(id);
     boxes.set(id, { x: pin?.x ?? p.x, y: pin?.y ?? p.y, w: alloc.w, h: alloc.h });
@@ -145,7 +149,7 @@ export function spaceTargets(i: SpaceInputs): Map<string, Rect> {
     hops: i.hops,
     anchors: i.anchors,
     parentOf: i.parentOf,
-    maxShift: i.maxShift ?? defaultMaxShift(i.hops, i.baseSize),
+    maxShift: i.maxShift ?? defaultMaxShift(i.hops, typeof i.baseSize === 'function' ? GENERIC_NODE_SIZE : i.baseSize),
   });
 }
 

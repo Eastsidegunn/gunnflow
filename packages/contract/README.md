@@ -31,7 +31,7 @@ job.
 import { defineConformanceSuite } from '@gunnflow/contract/conformance';
 
 defineConformanceSuite('my-backend', async () => ({
-  contractVersion: '0.4.0',
+  contractVersion: '0.5.0',
   nodes: () => myBackend.nodes(),            // { id, capabilities, artifacts, streams? }[]
   relay: (intent) => myBackend.relay(intent), // check structure with validateIntent before acting
   settle: () => myBackend.idle(),             // optional: wait for asynchronous effects
@@ -73,6 +73,10 @@ the digest of the artifact the backend stores. `digestOfBody(body)` is the refer
 `CONTRACT_VERSION` is semver. While in 0.x, a different minor is treated as incompatible (the suite
 checks that major.minor match), so a consumer claims `contractVersion: '<major>.<minor>.x'`.
 
+- **0.5.0** — wiring: a kind may state its node `shape` (`rect` · `pill` · `circle` · `diamond` ·
+  `hexagon`, and `band` for containers) and a `size` factor (0.5–3); `parts` becomes optional;
+  helper `kindShape`. Presentation only. Every existing config stays valid. Node, detail and intent
+  wire unchanged. Claim `0.5.x`.
 - **0.4.0** — wiring: optional attention `group` (display group name), `actions` (display label
   per action name), and `detail.collapsed` / `detail.copyable` (with `detail.emphasis` now optional);
   helpers `attentionGroup`, `actionLabel`, `detailCollapsed`, `detailCopyable`. Every existing
