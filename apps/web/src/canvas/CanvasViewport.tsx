@@ -578,7 +578,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
 
   // ---- pointer interaction -------------------------------------------------
   let drag:
-    | { type: 'pan'; lastX: number; lastY: number; moved: boolean }
+    | { type: 'pan'; lastX: number; lastY: number; moved: boolean; middle?: boolean }
     | { type: 'node'; id: string; offsetX: number; offsetY: number; moved: boolean }
     | { type: 'group'; id: string; lastX: number; lastY: number; moved: boolean }
     | { type: 'sticky'; id: string; offsetX: number; offsetY: number; moved: boolean }
@@ -587,7 +587,15 @@ export function CanvasViewport(props: CanvasViewportProps) {
     | { type: 'rewire'; fromId: string }
     | null = null;
 
+  /** The pointer that owns the current gesture; other pointers neither start, move, end nor cancel it. */
+  let gesturePointer: number | null = null;
+  const foreign = (e: PointerEvent) => gesturePointer !== null && e.pointerId !== gesturePointer;
+
   const onPointerDown = (e: PointerEvent) => {
+    // Buttons beyond right (back/forward) start nothing on the canvas — not even a camera hand-over.
+    if (e.button > 2) return;
+    // A second pointer while one already owns a gesture is ignored.
+    if (foreign(e)) return;
     // A fresh gesture owns the camera: a scheduled stage pan-aside (or inbox framing) yields.
     cancelStagePan();
     yieldCamera();
@@ -599,7 +607,17 @@ export function CanvasViewport(props: CanvasViewportProps) {
       setMenu({ x: e.clientX, y: e.clientY, world: w, target: targetAt(w.x, w.y), hold: true });
       return;
     }
+    // Input contract: the middle button always moves the view, whatever lies under it
+    // (nodes, groups, personal items and link mode ignore it); it never selects.
+    if (e.button === 1) {
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
+      gesturePointer = e.pointerId;
+      drag = { type: 'pan', lastX: e.clientX, lastY: e.clientY, moved: false, middle: true };
+      return;
+    }
     canvas.setPointerCapture(e.pointerId);
+    gesturePointer = e.pointerId;
     const w = screenToWorld(e.clientX, e.clientY);
     const sticky = hitSticky(w.x, w.y);
     const box = sticky ? null : hitBox(w.x, w.y);
@@ -653,7 +671,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
   };
 
   const onPointerMove = (e: PointerEvent) => {
-    if (!drag) return;
+    if (!drag || foreign(e)) return;
     if (drag.type === 'pan') {
       viewState.panBy(e.clientX - drag.lastX, e.clientY - drag.lastY);
       drag.lastX = e.clientX;
@@ -714,6 +732,8 @@ export function CanvasViewport(props: CanvasViewportProps) {
   };
 
   const onPointerUp = (e: PointerEvent) => {
+    if (foreign(e)) return;
+    gesturePointer = null;
     if (!drag) return;
     const w = screenToWorld(e.clientX, e.clientY);
     if (drag.type === 'rewire') {
@@ -740,7 +760,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
     } else if ((drag.type === 'node' || drag.type === 'group') && !drag.moved) {
       personal.setOpen(null);
       selection.select(drag.id);
-    } else if (drag.type === 'pan' && !drag.moved) {
+    } else if (drag.type === 'pan' && !drag.moved && !drag.middle) {
       selection.clear();
     }
     drag = null;
@@ -750,13 +770,20 @@ export function CanvasViewport(props: CanvasViewportProps) {
 
   // A cancelled touch/pen drag (or lost capture) must not leave targets frozen
   // on the drag-patched map: drop the gesture and let push-aside settle.
-  const onPointerCancel = () => {
+  const onPointerCancel = (e: PointerEvent) => {
+    if (foreign(e)) return;
+    gesturePointer = null;
     if (drag?.type === 'rewire') {
       rewireDrag = null;
       markDirty();
     }
     drag = null;
     setDragLive(false);
+  };
+
+  // The browser's own defaults for the middle (autoscroll, X11 paste) and back/forward buttons never run on the canvas.
+  const onButtonDefault = (e: MouseEvent) => {
+    if (e.button === 1 || e.button > 2) e.preventDefault();
   };
 
   const onDblClick = (e: MouseEvent) => {
@@ -862,6 +889,9 @@ export function CanvasViewport(props: CanvasViewportProps) {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onLostPointerCapture={onPointerCancel}
+        onMouseDown={onButtonDefault}
+        onMouseUp={onButtonDefault}
+        onAuxClick={onButtonDefault}
         onDblClick={onDblClick}
         onContextMenu={onContextMenu}
         onWheel={onWheel}
