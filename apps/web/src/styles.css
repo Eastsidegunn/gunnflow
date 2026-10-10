@@ -840,3 +840,8 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 .zoom-ladder .zoom-tick { position: absolute; right: 0; width: 6px; height: 1px; background: var(--subtext); transform: translateY(50%); }
 .zoom-ladder .zoom-tick.anchor { width: 12px; height: 2px; background: var(--text, #e6e6e6); }
 .zoom-ladder .zoom-current { position: absolute; right: 0; width: 14px; height: 2px; background: var(--accent); transform: translateY(50%); transition: bottom var(--duration-fast01) var(--ease-standard); }
+
+/* Nested-link chip popover (GF-E): the relations between a node and its own containers, verbatim. */
+.nested-popover { position: absolute; z-index: 30; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.nested-popover button { text-align: left; background: transparent; border-color: transparent; color: var(--text, #e6e6e6); white-space: nowrap; }
+

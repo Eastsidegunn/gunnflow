@@ -3,6 +3,9 @@
  * focusable DOM entry, so the canvas never seals information away from
  * keyboard or assistive tech. Also what e2e uses to read the topology.
  */
+import { WORKSPACE_ROOT_KIND } from '@gunnflow/contract';
+import { classifyRelations } from '../canvas/genericScene.js';
+import { layoutGraphOf } from '../canvas/layoutGraph.js';
 import { For, Index, Show, createMemo } from 'solid-js';
 import type { WorkspaceStores } from '../state/stores.js';
 import type { Emphasis } from '../state/lens.js';
@@ -16,6 +19,22 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
     for (const [id, tier] of props.stores.relevance.tiers()) out.set(id, tierEmphasis(tier));
     return out;
   });
+  /**
+   * Relations with a node's own containers (GF-E): drawn as a chip on the
+   * canvas, spoken here so keyboard and screen-reader users reach them too.
+   */
+  const nested = createMemo(() => {
+    const nodes = (projectionStore.genericNodes()?.nodes ?? []).filter((n) => n.kind !== WORKSPACE_ROOT_KIND);
+    const config = props.stores.wiring.config;
+    return { links: classifyRelations(nodes, config, layoutGraphOf(nodes, config)).nestedLinks, byId: new Map(nodes.map((n) => [n.id, n])) };
+  });
+  const nestedDescription = (id: string): string | undefined => {
+    const { links, byId } = nested();
+    const list = links.get(id);
+    if (!list) return undefined;
+    const name = (other: string) => byId.get(other)?.label ?? other;
+    return `Relations with its containers: ${list.map((l) => (l.direction === 'in' ? `${name(l.other)} ${l.type} this` : `this ${l.type} ${name(l.other)}`)).join('; ')}`;
+  };
   const entries = createMemo(() => {
     const p = projectionStore.projection();
     const emphasis = emphasisOf();
@@ -124,6 +143,7 @@ export function A11yMirror(props: { stores: WorkspaceStores }) {
           <li>
             <button
               data-testid={`node-${entry().id}`}
+              aria-description={nestedDescription(entry().id)}
               data-kind={entry().kind}
               data-emphasis={entry().emphasis}
               aria-pressed={selection.selectedId() === entry().id}
