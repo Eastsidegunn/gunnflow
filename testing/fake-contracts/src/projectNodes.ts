@@ -180,7 +180,10 @@ export function projectNodes(p: FakeWorkspaceProjection): NodeProjection[] {
       c.state === 'waiting' ? [{ cause: NEEDS_HANDS, ...(c.requestedAt ? { since: iso(c.requestedAt) } : {}) }] : [],
     artifacts: [],
   }));
-  return [...root, ...missions, ...tasks, ...gates, ...deliverables, ...chores];
+  const all = [...root, ...missions, ...tasks, ...gates, ...deliverables, ...chores];
+  // Decorations are upstream-stated facts carried verbatim; a node without an entry carries none.
+  const decorations = p.nodeDecorations ?? {};
+  return all.map((n) => (Object.hasOwn(decorations, n.id) ? { ...n, ...decorations[n.id] } : n));
 }
 
 /** Node kind of a hands-on request (the simulator's word). */

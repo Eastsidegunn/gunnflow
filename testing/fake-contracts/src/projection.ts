@@ -9,7 +9,7 @@
  * (progress, blockedReason, urgency, aggregateState) exist ONLY when upstream
  * provides them; the UI must never compute a substitute.
  */
-import type { ArtifactRef, Capability, CapabilityLevel, Intent } from '@gunnflow/contract';
+import type { ArtifactRef, Capability, CapabilityLevel, Intent, NodeProjection } from '@gunnflow/contract';
 
 
 export type FakeNodeState =
@@ -266,7 +266,18 @@ export interface FakeWorkspaceProjection {
   appliedIntentKeys?: string[];
   /** Hands-on requests to a person (present only in the fixtures that carry them). */
   chores?: FakeChoreProjection[];
+  /**
+   * Optional node decorations the upstream states, keyed by node id (present
+   * only in the fixtures that carry them). Projected onto the node verbatim.
+   */
+  nodeDecorations?: Record<string, FakeNodeDecoration>;
 }
+
+/** The contract's optional node decorations, as the simulator states them. */
+export type FakeNodeDecoration = Pick<
+  NodeProjection,
+  'shortName' | 'summary' | 'active' | 'lastActivityTs' | 'changedAtRevision' | 'originNodeId' | 'steps'
+>;
 
 /* ------------------------------------------------------------------ */
 /* Append-only event log (simulates the upstream's audit chain)       */

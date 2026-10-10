@@ -111,6 +111,10 @@ defineConformanceSuite('direct wire (simulator reference server)', async () => {
   return {
     contractVersion: CONTRACT_VERSION,
     nodes: () => nodesOf(upstream.snapshot()),
+    snapshot: () => {
+      const e = upstream.snapshot();
+      return { revision: e.revision, nodes: nodesOf(e) };
+    },
     // The wire serves execution (reference server): the suite validates what it serves.
     execution: async (taskId) => (await upstream.executionSnapshot(taskId)) as ExecutionSnapshot | undefined,
     relay: (intent) => {

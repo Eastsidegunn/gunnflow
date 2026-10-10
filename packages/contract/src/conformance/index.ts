@@ -11,11 +11,13 @@ import {
   DETAIL_MAX_ITEMS,
   isCompatibleContractVersion,
   nodeProblem,
+  snapshotProblem,
   streamEventProblem,
   validateExecutionSnapshot,
   validateNodeDetail,
 } from '../validate.js';
 import { digestOfBody, utf8Bytes } from '../digest.js';
+import type { DirectSnapshot } from '../wire.js';
 
 /** A node exactly as the backend projects it. */
 export type ConformanceNode = NodeProjection;
@@ -36,6 +38,12 @@ export interface ConformanceTarget {
   features?: { edit?: boolean; streams?: boolean };
   /** Nodes as the backend projects them. */
   nodes(): Promise<readonly ConformanceNode[]> | readonly ConformanceNode[];
+  /**
+   * The whole snapshot as the backend serves it (its GET /nodes body),
+   * checked with `snapshotProblem` — including changedAtRevision ≤ revision.
+   * Required as of 0.6.0.
+   */
+  snapshot(): Promise<DirectSnapshot> | DirectSnapshot;
   /** Relay a canonical intent to the backend. */
   relay(intent: Intent): Promise<IntentResult>;
   /** Resolves once effects of relayed intents or produced output are observable. */
@@ -103,6 +111,15 @@ export function refusedIntentShapes(nodeId: string, action: string): Array<[stri
     ['missing idempotency key', { nodeId, action }],
     ['not an object', [nodeId, action]],
   ];
+}
+
+/**
+ * The snapshot check the suite runs: the target's served snapshot must pass
+ * `snapshotProblem`. Exported so the check itself can be tested against a
+ * failing target.
+ */
+export async function snapshotConformanceProblem(t: Pick<ConformanceTarget, 'snapshot'>): Promise<string | null> {
+  return snapshotProblem(await t.snapshot());
 }
 
 let keyCounter = 0;
@@ -192,6 +209,28 @@ export function defineConformanceSuite(
       const nodes = await t.nodes();
       expect(new Set(nodes.map((n) => n.id)).size).toBe(nodes.length);
       for (const n of nodes) expect(nodeProblem(n), n.id).toBeNull();
+    });
+
+    it('snapshot: the served GET /nodes body holds the contract shape, no node changed after its revision', async () => {
+      const t = await makeTarget();
+      expect(await snapshotConformanceProblem(t)).toBeNull();
+    });
+
+    it('nodeProblem / snapshotProblem: optional decorations are bounded one-line texts, positive integers, closed steps (the shape every node must hold)', () => {
+      const base = { id: 'n', kind: 'k', state: { value: 's' }, relations: [], capabilities: [], attention: [], artifacts: [] };
+      const ok = (extra: Record<string, unknown>) => nodeProblem({ ...base, ...extra }) === null;
+      expect(ok({ shortName: 'x'.repeat(32), summary: 'one line', active: false, lastActivityTs: 1, changedAtRevision: 1 })).toBe(true);
+      expect(ok({ originNodeId: 'elsewhere', steps: { done: 0, total: 1 } })).toBe(true);
+      expect(ok({ shortName: 'x'.repeat(33) })).toBe(false);
+      expect(ok({ summary: 'two\nlines' })).toBe(false);
+      expect(ok({ active: 'yes' })).toBe(false);
+      expect(ok({ lastActivityTs: 0 })).toBe(false);
+      expect(ok({ changedAtRevision: 0 })).toBe(false);
+      expect(ok({ originNodeId: 'n' })).toBe(false);
+      expect(ok({ steps: { done: 2, total: 1 } })).toBe(false);
+      expect(ok({ steps: { done: 0, total: 1, pct: 0 } })).toBe(false);
+      expect(snapshotProblem({ revision: 3, nodes: [{ ...base, changedAtRevision: 3 }] })).toBeNull();
+      expect(snapshotProblem({ revision: 3, nodes: [{ ...base, changedAtRevision: 4 }] })).not.toBeNull();
     });
 
     it('refuses intents for unknown nodes, undeclared actions and unknown keys', async () => {

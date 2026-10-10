@@ -13,6 +13,9 @@ import {
   detailEmphasis,
   kindParts,
   kindShape,
+  RELATION_ROLES,
+  relationArrangeFor,
+  relationRoleFor,
   SHAPE_IDS,
   renderFor,
   validateWiringConfig,
@@ -394,3 +397,37 @@ describe('wiring 0.5.0 kind shape and size', () => {
   });
 });
 
+
+describe('wiring 0.6.0 relation role', () => {
+  const v = WIRING_SCHEMA_VERSION;
+
+  it('accepts every role in the closed set; relations without a role stay valid', () => {
+    expect(RELATION_ROLES).toEqual(['waits_on', 'blocks', 'supports', 'produces', 'contains']);
+    for (const role of RELATION_ROLES) {
+      expect(validateWiringConfig({ version: v, relations: { r: { style: 'solid', role } } }).ok).toBe(true);
+    }
+    const cfg: WiringConfig = {
+      version: v,
+      relations: { parent: { style: 'muted', arrange: 'contain', direction: 'out', role: 'contains' }, plain: { style: 'solid' } },
+    };
+    expect(validateWiringConfig(cfg)).toEqual({ ok: true, config: cfg });
+  });
+
+  it('rejects a role outside the closed set', () => {
+    const bad = (role: unknown) => validateWiringConfig({ version: v, relations: { r: { style: 'solid', role } } } as unknown as WiringConfig);
+    for (const role of ['depends_on', 'WAITS_ON', '', 3, null]) {
+      const r = bad(role);
+      expect(r.ok, String(role)).toBe(false);
+      if (!r.ok) expect(r.problems[0]).toContain('config.relations.r.role');
+    }
+  });
+
+  it('relationRoleFor: the stated role, else undefined; arrange is independent of it', () => {
+    const cfg: WiringConfig = { version: v, relations: { needs: { style: 'solid', arrange: 'flow', role: 'waits_on' }, plain: { style: 'solid' } } };
+    expect(relationRoleFor(cfg, 'needs')).toBe('waits_on');
+    expect(relationRoleFor(cfg, 'plain')).toBeUndefined();
+    expect(relationRoleFor(cfg, 'unregistered')).toBeUndefined();
+    expect(relationRoleFor(cfg, '__proto__')).toBeUndefined();
+    expect(relationArrangeFor(cfg, 'needs')).toBe('flow');
+  });
+});
