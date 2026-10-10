@@ -23,7 +23,7 @@ async function toClient(page: Page, wx: number, wy: number) {
 }
 
 /** Polls until the camera and the given node rects stop changing (layout passes and fits have landed). */
-async function still(page: Page, ids: string[]) {
+async function still(page: Page, ids: string[], times = 4) {
   const read = async () => JSON.stringify([await camera(page), ...(await Promise.all(ids.map((id) => rectOf(page, id))))]);
   let last = await read();
   let same = 0;
@@ -37,7 +37,7 @@ async function still(page: Page, ids: string[]) {
       },
       { intervals: [100], timeout: 15_000 },
     )
-    .toBeGreaterThanOrEqual(4);
+    .toBeGreaterThanOrEqual(times);
 }
 
 /** No personal items: a leftover sticky or box from another scenario must not lie under the aimed points. */
@@ -95,6 +95,9 @@ test('a pinned chip popover: one Esc closes only it (the selection stays); a pre
   const tAt = await toClient(page, t.x + t.w / 2, t.y + t.h / 2);
   await page.mouse.click(tAt.x, tAt.y);
   await expect.poll(() => selected(page)).toBe('t-build');
+  // A selection grows the node and, 400 ms later, may pan it clear of the stage (240 ms): aim only once
+  // the camera and the nodes have been still for longer than that.
+  await still(page, ['t-build', 'd-report'], 8);
   const chip = (await dbg<Rect>(page, 'chipRect', 'd-report'))!;
   const at = await toClient(page, chip.x + chip.w / 2, chip.y + chip.h / 2);
   await page.mouse.click(at.x, at.y);
