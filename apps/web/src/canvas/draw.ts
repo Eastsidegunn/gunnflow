@@ -4,6 +4,7 @@
  * goes to fillText verbatim; colours come from the theme preset and config
  * literals. The old domain painter is gone: every upstream speaks the contract.
  */
+import { inflate, labelBeside, labelX, shapeRect, tracePath } from './shapes.js';
 import { isSessionIntent } from '../model/types.js';
 import type { WorkspaceLayout, NodeBox } from './layout.js';
 import type { Camera } from '../state/viewState.js';
@@ -31,6 +32,8 @@ interface Frame {
   labelZoom?: number;
   /** Relevance tiers (dynamic-view P2); absent = every node tier 1. */
   tiers?: ReadonlyMap<string, Tier>;
+  /** Where a drag would settle if released now (dashed outlines; view furniture, no grade). */
+  ghost?: readonly { shape: import('./shapes.js').LeafShape; rect: { x: number; y: number; w: number; h: number } }[] | null;
 }
 
 export interface GenericDrawInput extends Omit<Frame, 'layout' | 'boxOf'> {
@@ -40,6 +43,8 @@ export interface GenericDrawInput extends Omit<Frame, 'layout' | 'boxOf'> {
 
 // The painter's palette is the theme preset — no values live in this file.
 const C = DEFAULT_THEME.canvas;
+/** The container header band's height (theme geometry), where a band's name strip goes. */
+const LAYOUT_HEADER = DEFAULT_THEME.geometry.groupHeader;
 
 function alphaFor(id: string, input: Frame): number {
   // Tiers are the one pipeline when present; the emphasis map is the legacy/test path.
@@ -144,7 +149,13 @@ function curve(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number
  * tokens. Attention is an engine rule on top of any assembly.
  */
 export function drawGeneric(ctx: CanvasRenderingContext2D, width: number, height: number, input: GenericDrawInput): void {
-  const frame: Frame = { ...input, layout: input.scene.layout, boxOf: (id) => endpointBox(input.scene, id) };
+  // Edges attach to a leaf's drawn shape (a label strip beside it is not part of the endpoint).
+  const endpoint = (id: string) => {
+    const b = endpointBox(input.scene, id);
+    const n = input.scene.nodes.get(id);
+    return b && n && input.scene.layout.nodes.has(id) ? { ...b, ...shapeRect(n.shape, b) } : b;
+  };
+  const frame: Frame = { ...input, layout: input.scene.layout, boxOf: endpoint };
   const { camera } = input;
   ctx.save();
   ctx.fillStyle = C.bg;
@@ -173,6 +184,19 @@ export function drawGeneric(ctx: CanvasRenderingContext2D, width: number, height
     if (node) drawGenericNode(ctx, box, node, frame);
   }
   drawRewireDrag(ctx, frame);
+  if (input.ghost) {
+    // The landing preview: the shape outline, dashed, where the drag would settle.
+    ctx.strokeStyle = C.text;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1.5 / camera.zoom;
+    ctx.setLineDash([5 / camera.zoom, 5 / camera.zoom]);
+    for (const g of input.ghost) {
+      tracePath(ctx, g.shape, shapeRect(g.shape, g.rect));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
   ctx.restore();
 }
 
@@ -186,6 +210,16 @@ function drawGroup(ctx: CanvasRenderingContext2D, group: GroupBox, node: SceneNo
   roundRect(ctx, group.x, group.y, group.w, group.h, GROUP_STYLE.radius);
   ctx.fill();
   ctx.stroke();
+  if (node?.band) {
+    // A band (wiring shape 'band'): its name sits on a strip across the top.
+    ctx.save();
+    roundRect(ctx, group.x, group.y, group.w, group.h, GROUP_STYLE.radius);
+    ctx.clip();
+    ctx.fillStyle = GROUP_STYLE.border;
+    ctx.globalAlpha *= 0.35;
+    ctx.fillRect(group.x, group.y, group.w, LAYOUT_HEADER);
+    ctx.restore();
+  }
   ctx.font = GROUP_STYLE.labelFont;
   let x = group.x + 14;
   if (node) {
@@ -220,66 +254,102 @@ function drawGroup(ctx: CanvasRenderingContext2D, group: GroupBox, node: SceneNo
 function drawGenericNode(ctx: CanvasRenderingContext2D, box: NodeBox, node: SceneNode, frame: Frame): void {
   ctx.globalAlpha = alphaFor(box.id, frame);
   const interrupt = node.attention?.mechanism === 'interrupt';
+  // The kind's shape (wiring); the label strip beside a small shape is not outlined.
+  const sr = shapeRect(node.shape, box);
   ctx.fillStyle = interrupt ? DEFAULT_THEME.attentionWash : C.node;
   ctx.strokeStyle = interrupt ? ATTENTION_COLOR : C.nodeBorder;
   ctx.lineWidth = interrupt ? 2.5 : 1.5;
-  roundRect(ctx, box.x, box.y, box.w, box.h, 10);
+  tracePath(ctx, node.shape, sr);
   ctx.fill();
   ctx.stroke();
 
+  const beside = labelBeside(node.shape);
+  // Title and glyph: inside a shape that holds text, beside one that does not (D-4a).
+  // Diamond and hexagon keep their text inside the inner band where the outline leaves room.
+  const inset = node.shape === 'diamond' ? sr.w * 0.22 : node.shape === 'hexagon' ? Math.min(sr.w / 4, sr.h / 2) * 0.6 : node.shape === 'pill' ? sr.h * 0.25 : 0;
+  const tx = beside ? labelX(node.shape, box) : box.x + 12 + inset;
+  // A short box (a small size factor) centres its title instead of hanging it from the top.
+  // A short circle (small size factor) has room for one centred title line only.
+  const shortBeside = beside && sr.h < 44;
+  const titleY = shortBeside
+    ? sr.y + sr.h / 2 + 5
+    : beside || node.shape === 'diamond'
+      ? sr.y + sr.h / 2 - (node.shape === 'diamond' ? 4 : 6)
+      : box.y + Math.min(22, box.h / 2 + 5);
+  const textRight = box.x + box.w - 12 - inset;
   ctx.font = DEFAULT_THEME.fonts.title;
   ctx.fillStyle = node.tone;
-  ctx.fillText(node.glyph, box.x + 12, box.y + 22);
-  ctx.fillStyle = C.text;
-  ctx.fillText(clip(ctx, node.title, box.w - 60), box.x + 34, box.y + 22);
+  if (node.shape === 'diamond') {
+    // A diamond holds text only along its middle: glyph above the centre line, title and detail centred on it.
+    drawDiamondText(ctx, sr, node, frame);
+  } else if (beside) {
+    // The glyph sits in the shape's centre.
+    const gw = ctx.measureText(node.glyph).width;
+    ctx.fillText(node.glyph, sr.x + sr.w / 2 - gw / 2, sr.y + sr.h / 2 + 5);
+  } else {
+    ctx.fillText(node.glyph, tx, titleY);
+  }
+  if (node.shape !== 'diamond') {
+    ctx.fillStyle = C.text;
+    const titleX = beside ? tx : tx + 22;
+    ctx.fillText(clip(ctx, node.title, Math.max(0, textRight - titleX - (beside ? 0 : 16))), titleX, titleY);
+  }
 
   if (node.attention) {
     // Interrupt: badge; ambient: a quiet dot. Causes stay in the data, not the drawing.
+    const ax = beside ? sr.x + sr.w - 6 : node.shape === 'diamond' ? sr.x + sr.w * 0.66 : box.x + box.w - 18 - inset;
+    const ay = beside ? sr.y + 8 : node.shape === 'diamond' ? sr.y + sr.h * 0.3 : box.y + 22;
     ctx.fillStyle = ATTENTION_COLOR;
     if (interrupt) {
       ctx.font = DEFAULT_THEME.fonts.badge;
-      ctx.fillText('!', box.x + box.w - 18, box.y + 22);
+      ctx.fillText('!', ax, ay);
     } else {
       ctx.beginPath();
-      ctx.arc(box.x + box.w - 14, box.y + 16, 3.5, 0, Math.PI * 2);
+      ctx.arc(ax + 4, ay - 6, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  if (detailOn((frame.tiers?.get(node.id) ?? 1) as Tier, frame.labelZoom ?? frame.camera.zoom, frame.detailZoom ?? 0.5)) {
+  if (node.shape !== 'diamond' && detailOn((frame.tiers?.get(node.id) ?? 1) as Tier, frame.labelZoom ?? frame.camera.zoom, frame.detailZoom ?? 0.5)) {
     ctx.font = DEFAULT_THEME.fonts.meta;
     ctx.fillStyle = C.subtext;
     const detail = node.labels.length > 0 ? node.labels.join(' · ') : `${node.kind} · ${node.state}`;
-    ctx.fillText(clip(ctx, detail, box.w - 24), box.x + 12, box.y + 42);
+    const detailY = beside ? titleY + 18 : box.y + 42;
+    // Only where the line fits inside the box (a label-beside title strip has room below the title).
+    if (beside ? !shortBeside : detailY <= box.y + box.h - 8) ctx.fillText(clip(ctx, detail, Math.max(0, textRight - tx)), tx, detailY);
     // A grown box (P3: tier sized it up) fits the line the labels displaced.
-    if (node.labels.length > 0 && box.h >= DEFAULT_THEME.geometry.node.h + 18) {
+    if (!beside && node.labels.length > 0 && box.h >= node.baseSize.h + 18) {
       ctx.fillStyle = C.faint;
-      ctx.fillText(clip(ctx, `${node.kind} · ${node.state}`, box.w - 24), box.x + 12, box.y + 60);
+      ctx.fillText(clip(ctx, `${node.kind} · ${node.state}`, Math.max(0, textRight - tx)), tx, box.y + 60);
     }
-    const chips = node.parts.actions.slice(0, 3);
-    let x = box.x + 12;
-    for (const a of chips) {
-      const usable = a.level === 'enabled' && (a.kind === 'assembled' ? !a.blocked : a.usable);
-      const label = (usable ? '' : '⊘ ') + (Object.hasOwn(node.actionLabels, a.action) ? node.actionLabels[a.action]! : a.action);
-      ctx.fillStyle = usable ? C.running : C.faint;
-      ctx.font = DEFAULT_THEME.fonts.small;
-      const text = clip(ctx, label, box.x + box.w - 12 - x);
-      // Chips sit on the box's bottom edge, whatever size the tier gave it.
-      ctx.fillText(text, x, box.y + box.h - 16);
-      x += ctx.measureText(text).width + 10;
-      if (x > box.x + box.w - 30) break;
+    // Action chips only on rect and hexagon boxes with a bottom row below the detail line; circle, diamond
+    // and pill never carry chips (approved mockup), whatever size the tier gives them.
+    if (!beside && node.shape !== 'pill' && box.h >= 70) {
+      const chips = node.parts.actions.slice(0, 3);
+      let x = tx;
+      for (const a of chips) {
+        const usable = a.level === 'enabled' && (a.kind === 'assembled' ? !a.blocked : a.usable);
+        const label = (usable ? '' : '⊘ ') + (Object.hasOwn(node.actionLabels, a.action) ? node.actionLabels[a.action]! : a.action);
+        ctx.fillStyle = usable ? C.running : C.faint;
+        ctx.font = DEFAULT_THEME.fonts.small;
+        const text = clip(ctx, label, Math.max(0, textRight - x));
+        // Chips sit on the box's bottom edge, whatever size the tier gave it.
+        ctx.fillText(text, x, box.y + box.h - 16);
+        x += ctx.measureText(text).width + 10;
+        if (x > textRight - 18) break;
+      }
     }
   }
 
   if (frame.selectedId === box.id) {
     ctx.strokeStyle = C.selection;
     ctx.lineWidth = 2.5;
-    { const o = DEFAULT_THEME.geometry.selectionRingOffset; roundRect(ctx, box.x - o, box.y - o, box.w + 2 * o, box.h + 2 * o, 12); }
+    { const o = DEFAULT_THEME.geometry.selectionRingOffset; tracePath(ctx, node.shape, inflate(shapeRect(node.shape, box), o), 12); }
     ctx.stroke();
     // The cleared breathing margin around a grown focus node (engine furniture,
     // not a grade) — drawn only when the margin actually cleared (pins may sit
     // in it; the ring never claims space that is not free).
-    if (box.w > DEFAULT_THEME.geometry.node.w) {
+    if (box.w > node.baseSize.w) {
       const m = DEFAULT_THEME.geometry.focusMargin;
       const halo = { x: box.x - m, y: box.y - m, w: box.w + 2 * m, h: box.h + 2 * m };
       const occupied = [...frame.layout.nodes.values()].some(
@@ -297,3 +367,24 @@ function drawGenericNode(ctx: CanvasRenderingContext2D, box: NodeBox, node: Scen
   }
   ctx.globalAlpha = 1;
 }
+
+/** A diamond's text: the glyph above the centre, the title on it and the detail below, all centred within the middle width. */
+function drawDiamondText(ctx: CanvasRenderingContext2D, r: { x: number; y: number; w: number; h: number }, node: SceneNode, frame: Frame): void {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const centred = (text: string, y: number, maxW: number) => {
+    const t = clip(ctx, text, maxW);
+    ctx.fillText(t, cx - ctx.measureText(t).width / 2, y);
+  };
+  ctx.font = DEFAULT_THEME.fonts.title;
+  ctx.fillStyle = node.tone;
+  centred(node.glyph, cy - 12, r.w * 0.3);
+  ctx.fillStyle = C.text;
+  centred(node.title, cy + 6, r.w * 0.78);
+  if (detailOn((frame.tiers?.get(node.id) ?? 1) as Tier, frame.labelZoom ?? frame.camera.zoom, frame.detailZoom ?? 0.5)) {
+    ctx.font = DEFAULT_THEME.fonts.meta;
+    ctx.fillStyle = C.subtext;
+    centred(node.labels.length > 0 ? node.labels.join(' · ') : node.state, cy + 22, r.w * 0.5);
+  }
+}
+

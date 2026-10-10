@@ -10,6 +10,7 @@
  * Everything here is iterative and bounded (no recursion over the graph), so
  * a deep or huge topology cannot stall the main thread.
  */
+import { isBand, leafBaseSize } from './shapes.js';
 import { WORKSPACE_ROOT_KIND, type NodeProjection } from '@gunnflow/contract';
 import { relationArrangeFor, relationDirectionFor, type WiringConfig } from '@gunnflow/contract/wiring';
 
@@ -58,10 +59,19 @@ export interface LayoutGraph {
    * signature (and every component signature): toggling re-lays everything.
    */
   packContainers?: boolean;
+  /**
+   * Containers drawn as wide bands (wiring `shape: "band"`): their disconnected
+   * children pack toward a wide row instead of the engine aspect. A layout
+   * input, so it joins the signature.
+   */
+  bands?: ReadonlySet<string>;
 }
 
-/** The packing mode's share of a signature (empty when on, the default). */
-const packMark = (graph: { packContainers?: boolean }) => (graph.packContainers === false ? '|flat' : '');
+/** The packing mode's share of a signature (empty when on, the default), plus the band containers. */
+const packMark = (graph: { packContainers?: boolean; bands?: ReadonlySet<string> }) =>
+  (graph.packContainers === false ? '|flat' : '') + (graph.bands && graph.bands.size > 0 ? `|bands:${[...graph.bands].sort(byId).join(',')}` : '');
+/** How wide a band's rows run against their height (a band is a row, not a block). */
+const BAND_ASPECT = 6;
 
 
 export interface LayoutProvider {
@@ -185,8 +195,12 @@ export function layoutGraphOf(
     else if (d > LAYOUT.maxNestDepth) atLimit.set(n.id, atLimit.get(p)!);
     parentOf.set(n.id, d <= LAYOUT.maxNestDepth ? p : atLimit.get(p)!);
   }
+  const containerIds = new Set(parentOf.values());
+  const bands = new Set(nodes.filter((n) => containerIds.has(n.id) && isBand(config, n.kind)).map((n) => n.id));
   return {
-    nodes: nodes.map((n) => ({ id: n.id, w: GENERIC_NODE_SIZE.w, h: GENERIC_NODE_SIZE.h })),
+    // Each leaf's box follows its kind's shape and size (wiring `kinds[kind].shape/size`).
+    nodes: nodes.map((n) => ({ id: n.id, ...leafBaseSize(config, n.kind) })),
+    bands,
     flow,
     parentOf,
     withheld: [...withheld].sort(byId),
@@ -194,7 +208,8 @@ export function layoutGraphOf(
       nodes.map((n) => n.id),
       flow,
       parentOf,
-    ) + packMark({ packContainers }),
+      new Map(nodes.map((n) => [n.id, leafBaseSize(config, n.kind)])),
+    ) + packMark({ packContainers, bands }),
     packContainers,
   };
 }
@@ -358,7 +373,7 @@ function componentRect(graph: LayoutGraph, members: readonly string[], positions
  * box is right-aligned — so a relation leaving the packed box starts at the
  * edge it leaves from, as in the unpacked column.
  */
-function packRows(rects: readonly Rect[], origin: Point, sides?: readonly number[]): Point[] | null {
+function packRows(rects: readonly Rect[], origin: Point, sides?: readonly number[], aspect: number = LAYOUT.aspect): Point[] | null {
   if (rects.length <= 1) return null;
   const side = (i: number) => sides?.[i] ?? 0;
   const order = rects
@@ -371,7 +386,7 @@ function packRows(rects: readonly Rect[], origin: Point, sides?: readonly number
     area += (r.w + LAYOUT.colGap) * (r.h + LAYOUT.rowGap * 2);
     widest = Math.max(widest, r.w);
   }
-  const rowWidth = Math.max(widest, Math.sqrt(area * LAYOUT.aspect));
+  const rowWidth = Math.max(widest, Math.sqrt(area * aspect));
   const shifts: Point[] = new Array(rects.length);
   let x = origin.x;
   let y = origin.y;
@@ -659,7 +674,12 @@ function packWithinContainers(graph: LayoutGraph, positions: Positions): Positio
     if (!content) continue;
     const vote = votes.get(c);
     const sides = comps.map((g) => Math.sign(g.reduce((s, k) => s + (vote?.get(k) ?? 0), 0)));
-    const shifts = packRows(comps.map((g) => union(g.map((k) => rect.get(k)!))!), { x: content.x, y: content.y }, sides);
+    const shifts = packRows(
+      comps.map((g) => union(g.map((k) => rect.get(k)!))!),
+      { x: content.x, y: content.y },
+      sides,
+      graph.bands?.has(c) ? BAND_ASPECT : LAYOUT.aspect,
+    );
     if (shifts) comps.forEach((g, i) => g.forEach((k) => shiftTree(k, shifts[i]!.x, shifts[i]!.y)));
     const inner = union(kids.map((k) => rect.get(k)!))!;
     rect.set(c, {

@@ -14,6 +14,7 @@ import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 import { buildScene, genericEmphasis } from './genericScene.js';
 import { containerRects, layoutGraphOf, sizedGraph } from './layoutGraph.js';
 import { resolveDrop } from './dropResolve.js';
+import { hitsLeaf, leafBaseSize, type LeafShape } from './shapes.js';
 import { FRAME_NODE_EVENT, anchorOut, fitZoom, fitZoomRelative, ladderKey, snapDown, ladderThreshold, ladderWith, stepZoom, wheelNotches, wheelPixels, zoomAtPoint, ZOOM_MAX, ZOOM_MIN, type Ladder, type Slot } from './zoomLadder.js';
 import {
   TIDY_EVENT,
@@ -67,6 +68,17 @@ export function CanvasViewport(props: CanvasViewportProps) {
   let rewireDrag: { fromId: string; toX: number; toY: number } | null = null;
 
   const geo = DEFAULT_THEME.geometry;
+  /**
+   * Each node's tier-1 box: its kind's shape and size factor (wiring); the
+   * classic node size otherwise. From the received nodes and the config only —
+   * never from the scene, which itself depends on these sizes.
+   */
+  const baseSizes = createMemo(() => {
+    const config = props.stores.wiring.config;
+    return new Map((projectionStore.genericNodes()?.nodes ?? []).map((n) => [n.id, leafBaseSize(config, n.kind)] as const));
+  });
+  const baseSizeOf = (id: string) => baseSizes().get(id) ?? geo.node;
+  const sizedGeo = () => ({ ...geo, node: baseSizeOf });
   const motion = DEFAULT_THEME.motion;
   // On-screen rects (dynamic-view P3): tier-sized, push-aside'd, ANIMATED geometry.
   // The scene is built from these, so hit-testing follows what is on screen mid-animation.
@@ -184,10 +196,10 @@ export function CanvasViewport(props: CanvasViewportProps) {
         const nodes = projectionStore.genericNodes()?.nodes ?? [];
         const received = receivedInputs();
         setLock({
-          layout: tierSizes(computeTiers(nodes, { ...personInputs(), ...received }), geo),
+          layout: tierSizes(computeTiers(nodes, { ...personInputs(), ...received }), sizedGeo()),
           ambient: tierSizes(
             computeTiers(nodes, { focusIds: new Set(), pendingIds: new Set(), ...received }),
-            geo,
+            sizedGeo(),
           ),
         });
       });
@@ -218,7 +230,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
     undefined,
     { equals: tierMapEquals },
   );
-  const currentSizes = createMemo(() => displaySizes(spatialTiers(), lock().ambient, geo), undefined, {
+  const currentSizes = createMemo(() => displaySizes(spatialTiers(), lock().ambient, sizedGeo()), undefined, {
     equals: sizeMapEquals,
   });
   const [dragLive, setDragLive] = createSignal(false);
@@ -232,7 +244,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
         const patched = new Map(lastTargets);
         for (const [id, p] of pins) {
           if (!base.has(id)) continue;
-          const s = sizes.get(id) ?? geo.node;
+          const s = sizes.get(id) ?? baseSizeOf(id);
           patched.set(id, { x: p.x, y: p.y, w: s.w, h: s.h });
         }
         lastTargets = patched;
@@ -243,7 +255,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
         lockedSizes: lock().layout,
         sizes,
         pins,
-        baseSize: geo.node,
+        baseSize: baseSizeOf,
         margin: geo.focusMargin,
         hops: geo.pushHops,
         anchors: new Set([...spatialTiers()].filter(([, t]) => t === 3).map(([id]) => id)),
@@ -486,9 +498,11 @@ export function CanvasViewport(props: CanvasViewportProps) {
     wx >= b.x && wx <= b.x + b.w && wy >= b.y && wy <= b.y + b.h;
   const hitTest = (wx: number, wy: number): NodeBox | null => {
     const boxes = [...layout().nodes.values()];
+    const sc = scene();
     for (let i = boxes.length - 1; i >= 0; i--) {
       const b = boxes[i]!;
-      if (inside(b, wx, wy)) return b;
+      // Inside the drawn shape (or its label strip), not merely its box: a diamond's corners are empty canvas.
+      if (hitsLeaf(sc?.nodes.get(b.id)?.shape ?? 'rect', b, wx, wy)) return b;
     }
     return null;
   };
@@ -522,7 +536,9 @@ export function CanvasViewport(props: CanvasViewportProps) {
         const n = scene()?.nodes.get(id);
         return n ? { glyph: n.glyph, tone: n.tone } : undefined;
       };
-      w.__gunnflowDebug = { ...(w.__gunnflowDebug ?? {}), nodeRect, nodeStyle };
+      // The drag's landing preview, as drawn (shape and rect per outline); [] when none.
+      const dropPreview = () => (dropGhost ?? []).map((g) => ({ shape: g.shape, ...g.rect }));
+      w.__gunnflowDebug = { ...(w.__gunnflowDebug ?? {}), nodeRect, nodeStyle, dropPreview };
     }
     const ctx = canvas.getContext('2d')!;
     const resize = () => {
@@ -564,6 +580,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
         detailZoom: ladderThreshold(PLAIN_LADDER, props.stores.prefs.prefs().detailZoom),
         labelZoom: (tweenTarget ?? viewState.camera()).zoom,
         tiers: tiers() as ReadonlyMap<string, Tier>,
+        ghost: dropGhost,
       };
       drawGeneric(ctx, canvas.width / dpr, canvas.height / dpr, { ...common, scene: scene() });
       // The personal layer, on top: the person's own notes, outside layout and lenses.
@@ -579,6 +596,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
     raf = requestAnimationFrame(loop);
     onCleanup(() => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(ghostRaf);
       observer.disconnect();
     });
   });
@@ -694,7 +712,12 @@ export function CanvasViewport(props: CanvasViewportProps) {
    * place that overlaps no other node and no container they do not belong to
    * (dropResolve). View state only — the move animates like any local change.
    */
-  const settleDrop = (origin: ReadonlyMap<string, Rect>) => {
+  /**
+   * Where the moved leaves would settle if released now: each one's landing
+   * rect, or null when they stay exactly where they are (the drop fits, or is
+   * unresolved — which needs a missing origin, never left by originOf).
+   */
+  const planDrop = (origin: ReadonlyMap<string, Rect>): Map<string, Rect> | null => {
     const parentOf = untrack(topoGraph)?.parentOf ?? new Map<string, string>();
     const rects = untrack(targets);
     const d = resolveDrop({
@@ -706,17 +729,68 @@ export function CanvasViewport(props: CanvasViewportProps) {
       groupPad: geo.groupPad,
       groupHeader: geo.groupHeader,
     });
-    // Unresolved needs a missing origin, which originOf never leaves: the drop then stays as placed.
-    if (d.kind === 'unresolved') return;
-    if (d.kind === 'origin') {
-      for (const [id, r] of origin) viewState.moveNode(id, r.x, r.y);
-      return;
-    }
-    if (d.dx === 0 && d.dy === 0) return;
+    if (d.kind === 'unresolved') return null;
+    if (d.kind === 'origin') return new Map(origin);
+    if (d.dx === 0 && d.dy === 0) return null;
+    const out = new Map<string, Rect>();
     for (const id of origin.keys()) {
       const r = rects.get(id);
-      if (r) viewState.moveNode(id, r.x + d.dx, r.y + d.dy);
+      if (r) out.set(id, { ...r, x: r.x + d.dx, y: r.y + d.dy });
     }
+    return out;
+  };
+  /** Whether the moved leaves, placed at `plan`, fit the canvas as it is now (nothing changed under them). */
+  const stillFits = (plan: ReadonlyMap<string, Rect>, origin: ReadonlyMap<string, Rect>) => {
+    const rects = new Map(untrack(targets));
+    for (const [id, r] of plan) rects.set(id, r);
+    const d = resolveDrop({
+      parentOf: untrack(topoGraph)?.parentOf ?? new Map<string, string>(),
+      rects,
+      moved: new Set(origin.keys()),
+      origin,
+      gap: geo.dropGap,
+      groupPad: geo.groupPad,
+      groupHeader: geo.groupHeader,
+    });
+    return d.kind === 'offset' && d.dx === 0 && d.dy === 0;
+  };
+  const settleDrop = (origin: ReadonlyMap<string, Rect>) => {
+    // The preview on screen is the landing — unless something moved under it since (a projection
+    // update mid-drag); then, and when none is shown, plan now.
+    const shown = dropGhostPlan;
+    clearGhost();
+    const plan = shown && stillFits(shown, origin) ? shown : planDrop(origin);
+    if (plan) for (const [id, r] of plan) viewState.moveNode(id, r.x, r.y);
+  };
+  /**
+   * The landing preview while dragging (approved mockup ③): a dashed outline
+   * where the drag would settle, recomputed at most once per frame. Absent
+   * when the drop would stay where it is held.
+   */
+  let dropGhost: { shape: LeafShape; rect: Rect }[] | null = null;
+  /** The plan behind the preview on screen: a release lands exactly where the person saw it. */
+  let dropGhostPlan: Map<string, Rect> | null = null;
+  let ghostRaf = 0;
+  const clearGhost = () => {
+    cancelAnimationFrame(ghostRaf);
+    ghostRaf = 0;
+    dropGhostPlan = null;
+    if (dropGhost) {
+      dropGhost = null;
+      markDirty();
+    }
+  };
+  const scheduleGhost = (origin: ReadonlyMap<string, Rect>) => {
+    if (ghostRaf) return;
+    ghostRaf = requestAnimationFrame(() => {
+      ghostRaf = 0;
+      if (!drag || (drag.type !== 'node' && drag.type !== 'group')) return;
+      const plan = planDrop(origin);
+      const sc = untrack(scene);
+      dropGhostPlan = plan;
+      dropGhost = plan ? [...plan].map(([id, rect]) => ({ shape: sc?.nodes.get(id)?.shape ?? 'rect', rect })) : null;
+      markDirty();
+    });
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -730,6 +804,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       const w = screenToWorld(e.clientX, e.clientY);
       viewState.moveNode(drag.id, w.x - drag.offsetX, w.y - drag.offsetY);
       drag.moved = true;
+      scheduleGhost(drag.origin);
     } else if (drag.type === 'sticky') {
       const w = screenToWorld(e.clientX, e.clientY);
       personal.updateSticky(drag.id, { x: w.x - drag.offsetX, y: w.y - drag.offsetY });
@@ -772,6 +847,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       drag.lastX = w.x;
       drag.lastY = w.y;
       drag.moved = true;
+      scheduleGhost(drag.origin);
     } else if (drag.type === 'rewire') {
       const w = screenToWorld(e.clientX, e.clientY);
       rewireDrag = { fromId: drag.fromId, toX: w.x, toY: w.y };
@@ -813,6 +889,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       selection.clear();
     }
     drag = null;
+    clearGhost();
     // Drag over: the deferred push-aside settles once, animated (perf: it never ran per pointermove).
     setDragLive(false);
   };
@@ -827,6 +904,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       markDirty();
     }
     drag = null;
+    clearGhost();
     setDragLive(false);
   };
 
