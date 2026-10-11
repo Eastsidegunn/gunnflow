@@ -77,19 +77,25 @@ describe('terminal relay (upstream-port 0.2.0)', () => {
     out.close();
   });
 
-  it('a reconnect starts from the retained snapshot; exit ends the stream', async () => {
+  it('attaching opens a new terminal: I/O goes by the id it answers; a reconnect starts from the snapshot; exit ends the stream', async () => {
     const app = makeApp();
-    await app.inject({ method: 'POST', url: '/api/terminals/term-build/input', payload: { bytesBase64: b64('before\r') } });
-    const out = await readOutput(app, 'term-build', (_t, e) => e.includes('exit'));
-    const resize = await app.inject({ method: 'POST', url: '/api/terminals/term-build/resize', payload: { cols: 70, rows: 10 } });
+    const opened = await app.inject({ method: 'POST', url: '/api/terminals', payload: { target: { attach: 'term-build' }, cols: 80, rows: 24 } });
+    const { terminalId } = opened.json() as { terminalId: string };
+    expect(terminalId).not.toBe('term-build');
+    // The target id is what to join, not a terminal.
+    const onTarget = await app.inject({ method: 'POST', url: '/api/terminals/term-build/input', payload: { bytesBase64: b64('x') } });
+    expect(onTarget.statusCode).toBe(404);
+    await app.inject({ method: 'POST', url: `/api/terminals/${terminalId}/input`, payload: { bytesBase64: b64('before\r') } });
+    const out = await readOutput(app, terminalId, (_t, e) => e.includes('exit'));
+    const resize = await app.inject({ method: 'POST', url: `/api/terminals/${terminalId}/resize`, payload: { cols: 70, rows: 10 } });
     expect(resize.statusCode).toBe(204);
-    await app.inject({ method: 'POST', url: '/api/terminals/term-build/input', payload: { bytesBase64: b64('size\rexit\r') } });
+    await app.inject({ method: 'POST', url: `/api/terminals/${terminalId}/input`, payload: { bytesBase64: b64('size\rexit\r') } });
     const { text, events } = await out.next();
     expect(events[0]).toBe('snapshot');
     expect(text).toContain('before\r\n');
     expect(text).toContain('70x10');
     expect(events.at(-1)).toBe('exit');
-    const late = await app.inject({ method: 'POST', url: '/api/terminals/term-build/input', payload: { bytesBase64: b64('x') } });
+    const late = await app.inject({ method: 'POST', url: `/api/terminals/${terminalId}/input`, payload: { bytesBase64: b64('x') } });
     expect(late.statusCode).toBe(409);
     out.close();
   });
@@ -110,9 +116,10 @@ describe('terminal relay (upstream-port 0.2.0)', () => {
       payload: { target: { shell: { cwd: '/' } }, cols: 80, rows: 24 },
     });
     expect(foreignPage.statusCode).toBe(403);
+    const opened = await app.inject({ method: 'POST', url: '/api/terminals', payload: { target: { attach: 'term-build' }, cols: 80, rows: 24 } });
     const localPage = await app.inject({
       method: 'DELETE',
-      url: '/api/terminals/term-build',
+      url: `/api/terminals/${(opened.json() as { terminalId: string }).terminalId}`,
       headers: { origin: 'http://localhost:5173' },
     });
     expect(localPage.statusCode).toBe(204);
@@ -139,7 +146,7 @@ describe('terminal relay (upstream-port 0.2.0)', () => {
       payload: { target: { attach: 'nope' }, cols: 80, rows: 24 },
     });
     expect(refused.statusCode).toBe(422);
-    expect(refused.json()).toEqual({ reason: 'no such terminal' });
+    expect(refused.json()).toEqual({ reason: 'no such session' });
   });
 
   it('an upstream without terminals answers 501 on every route', async () => {

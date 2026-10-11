@@ -54,8 +54,12 @@ export class FakeEchoShell {
     return this.exitCode === undefined ? 'running' : 'exited';
   }
 
+  snapshotBase64(): string {
+    return bytesToBase64(this.retained);
+  }
+
   subscribe(listener: Listener): () => void {
-    listener({ type: 'snapshot', bytesBase64: bytesToBase64(this.retained) });
+    listener({ type: 'snapshot', bytesBase64: this.snapshotBase64() });
     if (this.exitCode !== undefined) {
       listener({ type: 'exit', code: this.exitCode });
       return () => undefined;
@@ -122,13 +126,78 @@ export class FakeEchoShell {
   }
 }
 
-/** The simulator's terminal table: one attachable console bound to a node, plus shells opened on request. */
+/**
+ * One viewer's terminal onto a running target, as a real backend opens it on
+ * `attach`: its own terminalId, the target's bytes both ways. Closing it ends
+ * this view only (its stream gets `exit`); the target keeps running. When the
+ * target ends, the view ends with it.
+ */
+export class FakeAttachView {
+  readonly info: UpstreamTerminal;
+  private exitCode: number | null | undefined;
+  private readonly listeners = new Set<Listener>();
+  private readonly off: () => void;
+
+  constructor(
+    terminalId: string,
+    private readonly target: FakeEchoShell,
+  ) {
+    this.info = { ...target.info, terminalId, state: 'running' };
+    // Only the target's later output and its end matter here; a subscriber starts from the target's snapshot.
+    this.off = target.subscribe((e) => {
+      if (e.type === 'exit') this.end(e.code);
+      else if (e.type === 'data') for (const l of this.listeners) l(e);
+    });
+  }
+
+  get state(): UpstreamTerminal['state'] {
+    return this.exitCode === undefined ? 'running' : 'exited';
+  }
+
+  subscribe(listener: Listener): () => void {
+    listener({ type: 'snapshot', bytesBase64: this.target.snapshotBase64() });
+    if (this.exitCode !== undefined) {
+      listener({ type: 'exit', code: this.exitCode });
+      return () => undefined;
+    }
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  input(bytesBase64: string): UpstreamTerminalAck {
+    return this.exitCode !== undefined ? { ok: false, reason: 'exited' } : this.target.input(bytesBase64);
+  }
+
+  resize(cols: number, rows: number): UpstreamTerminalAck {
+    return this.exitCode !== undefined ? { ok: false, reason: 'exited' } : this.target.resize(cols, rows);
+  }
+
+  end(code: number | null): void {
+    if (this.exitCode !== undefined) return;
+    this.exitCode = code;
+    this.off();
+    for (const l of this.listeners) l({ type: 'exit', code });
+    this.listeners.clear();
+  }
+}
+
+type FakeTerminal = FakeEchoShell | FakeAttachView;
+
+/**
+ * The simulator's terminal table, shaped like a real backend's. The attachable
+ * console bound to a node is a *target*: its id is for `attach` only, never for
+ * input, size, output or close. Attaching opens a new terminal (`view-N`), listed
+ * beside the target with its label and node; closing that view leaves the target
+ * running. A new shell (`shell-N`) is a terminal of its own.
+ */
 export class FakeTerminals {
-  private readonly terminals = new Map<string, FakeEchoShell>();
+  private readonly targets = new Map<string, FakeEchoShell>();
+  private readonly terminals = new Map<string, FakeTerminal>();
   private nextShell = 1;
+  private nextView = 1;
 
   constructor() {
-    this.terminals.set(
+    this.targets.set(
       'term-build',
       new FakeEchoShell(
         { terminalId: 'term-build', label: 'Web Build console', kind: 'attachable', nodeId: 't-build' },
@@ -140,16 +209,18 @@ export class FakeTerminals {
   }
 
   list(): UpstreamTerminal[] {
-    return [...this.terminals.values()].map((t) => ({ ...t.info, state: t.state }));
+    return [...this.targets.values(), ...this.terminals.values()].map((t) => ({ ...t.info, state: t.state }));
   }
 
   open(request: UpstreamTerminalOpen): UpstreamTerminalOpened {
     if ('attach' in request.target) {
-      const t = this.terminals.get(request.target.attach);
-      if (!t) return { ok: false, reason: 'no such terminal' };
-      if (t.state === 'exited') return { ok: false, reason: 'terminal has exited' };
+      const t = this.targets.get(request.target.attach);
+      if (!t) return { ok: false, reason: 'no such session' };
+      if (t.state === 'exited') return { ok: false, reason: 'session has exited' };
       t.resize(request.cols, request.rows);
-      return { ok: true, terminalId: t.info.terminalId };
+      const terminalId = `view-${this.nextView++}`;
+      this.terminals.set(terminalId, new FakeAttachView(terminalId, t));
+      return { ok: true, terminalId };
     }
     const cwd = request.target.shell.cwd.trim();
     if (!cwd) return { ok: false, reason: 'a folder is required' };
@@ -161,7 +232,8 @@ export class FakeTerminals {
     return { ok: true, terminalId };
   }
 
-  get(terminalId: string): FakeEchoShell | undefined {
+  /** Terminals only: an attach target's id names no terminal. */
+  get(terminalId: string): FakeTerminal | undefined {
     return this.terminals.get(terminalId);
   }
 
@@ -169,7 +241,7 @@ export class FakeTerminals {
     const t = this.terminals.get(terminalId);
     if (!t) return { ok: false, reason: 'unknown' };
     t.end(null);
-    if (t.info.kind === 'shell') this.terminals.delete(terminalId);
+    this.terminals.delete(terminalId);
     return { ok: true };
   }
 }

@@ -77,11 +77,18 @@ six methods are optional; leave them out and every terminal route answers 501.
 | Method | Meaning | BFF route |
 |---|---|---|
 | `listTerminals()` | `UpstreamTerminal[]`: `{ terminalId, label, kind: 'attachable' \| 'shell', state: 'running' \| 'exited', nodeId? }` | `GET /api/terminals` |
-| `openTerminal({ target, cols, rows })` | `target` = `{ attach: terminalId }` (join one, stating this viewer's size) or `{ shell: { cwd } }` (a new shell); `{ ok, terminalId }` or `{ ok: false, reason }` | `POST /api/terminals` (422 on refusal) |
+| `openTerminal({ target, cols, rows })` | `target` = `{ attach: terminalId }` (join one, stating this viewer's size) or `{ shell: { cwd } }` (a new shell); `{ ok, terminalId }` or `{ ok: false, reason }`. Either way the answer names a **new** terminal (below) | `POST /api/terminals` (422 on refusal) |
 | `subscribeTerminalOutput(id, listener)` | `snapshot` (retained bytes) first — on every subscribe, so a reconnect restarts from it — then `data`, then `exit { code }`; `undefined` = no such terminal | `GET /api/terminals/:id/output` (SSE) |
 | `terminalInput(id, bytesBase64)` | raw bytes typed or pasted | `POST /api/terminals/:id/input` (≤ 64 KiB base64) |
 | `terminalResize(id, cols, rows)` | the viewer's size (1–1000) | `POST /api/terminals/:id/resize` |
 | `closeTerminal(id)` | end it | `DELETE /api/terminals/:id` |
+
+Opening always opens a new terminal: the `terminalId` it answers is the one every later input,
+resize, output and close for that viewer uses. An `attach` id names the target to join, not a
+terminal to talk to — I/O on it may answer `unknown`. Closing an attached terminal ends that
+terminal only; the target keeps running, and when the target ends the attached terminal exits too.
+`listTerminals` may list attached terminals beside their target; nothing on the wire links them,
+so the cockpit folds under a target only the ones it opened itself.
 
 Any method may also answer `UpstreamUnsupported` when support is only learned at call time (the
 direct wire's `/terminals` answering 404/501): the BFF answers 501. A rejection is a reasoned 502.

@@ -129,7 +129,7 @@ interface ExecutionSnapshot { sessions: ExecutionSession[]; events: ExecutionEve
 interface DirectTerminal {
   terminalId: string;                 // 비어 있지 않음, 경로에는 encodeURIComponent로
   label: string;                      // 백엔드 어휘 그대로
-  kind: 'attachable' | 'shell';       // attachable = 이미 돌고 있어 합류 가능, shell = 요청으로 연 것
+  kind: 'attachable' | 'shell';       // attachable = 이미 돌고 있어 합류 가능(id = 붙을 대상), shell = 요청으로 연 것(id = 터미널)
   state: 'running' | 'exited';
   nodeId?: string;                    // 스냅샷의 노드에 묶임
 }
@@ -146,6 +146,15 @@ interface DirectTerminalOpen {
   통과 못 하면 BFF는 `502` + 사유로 끊는다.
 - `POST /terminals` → `200 { terminalId }`. 열기를 거절하면(없는 attach id, 끝난 터미널,
   허용하지 않는 폴더 등) `422 { reason }` — `reason`은 사람에게 그대로 보인다.
+- **열기는 attach든 shell이든 새 터미널을 연다.** 응답의 `terminalId`는 *새로 열린* 터미널의 id이고,
+  이후 그 뷰어의 입력·크기·출력·닫기는 전부 그 id로 한다. `attach`에 넣는 id(목록의 `attachable`
+  항목 id)는 **붙을 대상**의 id일 뿐 입출력 id가 아니다 — 백엔드는 그 id로 오는 `stream`·`input`·
+  `resize`·`DELETE`를 `404`로 답해도 된다. 백엔드는 응답 id가 대상 id와 같기를 기대하지 않는다
+  (같아도 계약 위반은 아니지만, cockpit은 늘 응답 id를 쓴다). 붙어서 연 터미널을 `DELETE`하면 그
+  터미널만 끝나고 **대상은 계속 돈다**. 대상이 끝나면 붙은 터미널도 `exit`로 끝난다.
+- 붙어서 연 터미널은 `GET /terminals`에 대상과 나란히 나와도 된다(보통 같은 `label`·`nodeId`).
+  대상과의 연결을 wire로 알릴 필드는 없다. cockpit은 자기가 연 것(응답 id → 대상 id)을 기억해
+  대상 행 아래로 묶어 보이고, 모르는 것은 그대로 보인다.
 - `GET /terminals/:id/stream` (SSE, `/stream`과 같은 프레이밍):
   - `event: snapshot` — `data:`는 백엔드가 보존한 출력 전체의 base64(비었으면 빈 `data:`).
     **연결마다 첫 프레임**이다. 재접속한 뷰어는 화면을 이것으로 다시 시작한다.

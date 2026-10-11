@@ -6,8 +6,8 @@
  */
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import '@xterm/xterm/css/xterm.css';
-import { t } from '../i18n/index.js';
-import { terminalPanel } from '../state/terminalPanel.js';
+import { t, tn } from '../i18n/index.js';
+import { foldAttached, terminalPanel, type TerminalRow } from '../state/terminalPanel.js';
 import { dock, DOCK_KEY_STEP } from '../state/dock.js';
 import {
   closeTerminal,
@@ -102,10 +102,9 @@ function DockHandle() {
   );
 }
 
-const offered = (list: TerminalListResult): TerminalEntry[] => (list.ok ? list.terminals : []);
-
 function TerminalList() {
   const p = terminalPanel;
+  const offered = (list: TerminalListResult): TerminalRow[] => (list.ok ? foldAttached(list.terminals, p.attached()) : []);
   const [cwd, setCwd] = createSignal('');
   const [error, setError] = createSignal<string | null>(null);
   const openShell = async (e: Event) => {
@@ -143,6 +142,11 @@ function TerminalList() {
                       <li class="term-row" data-testid={`term-row-${x.terminalId}`}>
                         <span class="term-kind">{t(x.kind === 'shell' ? 'term.kind.shell' : 'term.kind.attachable')}</span>
                         <span class="term-label">{x.label}</span>
+                        <Show when={x.openHere > 0}>
+                          <span class="hint" data-testid={`term-open-here-${x.terminalId}`}>
+                            {tn('term.openHere', x.openHere)}
+                          </span>
+                        </Show>
                         <Show
                           when={x.state === 'running'}
                           fallback={<span class="hint">{t('term.state.exited')}</span>}
@@ -181,14 +185,32 @@ function TerminalList() {
   );
 }
 
+/**
+ * A shell row is a terminal: the view talks to it by its id. An attachable row
+ * is a target: the view opens a terminal onto it and talks to the id the open
+ * returns; leaving the view closes that terminal and the target keeps running.
+ */
 function TerminalView(props: { entry: TerminalEntry }) {
-  const id = props.entry.terminalId;
+  const entry = props.entry;
+  const attaches = entry.kind === 'attachable';
   let host!: HTMLDivElement;
   const [status, setStatus] = createSignal<Status>('connecting');
   const [exitCode, setExitCode] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   let disposed = false;
   let teardown: (() => void) | null = null;
+  let endShell: (() => Promise<void>) | null = null;
+  /** The terminal this view opened by attaching; closed when the view goes. */
+  let opened: string | null = null;
+  const closeOpened = (keepalive = false) => {
+    const id = opened;
+    if (id === null) return;
+    opened = null;
+    terminalPanel.release(id);
+    void closeTerminal(id, { keepalive }).then(() => terminalPanel.refresh());
+  };
+  const onPageHide = () => closeOpened(true);
+  window.addEventListener('pagehide', onPageHide);
 
   onMount(async () => {
     // Keys typed into the shell are the shell's: none reaches the cockpit's bindings (Esc, Enter, V…).
@@ -205,10 +227,25 @@ function TerminalView(props: { entry: TerminalEntry }) {
     term.loadAddon(fit);
     term.open(host);
     fit.fit();
-    // Attaching states this viewer's size; a refusal leaves the screen read-only with its reason.
-    const attached = await openTerminal({ attach: id }, term.cols, term.rows);
-    if (disposed) return term.dispose();
-    if (!attached.ok) setError(t('term.openFailed', { reason: attached.reason }));
+    let id = entry.terminalId;
+    if (attaches) {
+      // Attaching states this viewer's size; a refusal leaves the screen empty with its reason.
+      const o = await openTerminal({ attach: entry.terminalId }, term.cols, term.rows);
+      if (disposed) {
+        if (o.ok) void closeTerminal(o.terminalId);
+        return term.dispose();
+      }
+      if (!o.ok) {
+        setError(t('term.openFailed', { reason: o.reason }));
+        setStatus('gone');
+        teardown = () => term.dispose();
+        return;
+      }
+      id = opened = o.terminalId;
+      terminalPanel.remember(id, entry.terminalId);
+    } else {
+      void resizeTerminal(id, term.cols, term.rows);
+    }
     const send = inputSender(id, (reason) => setError(t('term.inputFailed', { reason })));
     const onData = term.onData((d) => {
       if (status() !== 'exited') send(d);
@@ -234,6 +271,11 @@ function TerminalView(props: { entry: TerminalEntry }) {
       lost: (retrying) => setStatus((s) => (s === 'exited' ? s : retrying ? 'retrying' : 'gone')),
     });
     term.focus();
+    endShell = async () => {
+      const refused = await closeTerminal(id);
+      if (refused) setError(t('term.closeFailed', { reason: refused }));
+      else terminalPanel.back();
+    };
     teardown = () => {
       stop();
       clearTimeout(resizeTimer);
@@ -245,7 +287,9 @@ function TerminalView(props: { entry: TerminalEntry }) {
   });
   onCleanup(() => {
     disposed = true;
+    window.removeEventListener('pagehide', onPageHide);
     teardown?.();
+    closeOpened();
   });
 
   const statusText = () => {
@@ -263,18 +307,19 @@ function TerminalView(props: { entry: TerminalEntry }) {
           <span class="term-error" role="alert">{error()}</span>
         </Show>
         <span class="spacer" />
-        <Show when={status() !== 'exited'}>
-          <button
-            class="privileged"
-            data-testid="term-end"
-            onClick={async () => {
-              const refused = await closeTerminal(id);
-              if (refused) setError(t('term.closeFailed', { reason: refused }));
-              else terminalPanel.back();
-            }}
-          >
-            {t('term.end')}
-          </button>
+        <Show
+          when={!attaches}
+          fallback={
+            <button data-testid="term-detach" onClick={() => terminalPanel.back()}>
+              {t('term.detach')}
+            </button>
+          }
+        >
+          <Show when={status() !== 'exited'}>
+            <button class="privileged" data-testid="term-end" onClick={() => void endShell?.()}>
+              {t('term.end')}
+            </button>
+          </Show>
         </Show>
       </footer>
     </div>

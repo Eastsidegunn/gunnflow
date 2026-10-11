@@ -60,6 +60,10 @@ export async function listTerminals(): Promise<TerminalList> {
 
 export type OpenTarget = { attach: string } | { shell: { cwd: string } };
 
+/**
+ * Either target opens a new terminal: input, size, output and close all use the
+ * returned terminalId. An `attach` id names what to join, not a terminal to talk to.
+ */
 export async function openTerminal(
   target: OpenTarget,
   cols: number,
@@ -94,9 +98,10 @@ async function post(path: string, body: unknown): Promise<string | null> {
 export const resizeTerminal = (id: string, cols: number, rows: number) =>
   post(`/api/terminals/${encodeURIComponent(id)}/resize`, { cols, rows });
 
-export async function closeTerminal(id: string): Promise<string | null> {
+/** `keepalive`: the request outlives the page (a tab closing or reloading). */
+export async function closeTerminal(id: string, opts: { keepalive?: boolean } = {}): Promise<string | null> {
   try {
-    const res = await fetch(`/api/terminals/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const res = await fetch(`/api/terminals/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: opts.keepalive });
     return res.ok ? null : await reasonOf(res);
   } catch (err) {
     return String(err);

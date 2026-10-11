@@ -130,8 +130,10 @@ export interface WorkspaceUpstream {
 }
 
 /**
- * A terminal the upstream offers. `attachable` = already running, joinable;
- * `shell` = one opened on request. `nodeId` (optional) binds it to a node.
+ * A terminal the upstream offers. `attachable` = already running, joinable —
+ * its id is an attach target; `shell` = one opened on request — its id is a
+ * terminal. `nodeId` (optional) binds it to a node. A terminal opened by
+ * attaching may be listed too, beside its target.
  */
 export interface UpstreamTerminal {
   terminalId: string;
@@ -141,7 +143,14 @@ export interface UpstreamTerminal {
   nodeId?: string;
 }
 
-/** Attach to an offered terminal, or ask for a new shell in a folder. */
+/**
+ * Attach to an offered terminal, or ask for a new shell in a folder. Either way
+ * a new terminal opens: `UpstreamTerminalOpened.terminalId` names it, and every
+ * later input, resize, output and close for that viewer uses that id. An
+ * `attach` id names the target to join, not a terminal to talk to — the
+ * upstream may answer `unknown` for I/O on it. Closing the attached terminal
+ * ends that terminal only; the target keeps running.
+ */
 export interface UpstreamTerminalOpen {
   target: { attach: string } | { shell: { cwd: string } };
   cols: number;

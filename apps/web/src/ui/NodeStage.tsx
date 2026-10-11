@@ -96,7 +96,7 @@ export function NodeStage(props: {
                     <DomainQuickSection nodeId={v().n.id} />
                     <PersonalNoteSection personal={props.stores.personal} nodeId={v().n.id} />
                     <NodeActions stores={props.stores} node={v().n} resolved={v().r} />
-                    <For each={terminalsForNode(terminalPanel.list(), v().n.id)}>
+                    <For each={terminalsForNode(terminalPanel.list(), v().n.id, terminalPanel.attached())}>
                       {(x) => (
                         <div class="actions">
                           <button data-testid={`stage-open-terminal-${x.terminalId}`} onClick={() => terminalPanel.show(x)}>

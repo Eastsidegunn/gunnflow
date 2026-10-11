@@ -37,11 +37,43 @@ describe('simulator terminals (upstream-port 0.2.0)', () => {
 
   it('a new subscriber starts from the retained snapshot', async () => {
     const up = createFakeUpstream();
-    await up.terminalInput!('term-build', b64('one\r'));
+    const opened = await up.openTerminal!({ target: { attach: 'term-build' }, cols: 80, rows: 24 });
+    if (!('ok' in opened) || !opened.ok) throw new Error('attach refused');
+    await up.terminalInput!(opened.terminalId, b64('one\r'));
     const events: UpstreamTerminalEvent[] = [];
-    up.subscribeTerminalOutput!('term-build', (e) => events.push(e));
+    up.subscribeTerminalOutput!(opened.terminalId, (e) => events.push(e));
     expect(events).toHaveLength(1);
     expect(text(events)).toContain('$ one\r\none\r\n$ ');
+  });
+
+  it('attaching opens a new terminal; the target id is not one, and closing the view leaves the target running', async () => {
+    const up = createFakeUpstream();
+    expect(await up.openTerminal!({ target: { attach: 'term-build' }, cols: 90, rows: 20 })).toEqual({ ok: true, terminalId: 'view-1' });
+    // The target id names what to join only, as on a real backend.
+    expect(up.subscribeTerminalOutput!('term-build', () => undefined)).toBeUndefined();
+    expect(await up.terminalInput!('term-build', b64('x'))).toEqual({ ok: false, reason: 'unknown' });
+    expect(await up.terminalResize!('term-build', 80, 24)).toEqual({ ok: false, reason: 'unknown' });
+    expect(await up.closeTerminal!('term-build')).toEqual({ ok: false, reason: 'unknown' });
+    // The view is listed beside its target, with its label and node.
+    expect(await up.listTerminals!()).toEqual([
+      { terminalId: 'term-build', label: 'Web Build console', kind: 'attachable', state: 'running', nodeId: 't-build' },
+      { terminalId: 'view-1', label: 'Web Build console', kind: 'attachable', state: 'running', nodeId: 't-build' },
+    ]);
+    const first: UpstreamTerminalEvent[] = [];
+    up.subscribeTerminalOutput!('view-1', (e) => first.push(e));
+    await up.terminalInput!('view-1', b64('size\r'));
+    expect(text(first)).toContain('90x20');
+    expect(await up.closeTerminal!('view-1')).toEqual({ ok: true });
+    expect(first.at(-1)).toEqual({ type: 'exit', code: null });
+    expect(((await up.listTerminals!()) as UpstreamTerminal[]).map((t) => [t.terminalId, t.state])).toEqual([['term-build', 'running']]);
+    // A second viewer gets its own terminal, sees what the first one typed, and ends with the target.
+    expect(await up.openTerminal!({ target: { attach: 'term-build' }, cols: 80, rows: 24 })).toEqual({ ok: true, terminalId: 'view-2' });
+    const second: UpstreamTerminalEvent[] = [];
+    up.subscribeTerminalOutput!('view-2', (e) => second.push(e));
+    expect(text(second)).toContain('90x20');
+    await up.terminalInput!('view-2', b64('exit\r'));
+    expect(second.at(-1)).toEqual({ type: 'exit', code: 0 });
+    expect(await up.openTerminal!({ target: { attach: 'term-build' }, cols: 80, rows: 24 })).toEqual({ ok: false, reason: 'session has exited' });
   });
 
   it('refuses unknown terminals and a shell without a folder', async () => {
