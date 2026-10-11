@@ -32,6 +32,8 @@ import { t } from './i18n/index.js';
 import { NowView } from './ui/NowView.jsx';
 import { cursorNodeId, cursorSection, type CockpitView } from './state/nowView.js';
 import { browserIdle, scheduleLayoutPreload, type PreloadState } from './state/layoutPreload.js';
+import { TerminalPanel } from './ui/TerminalPanel.jsx';
+import { terminalPanel } from './state/terminalPanel.js';
 
 export function App() {
   const stores = createWorkspaceStores(postIntent);
@@ -141,6 +143,8 @@ export function App() {
     void stores.wiring.refresh(fetchWiringFiles);
     // The personal layer: this machine's local notes (never sent upstream).
     void stores.personal.load();
+    // The offered terminals, once: a node stage offers "Open terminal" from this list without a request.
+    void terminalPanel.refresh();
     // Prefs apply once at boot; the default lens is only a starting point, never a lock.
     void stores.prefs.load().then((p) => {
       if (p.defaultLens !== 'all') stores.lensState.setLens(p.defaultLens);
@@ -525,6 +529,7 @@ export function App() {
         />
       </Show>
       <SurfacePlaceholder surface={surface} onClose={() => setSurface(null)} />
+      <TerminalPanel />
       {/* Settings: an overlay panel over the cockpit. */}
       <Show when={settingsPresence.mounted()}>
         <SettingsScreen stores={stores} onClose={() => setSettingsOpen(false)} motion={settingsPresence.phase()} />

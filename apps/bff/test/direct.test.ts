@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CONTRACT_VERSION, DIRECT_WIRE, type ExecutionSnapshot, type NodeProjection } from '@gunnflow/contract';
 import { defineConformanceSuite } from '@gunnflow/contract/conformance';
 import { startFakeDirectServer, type FakeDirectServer } from '@gunnflow-testing/fake-contracts/direct-server';
+import { upstreamTerminalDriver } from '@gunnflow-testing/fake-contracts';
 import { UnsupportedDetail, type UpstreamProjectionEnvelope } from '@gunnflow/upstream-port';
 import { createDirectUpstream } from '../src/direct-upstream.js';
 import { buildServer } from '../src/server.js';
@@ -117,6 +118,9 @@ defineConformanceSuite('direct wire (simulator reference server)', async () => {
     },
     // The wire serves execution (reference server): the suite validates what it serves.
     execution: async (taskId) => (await upstream.executionSnapshot(taskId)) as ExecutionSnapshot | undefined,
+    // Terminals over the wire: the BFF's direct client against the reference server's echo shells.
+    features: { terminals: true },
+    terminals: await upstreamTerminalDriver(upstream, { shellCwd: '/conformance' }),
     relay: (intent) => {
       before = upstream.snapshot().revision;
       return upstream.relayIntent(intent, 'fake-actor:conformance');

@@ -12,9 +12,12 @@ import {
   EXECUTION_MAX_STATUS_CHARS,
   NODE_SHORT_NAME_MAX_CHARS,
   NODE_SUMMARY_MAX_CHARS,
+  DIRECT_WIRE,
   artifactRefProblem,
   capabilityProblem,
   digestOfBody,
+  directTerminalProblem,
+  isWireBase64,
   isCompatibleContractVersion,
   lookupCapability,
   nodeProblem,
@@ -446,5 +449,33 @@ describe('semver', () => {
     expect(isCompatibleContractVersion('1.4.0', '1.0.0')).toBe(true);
     expect(isCompatibleContractVersion('2.0.0', '1.0.0')).toBe(false);
     expect(isCompatibleContractVersion('0.1', '0.1.0')).toBe(false);
+  });
+});
+
+describe('direct wire terminals', () => {
+  it('a GET /terminals element: closed kind and state, non-empty ids, no unknown keys', () => {
+    const ok = { terminalId: 't', label: '', kind: 'shell', state: 'running' };
+    expect(directTerminalProblem(ok)).toBeNull();
+    expect(directTerminalProblem({ ...ok, kind: 'attachable', state: 'exited', nodeId: 'n' })).toBeNull();
+    expect(directTerminalProblem({ ...ok, terminalId: '' })).not.toBeNull();
+    expect(directTerminalProblem({ ...ok, kind: 'pty' })).not.toBeNull();
+    expect(directTerminalProblem({ ...ok, state: 'idle' })).not.toBeNull();
+    expect(directTerminalProblem({ ...ok, nodeId: '' })).not.toBeNull();
+    expect(directTerminalProblem({ ...ok, pid: 42 })).toBe("unknown key 'pid'");
+    expect(directTerminalProblem([ok])).not.toBeNull();
+  });
+
+  it('bytes travel as standard padded base64 only', () => {
+    expect(isWireBase64('')).toBe(true);
+    expect(isWireBase64('AP8bWzJK')).toBe(true);
+    expect(isWireBase64('IA==')).toBe(true);
+    expect(isWireBase64('IA')).toBe(false); // unpadded
+    expect(isWireBase64('AP8b\nWzJK')).toBe(false);
+    expect(isWireBase64('_-8=')).toBe(false); // url-safe alphabet
+    expect(isWireBase64(1)).toBe(false);
+  });
+
+  it('paths are addressed by an encoded terminal id', () => {
+    expect(DIRECT_WIRE.terminal('a/b c')).toBe('/terminals/a%2Fb%20c');
   });
 });

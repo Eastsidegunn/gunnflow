@@ -10,6 +10,7 @@ import { readUserWiring, readWiringDir, removeUserWiring, userWiringProblem, wri
 import { personalStructureProblem, readPersonal, writePersonal } from './personalStore.js';
 import { prefsStructureProblem, readPrefs, writePrefs } from './prefsStore.js';
 import { PERSONAL_SOURCE_MAX_CHARS, type PersonalRenders } from './personalRender.js';
+import { registerTerminalRoutes } from './terminalRoutes.js';
 
 function isUnsupported(v: unknown): v is UpstreamUnsupported {
   return typeof v === 'object' && v !== null && typeof (v as UpstreamUnsupported).unsupported === 'string';
@@ -353,6 +354,8 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
       reply.raw.end();
     });
   });
+
+  registerTerminalRoutes(app, upstream);
 
   // Human intent relay. The BFF stamps the actor (auth/session handling is its
   // job) and forwards; acceptance and reasons come from upstream only.

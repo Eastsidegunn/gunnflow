@@ -24,6 +24,8 @@ export interface UpstreamUnsupported {
 
 export type Unsubscribe = () => void;
 
+type MaybePromise<T> = T | Promise<T>;
+
 /**
  * Thrown by `nodeDetail` when the upstream turns out not to serve the detail
  * surface at all (the direct wire answering 501). Distinct from `undefined`,
@@ -101,7 +103,67 @@ export interface WorkspaceUpstream {
    * UnsupportedDetail, which the BFF also answers with 501.
    */
   nodeDetail?(nodeId: string): Promise<NodeDetail | undefined>;
+  /**
+   * Interactive terminals (0.2.0, optional as a set). The upstream is a dumb
+   * pipe for bytes it already runs; neither it nor the BFF interprets them.
+   * Missing methods = the surface is unsupported (the BFF answers 501). An
+   * upstream that only learns at call time (the direct wire answering 404/501)
+   * returns UpstreamUnsupported instead, also answered with 501. Transport or
+   * wire failure rejects (the BFF answers a reasoned 502).
+   */
+  listTerminals?(): MaybePromise<UpstreamTerminal[] | UpstreamUnsupported>;
+  openTerminal?(request: UpstreamTerminalOpen): MaybePromise<UpstreamTerminalOpened | UpstreamUnsupported>;
+  /**
+   * Output as byte chunks. The first event is always a `snapshot` of what the
+   * upstream retains, so a reconnecting viewer starts from it; a later
+   * `snapshot` (the upstream reconnected underneath) restarts the screen the
+   * same way. `exit` or `end` is last. `undefined` = no such terminal (the BFF
+   * answers 404).
+   */
+  subscribeTerminalOutput?(
+    terminalId: string,
+    listener: (event: UpstreamTerminalEvent) => void,
+  ): MaybePromise<Unsubscribe | undefined | UpstreamUnsupported>;
+  terminalInput?(terminalId: string, bytesBase64: string): MaybePromise<UpstreamTerminalAck | UpstreamUnsupported>;
+  terminalResize?(terminalId: string, cols: number, rows: number): MaybePromise<UpstreamTerminalAck | UpstreamUnsupported>;
+  closeTerminal?(terminalId: string): MaybePromise<UpstreamTerminalAck | UpstreamUnsupported>;
 }
+
+/**
+ * A terminal the upstream offers. `attachable` = already running, joinable;
+ * `shell` = one opened on request. `nodeId` (optional) binds it to a node.
+ */
+export interface UpstreamTerminal {
+  terminalId: string;
+  label: string;
+  kind: 'attachable' | 'shell';
+  state: 'running' | 'exited';
+  nodeId?: string;
+}
+
+/** Attach to an offered terminal, or ask for a new shell in a folder. */
+export interface UpstreamTerminalOpen {
+  target: { attach: string } | { shell: { cwd: string } };
+  cols: number;
+  rows: number;
+}
+
+export type UpstreamTerminalOpened = { ok: true; terminalId: string } | { ok: false; reason: string };
+
+/**
+ * `end` = the upstream stopped carrying output without an exit it knows of:
+ * the terminal is gone (`gone`), the surface turned out unsupported
+ * (`unsupported`), or this upstream client closed (`closed`). Not a fact about
+ * the process — the BFF drops the viewer's stream and the viewer re-asks.
+ */
+export type UpstreamTerminalEvent =
+  | { type: 'snapshot'; bytesBase64: string }
+  | { type: 'data'; bytesBase64: string }
+  | { type: 'exit'; code: number | null }
+  | { type: 'end'; reason: 'gone' | 'unsupported' | 'closed' };
+
+/** `unknown` = no such terminal (404); `exited` = it no longer takes input (409). */
+export type UpstreamTerminalAck = { ok: true } | { ok: false; reason: 'unknown' | 'exited' };
 
 export interface UpstreamArtifactSnapshot {
   mediaType: string;
