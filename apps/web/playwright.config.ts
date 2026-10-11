@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
+import { STRANGE_SERVERS } from './playwright.strange.config.js';
 
 /** The personal layer's files during e2e: a temporary directory, never the person's ~/.gunnflow. */
 export const E2E_PERSONAL_DIR = join(tmpdir(), 'gunnflow-e2e-personal');
@@ -88,5 +89,7 @@ export default defineConfig({
       cwd: '../..',
       env: { GUNNFLOW_HOME: E2E_HOME, GUNNFLOW_WEB_PORT: '5174', GUNNFLOW_BFF_PORT: '8797', VITE_PREVIEW_ORIGIN: 'http://127.0.0.1:8798' },
     },
+    // An unfamiliar backend (e2e/strange-backend.spec.ts): its own servers, ports and home.
+    ...STRANGE_SERVERS,
   ],
 });

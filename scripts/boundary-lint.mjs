@@ -10,7 +10,7 @@
 // adds names a person wants checked without publishing them; it lives outside
 // the repository, so it can never be committed. This file spells no backend name.
 // (Self-contained on purpose: tests copy this file alone into sandboxes.)
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
@@ -20,6 +20,11 @@ const SCAN_DIRS = ['apps', 'packages', 'testing'];
 const NAME_SCAN_DIRS = ['apps/', 'packages/', 'testing/'];
 // Rule: simulator-isolation — product packages know no simulator.
 const SIMULATOR_BLIND_DIRS = ['packages/'];
+// Rule: simulator-blind-apps — app runtime source (apps/*/src, tests excepted) knows no simulator
+// either. The sanctioned doors (the BFF composition's dynamic load) are an exact list in the names data.
+const APP_SRC = /^apps\/[^/]+\/src\//;
+const isTestFile = (rel) => /(^|\/)(test|tests|e2e|__tests__)\//.test(rel) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(rel);
+const SIMULATOR_REF = /['"`]@gunnflow-testing\/|['"`](\.\.\/)+(.*\/)?testing\//;
 
 const NAMES_FILE = process.env.BOUNDARY_NAMES_FILE ?? new URL('./boundary-names.json', import.meta.url).pathname;
 // An explicit BOUNDARY_NAMES_FILE is exact (tests rely on that); only the default file merges the local one.
@@ -47,6 +52,7 @@ const names = (() => {
   const base = readNames(NAMES_FILE);
   if (!LOCAL_NAMES_FILE || !existsSync(LOCAL_NAMES_FILE)) return base;
   const local = readNames(LOCAL_NAMES_FILE);
+  // Only names merge; the doors and the domain vocabulary are the repository's.
   const merged = { ...base };
   for (const key of ['backendNames', 'forbiddenPackages', 'siblingRepos']) {
     merged[key] = [...(base[key] ?? []), ...(local[key] ?? [])];
@@ -66,6 +72,26 @@ const FORBIDDEN = [
     ? [new RegExp(`from\\s+['"](\\.\\.\\/)+(\\.\\.\\/)*(${siblings})`, 'i'), new RegExp(`['"]\\.\\.\\/\\.\\.\\/\\.\\.\\/(${siblings})`, 'i')]
     : []),
 ];
+// Rule: domain-vocabulary — the engine knows no domain word (data: names.domainVocabulary).
+const DOMAIN = names.domainVocabulary ?? {};
+const DOMAIN_PATTERNS = (DOMAIN.patterns ?? []).map(toRegExp);
+const SIMULATOR_DOORS = names.simulatorDoors ?? [];
+
+// Ratchet: findings of these rules are counted per file against a committed baseline. A count above
+// the baseline (or a file not in it) fails; a count below it fails too, until the baseline is shrunk
+// with --shrink-baseline — which only ever lowers or drops entries, never adds or raises one.
+const RATCHETED = ['simulator-blind-apps', 'domain-vocabulary'];
+const BASELINE_FILE = process.env.BOUNDARY_BASELINE_FILE ?? new URL('./boundary-baseline.json', import.meta.url).pathname;
+const SHRINK = process.argv.includes('--shrink-baseline');
+/** rule → file → finding lines */
+const ratcheted = Object.fromEntries(RATCHETED.map((r) => [r, new Map()]));
+const record = (rule, rel, i, line) => {
+  const byFile = ratcheted[rule];
+  if (!byFile.has(rel)) byFile.set(rel, []);
+  byFile.get(rel).push(`${rel}:${i + 1}  ${line.trim()}`);
+};
+const isComment = (line) => /^\s*(\/\/|\/\*|\*)/.test(line);
+
 const SRC_EXT = /\.(ts|tsx|mts|mjs|js|jsx)$/;
 
 // Layering: the contract is pure (depends on nothing but relative files and
@@ -125,11 +151,30 @@ function scanBackendNames(rel, lines) {
   });
 }
 
+function scanSimulatorBlindApps(rel, lines) {
+  if (!APP_SRC.test(rel) || isTestFile(rel)) return;
+  lines.forEach((line, i) => {
+    if (!SIMULATOR_REF.test(line)) return;
+    if (SIMULATOR_DOORS.some((d) => d.file === rel && d.line === line.trim())) return;
+    record('simulator-blind-apps', rel, i, line);
+  });
+}
+
+function scanDomainVocabulary(rel, lines) {
+  if (!(DOMAIN.scan ?? []).some((d) => rel.startsWith(d)) || isTestFile(rel)) return;
+  if ((DOMAIN.exclude ?? []).some((d) => rel.startsWith(d))) return;
+  lines.forEach((line, i) => {
+    if (!isComment(line) && DOMAIN_PATTERNS.some((p) => p.test(line))) record('domain-vocabulary', rel, i, line);
+  });
+}
+
 function scanFile(path) {
   const text = readFileSync(path, 'utf8');
   const rel = relative(ROOT, path);
   const lines = text.split('\n');
   scanBackendNames(rel, lines);
+  scanSimulatorBlindApps(rel, lines);
+  scanDomainVocabulary(rel, lines);
   lines.forEach((line, i) => {
     const isImport = /\b(import|require|from)\b/.test(line);
     if (!isImport) return;
@@ -197,9 +242,40 @@ function walk(dir) {
 
 for (const dir of SCAN_DIRS) if (existsSync(join(ROOT, dir))) walk(join(ROOT, dir));
 
+const baseline = existsSync(BASELINE_FILE) ? JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) : {};
+const stale = [];
+for (const rule of RATCHETED) {
+  const allowed = baseline[rule] ?? {};
+  const found = ratcheted[rule];
+  for (const [file, hits] of found) {
+    const cap = allowed[file] ?? 0;
+    if (hits.length > cap) {
+      violations.push(`[${rule}] ${file}: ${hits.length} found, the baseline allows ${cap} — remove the new ones:`);
+      for (const h of hits) violations.push(`    ${h}`);
+    }
+  }
+  for (const [file, cap] of Object.entries(allowed)) {
+    const now = found.get(file)?.length ?? 0;
+    if (now < cap) stale.push({ rule, file, cap, now });
+  }
+}
+if (SHRINK && stale.length > 0) {
+  for (const { rule, file, now } of stale) {
+    if (now === 0) delete baseline[rule][file];
+    else baseline[rule][file] = now;
+  }
+  writeFileSync(BASELINE_FILE, JSON.stringify(baseline, null, 2) + '\n');
+  console.log(`boundary-lint: shrank the baseline (${stale.length} entr${stale.length === 1 ? 'y' : 'ies'}).`);
+} else {
+  for (const { rule, file, cap, now } of stale) {
+    violations.push(`[${rule}] ${file}: ${now} found, the baseline still allows ${cap} — good; shrink it: node scripts/boundary-lint.mjs --shrink-baseline`);
+  }
+}
+
 if (violations.length > 0) {
   console.error('boundary-lint FAILED:');
   for (const v of violations) console.error('  ' + v);
   process.exit(1);
 }
-console.log('boundary-lint OK — no cross-repo imports; contract and simulator layering hold; the core names no backend.');
+const known = RATCHETED.map((r) => `${r} ${[...ratcheted[r].values()].reduce((n, h) => n + h.length, 0)}`).join(', ');
+console.log(`boundary-lint OK — no cross-repo imports; contract and simulator layering hold; the core names no backend (known, in the baseline: ${known}).`);

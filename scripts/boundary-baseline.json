@@ -1,0 +1,30 @@
+{
+  "$comment": "Known violations of the ratcheted boundary-lint rules, per file, frozen at GF-A0 (audit 2026-10-11). This file only shrinks: fix an occurrence, then run `node scripts/boundary-lint.mjs --shrink-baseline`. Never add or raise an entry.",
+  "simulator-blind-apps": {
+    "apps/web/src/model/executionTypes.ts": 2,
+    "apps/web/src/model/selectors.ts": 1,
+    "apps/web/src/model/terminalTypes.ts": 1,
+    "apps/web/src/model/types.ts": 3
+  },
+  "domain-vocabulary": {
+    "apps/bff/src/direct-upstream.ts": 1,
+    "apps/web/src/App.tsx": 5,
+    "apps/web/src/canvas/layout.ts": 2,
+    "apps/web/src/model/normalize.ts": 5,
+    "apps/web/src/model/selectors.ts": 11,
+    "apps/web/src/state/depth.ts": 2,
+    "apps/web/src/state/executionStore.ts": 4,
+    "apps/web/src/state/fakeIntentAdapter.ts": 36,
+    "apps/web/src/state/focus.ts": 4,
+    "apps/web/src/state/gateLogic.ts": 3,
+    "apps/web/src/state/terminalStore.ts": 6,
+    "apps/web/src/ui/A11yMirror.tsx": 3,
+    "apps/web/src/ui/ExecutionSurface.tsx": 9,
+    "apps/web/src/ui/HumanGateSurface.tsx": 7,
+    "apps/web/src/ui/LiveTerminalSurface.tsx": 5,
+    "apps/web/src/ui/NodeStage.tsx": 5,
+    "apps/web/src/ui/TaskInspector.tsx": 14,
+    "packages/contract/src/conformance/index.ts": 1,
+    "packages/contract/src/validate.ts": 5
+  }
+}

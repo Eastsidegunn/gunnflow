@@ -15,7 +15,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "build": "echo 'fake-contracts: source-only package, no build'",
-    "serve:direct": "tsx src/serveDirect.ts"
+    "serve:direct": "tsx src/serveDirect.ts",
+    "serve:strange": "tsx src/serveStrange.ts"
   },
   "dependencies": {
     "@gunnflow/contract": "workspace:*",
