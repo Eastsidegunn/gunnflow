@@ -3,7 +3,7 @@
  * the cockpit before sending, backends on receipt. Structure only —
  * unknown keys, types, slot pairing, declared/enabled — never content.
  */
-import type { Capability, ExecutionSnapshot, NodeDetail } from './types.js';
+import type { Capability, ExecutionSnapshot, NodeDetail, NodeProjection } from './types.js';
 
 export type IntentValidation = { ok: true } | { ok: false; reason: string };
 
@@ -261,6 +261,58 @@ export function streamEventProblem(v: unknown): string | null {
   return "event.type must be 'resync', 'append' or 'gap'";
 }
 
+/** Bounds of the optional node decorations (0.6.0), in code points. */
+export const NODE_SHORT_NAME_MAX_CHARS = 32;
+export const NODE_SUMMARY_MAX_CHARS = 200;
+const NODE_KEYS = [
+  'id', 'kind', 'label', 'state', 'relations', 'capabilities', 'attention', 'artifacts', 'streams',
+  'shortName', 'summary', 'active', 'lastActivityTs', 'changedAtRevision', 'originNodeId', 'steps',
+] as const;
+/** LF, VT, FF, CR, NEL, LINE SEPARATOR, PARAGRAPH SEPARATOR. */
+const LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/;
+
+/** A one-line text of 1..max code points (surrogate pairs count once). */
+const oneLine = (v: unknown, max: number): boolean => {
+  if (typeof v !== 'string' || LINE_BREAK.test(v)) return false;
+  const n = [...v].length;
+  return n >= 1 && n <= max;
+};
+
+/** The optional decorations of a node; `id` is already known to be a non-empty string. */
+function nodeDecorationProblem(v: Record<string, unknown>, id: string): string | null {
+  if (v.shortName !== undefined && !oneLine(v.shortName, NODE_SHORT_NAME_MAX_CHARS)) {
+    return `${id}: shortName must be 1..${NODE_SHORT_NAME_MAX_CHARS} characters with no line breaks`;
+  }
+  if (v.summary !== undefined && !oneLine(v.summary, NODE_SUMMARY_MAX_CHARS)) {
+    return `${id}: summary must be 1..${NODE_SUMMARY_MAX_CHARS} characters with no line breaks`;
+  }
+  if (v.active !== undefined && typeof v.active !== 'boolean') return `${id}: active must be a boolean`;
+  if (v.lastActivityTs !== undefined && !(Number.isInteger(v.lastActivityTs) && (v.lastActivityTs as number) > 0)) {
+    return `${id}: lastActivityTs must be a positive integer (ms epoch)`;
+  }
+  if (v.changedAtRevision !== undefined && !(Number.isInteger(v.changedAtRevision) && (v.changedAtRevision as number) >= 1)) {
+    return `${id}: changedAtRevision must be an integer ≥ 1`;
+  }
+  if (v.originNodeId !== undefined) {
+    if (typeof v.originNodeId !== 'string' || !v.originNodeId) return `${id}: originNodeId must be a non-empty string`;
+    if (v.originNodeId === id) return `${id}: originNodeId must not be the node's own id`;
+  }
+  if (v.steps !== undefined) {
+    const st = v.steps;
+    if (
+      !isRecord(st) ||
+      unknownKey(st, ['done', 'total']) ||
+      !Number.isInteger(st.done) ||
+      !Number.isInteger(st.total) ||
+      (st.total as number) < 1 ||
+      (st.done as number) < 0 ||
+      (st.done as number) > (st.total as number)
+    ) {
+      return `${id}: steps must be { done; total } integers with 0 ≤ done ≤ total and total ≥ 1`;
+    }
+  }
+  return null;
+}
 
 /**
  * Whole-node structure: closed shapes for state/relations/attention, every
@@ -269,11 +321,13 @@ export function streamEventProblem(v: unknown): string | null {
  */
 export function nodeProblem(v: unknown): string | null {
   if (!isRecord(v)) return 'node must be an object';
-  const extra = unknownKey(v, ['id', 'kind', 'label', 'state', 'relations', 'capabilities', 'attention', 'artifacts', 'streams']);
+  const extra = unknownKey(v, NODE_KEYS);
   if (extra) return `unknown node key '${extra}'`;
   if (typeof v.id !== 'string' || !v.id) return 'node.id must be a non-empty string';
   if (typeof v.kind !== 'string' || !v.kind) return `${v.id}: kind must be a non-empty string`;
   if (v.label !== undefined && typeof v.label !== 'string') return `${v.id}: label must be a string`;
+  const decoration = nodeDecorationProblem(v, v.id);
+  if (decoration) return decoration;
   if (!isRecord(v.state) || typeof v.state.value !== 'string' || unknownKey(v.state, ['value'])) {
     return `${v.id}: state must be { value: string }`;
   }
@@ -328,6 +382,45 @@ export function nodeProblem(v: unknown): string | null {
     for (const e of c.decision?.evidence ?? []) {
       if (!artifactIds.includes(e)) return `${v.id}/${c.action}: evidence '${e}' is not an artifact of the node`;
     }
+  }
+  return null;
+}
+
+/* ---- snapshot (GET /nodes and every /stream frame on the direct wire) ---- */
+
+/**
+ * A node as carried by a snapshot of the given revision: `nodeProblem`, plus
+ * the snapshot-level rule that its `changedAtRevision` does not exceed the
+ * revision. A failure is per node — the node is not shown, the rest stand.
+ */
+export function snapshotNodeProblem(v: unknown, revision: number): string | null {
+  const problem = nodeProblem(v);
+  if (problem) return problem;
+  const n = v as NodeProjection;
+  if (n.changedAtRevision !== undefined && n.changedAtRevision > revision) {
+    return `${n.id}: changedAtRevision ${n.changedAtRevision} is after the snapshot revision ${revision}`;
+  }
+  return null;
+}
+
+/**
+ * Whole `DirectSnapshot` structure: closed { revision, nodes }, revision a
+ * non-negative integer, unique node ids, every node passing
+ * `snapshotNodeProblem`. Reports the first problem.
+ */
+export function snapshotProblem(v: unknown): string | null {
+  if (!isRecord(v)) return 'snapshot must be an object';
+  const extra = unknownKey(v, ['revision', 'nodes']);
+  if (extra) return `unknown snapshot key '${extra}'`;
+  if (!(Number.isInteger(v.revision) && (v.revision as number) >= 0)) return 'snapshot.revision must be a non-negative integer';
+  if (!Array.isArray(v.nodes)) return 'snapshot.nodes must be an array';
+  const seen = new Set<string>();
+  for (const [i, n] of v.nodes.entries()) {
+    const problem = snapshotNodeProblem(n, v.revision as number);
+    if (problem) return `nodes[${i}]: ${problem}`;
+    const id = (n as NodeProjection).id;
+    if (seen.has(id)) return `nodes[${i}]: duplicate node id '${id}'`;
+    seen.add(id);
   }
   return null;
 }

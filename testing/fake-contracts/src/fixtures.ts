@@ -457,6 +457,53 @@ export function nestedFlowFixture(): FakeWorkspaceProjection {
   return { ...base, edges: [...base.edges, { id: 'e-nested', from: 'm1', to: 'd-report', edgeKind: 'produces' }] };
 }
 
+/**
+ * The normal fixture plus the optional node decorations (contract 0.6.0):
+ * short names, summaries, activity, change revisions, origins and counted
+ * steps — some nodes carry them, some do not. Change revisions stay at or
+ * below the fixture revision (10).
+ */
+export function viewsFixture(): FakeWorkspaceProjection {
+  const base = normalFixture();
+  return {
+    ...base,
+    nodeDecorations: {
+      m1: {
+        shortName: 'Website',
+        summary: 'Public site: research done, copy and build under way.',
+        active: true,
+        lastActivityTs: NOW - 5_000,
+        changedAtRevision: 10,
+        steps: { done: 1, total: 4 },
+      },
+      't-research': {
+        summary: 'Competitor pages reviewed and summarized.',
+        active: false,
+        lastActivityTs: NOW - 2_400_000,
+        changedAtRevision: 3,
+        steps: { done: 3, total: 3 },
+      },
+      't-draft': {
+        summary: 'Landing page copy, second pass.',
+        active: true,
+        lastActivityTs: NOW - 30_000,
+        changedAtRevision: 9,
+        steps: { done: 2, total: 5 },
+      },
+      't-build': {
+        summary: 'Site build with authentication tests.',
+        active: true,
+        lastActivityTs: NOW - 5_000,
+        changedAtRevision: 10,
+        steps: { done: 3, total: 6 },
+      },
+      // No activity stated: unknown, not idle. Its origin is not in this snapshot.
+      't-test': { summary: 'End-to-end checks before release.', changedAtRevision: 4, originNodeId: 'plan-review' },
+      'd-report': { active: false, changedAtRevision: 3, originNodeId: 't-research' },
+    },
+  };
+}
+
 export const FIXTURES = {
   empty: emptyFixture,
   normal: normalFixture,
@@ -466,6 +513,7 @@ export const FIXTURES = {
   gates: gatesFixture,
   large: () => largeFixture(),
   'nested-flow': nestedFlowFixture,
+  views: viewsFixture,
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

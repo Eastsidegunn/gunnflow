@@ -44,6 +44,7 @@ import {
   resetKey,
   setAttention,
   setRelation,
+  keptRole,
   setRender,
   setViewer,
   sourceTabs,
@@ -218,7 +219,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
               options={EDGE_STYLE_IDS}
               value={style()}
               testid={(s) => `style-${p.scope}-${p.k}-${s}`}
-              onPick={(s) => edit(setRelation(draft(), p.k, { style: s as EdgeStyleId, ...(arrange() !== 'none' ? { arrange: arrange() } : {}), ...withDirection(arrange(), direction()) }))}
+              onPick={(s) => edit(setRelation(draft(), p.k, { style: s as EdgeStyleId, ...(arrange() !== 'none' ? { arrange: arrange() } : {}), ...withDirection(arrange(), direction()), ...keptRole(preview(), p.k) }))}
             />
           </label>
           <label class="seg-label">
@@ -227,7 +228,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
               options={ARRANGE_IDS}
               value={arrange()}
               testid={(a) => `arrange-${p.scope}-${p.k}-${a}`}
-              onPick={(a) => edit(setRelation(draft(), p.k, { style: style(), arrange: a as ArrangeId, ...withDirection(a as ArrangeId, direction()) }))}
+              onPick={(a) => edit(setRelation(draft(), p.k, { style: style(), arrange: a as ArrangeId, ...withDirection(a as ArrangeId, direction()), ...keptRole(preview(), p.k) }))}
             />
           </label>
           <Show when={arrange() === 'contain'}>
@@ -237,7 +238,7 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                 options={CONTAIN_DIRECTIONS}
                 value={direction()}
                 testid={(d) => `direction-${p.scope}-${p.k}-${d}`}
-                onPick={(d) => edit(setRelation(draft(), p.k, { style: style(), arrange: 'contain', ...withDirection('contain', d) }))}
+                onPick={(d) => edit(setRelation(draft(), p.k, { style: style(), arrange: 'contain', ...withDirection('contain', d), ...keptRole(preview(), p.k) }))}
               />
             </label>
           </Show>

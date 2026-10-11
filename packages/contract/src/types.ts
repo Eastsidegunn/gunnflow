@@ -68,6 +68,28 @@ export interface NodeProjection {
   artifacts: ArtifactRef[];
   /** Mutually exclusive with artifacts for the same data. */
   streams?: StreamRef[];
+  /*
+   * Optional decorations (0.6.0). Each is an upstream-stated fact; absent
+   * means only that decoration is omitted — the cockpit never fills one in.
+   */
+  /** Far-zoom name: 1..32 code points, no line breaks (LF VT FF CR NEL U+2028 U+2029). Absent → the engine shortens the label (first 24 chars). */
+  shortName?: string;
+  /** One-line upstream summary: 1..200 code points, no line breaks. Plain text, same status as the label. */
+  summary?: string;
+  /** The upstream says the node is active now. Absent = unknown, never false. */
+  active?: boolean;
+  /** ms epoch (integer > 0) of the node's last activity, as the upstream reports it. */
+  lastActivityTs?: number;
+  /**
+   * Revision (integer ≥ 1, ≤ the snapshot revision) at which this node's own
+   * projection last changed. Containers do not roll up: "changed inside" is a
+   * cockpit view computed from received containment.
+   */
+  changedAtRevision?: number;
+  /** The node this one originated from (not its own id). Draws no edge; may name a node absent from the snapshot. */
+  originNodeId?: string;
+  /** Upstream-counted steps: integers, 0 ≤ done ≤ total, total ≥ 1. Display only — the engine never computes progress. */
+  steps?: { done: number; total: number };
 }
 
 /** One on-demand detail item. The label is upstream vocabulary, opaque to the engine. Exactly one body. */

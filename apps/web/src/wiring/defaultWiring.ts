@@ -23,9 +23,10 @@ export const DEFAULT_WIRING: WiringConfig = {
     draft: { glyph: '▤', tone: '#dde3ea' },
   },
   relations: {
-    dependency: { style: 'solid', arrange: 'flow' },
+    // role: what the simulator's relation word is, for presentation (source → target); arrange still lays out.
+    dependency: { style: 'solid', arrange: 'flow', role: 'blocks' },
     spawn: { style: 'muted', arrange: 'flow' },
-    produces: { style: 'bold', arrange: 'flow' },
+    produces: { style: 'bold', arrange: 'flow', role: 'produces' },
     gate: { style: 'double', arrange: 'flow' },
     'member-of': { style: 'muted', arrange: 'contain' },
     evidence: { style: 'solid' },

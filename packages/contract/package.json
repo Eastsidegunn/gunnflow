@@ -1,6 +1,6 @@
 {
   "name": "@gunnflow/contract",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "description": "The Gunnflow backend contract: types, runtime validator, and the conformance suite backends run against themselves. No runtime dependencies.",
   "license": "MIT",

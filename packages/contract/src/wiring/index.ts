@@ -46,6 +46,16 @@ export const ARRANGE_IDS = ['flow', 'contain', 'none'] as const;
 export const CONTAIN_DIRECTIONS = ['in', 'out'] as const;
 export type ContainDirection = (typeof CONTAIN_DIRECTIONS)[number];
 /**
+ * What a relation type is, for presentation (closed set, 0.6.0; absent =
+ * unstated), read along the stored edge: the source <role> its target
+ * ('waits_on': the source waits on the target; 'contains': the source holds
+ * the target). The config states it for the upstream's vocabulary; the engine
+ * may use it to choose how an edge reads (legend, emphasis), never to infer
+ * anything about the nodes it joins. `arrange` stays the layout authority.
+ */
+export const RELATION_ROLES = ['waits_on', 'blocks', 'supports', 'produces', 'contains'] as const;
+export type RelationRole = (typeof RELATION_ROLES)[number];
+/**
  * Engine viewers (closed set). html, mermaid and excalidraw only ever render
  * on the isolated origin; mermaid and excalidraw each accept only their own
  * media types (generic JSON is never taken for a drawing).
@@ -129,7 +139,7 @@ export interface WiringConfig {
   version: string;
   /** glyph: a short literal printed verbatim; tone: a '#rrggbb' colour. */
   render?: Record<string, { glyph: string; tone: string }>;
-  relations?: Record<string, { style: EdgeStyleId; arrange?: ArrangeId; direction?: ContainDirection }>;
+  relations?: Record<string, { style: EdgeStyleId; arrange?: ArrangeId; direction?: ContainDirection; role?: RelationRole }>;
   /**
    * First match wins; an unmatched cause is ambient (engine invariant).
    * `group` is a display group name (a literal the screen prints, never
@@ -286,14 +296,15 @@ export function validateWiringConfig(value: unknown): WiringValidation {
   });
 
   record(value.relations, 'config.relations', (_k, x, at) => {
-    if (!isRecord(x)) return p(at, 'must be { style, arrange?, direction? }');
-    closed(x, ['style', 'arrange', 'direction'], at);
+    if (!isRecord(x)) return p(at, 'must be { style, arrange?, direction?, role? }');
+    closed(x, ['style', 'arrange', 'direction', 'role'], at);
     oneOf(x.style, EDGE_STYLE_IDS, `${at}.style`);
     if (x.arrange !== undefined) oneOf(x.arrange, ARRANGE_IDS, `${at}.arrange`);
     if (x.direction !== undefined) {
       oneOf(x.direction, CONTAIN_DIRECTIONS, `${at}.direction`);
       if (x.arrange !== 'contain') p(`${at}.direction`, "only a 'contain' relation has a direction");
     }
+    if (x.role !== undefined) oneOf(x.role, RELATION_ROLES, `${at}.role`);
   });
 
   if (value.attention !== undefined) {
@@ -567,6 +578,10 @@ export function renderFor(config: WiringConfig, stateValue: string) {
 }
 export function relationStyleFor(config: WiringConfig, type: string) {
   return own(config.relations, type)?.style;
+}
+/** Presentation role of a relation type; undefined when unregistered or unstated. */
+export function relationRoleFor(config: WiringConfig, type: string): RelationRole | undefined {
+  return own(config.relations, type)?.role;
 }
 /** Layout role of a relation type; unregistered or unstated = none. */
 export function relationArrangeFor(config: WiringConfig, type: string): ArrangeId {

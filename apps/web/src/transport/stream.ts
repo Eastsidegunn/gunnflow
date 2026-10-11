@@ -57,7 +57,7 @@ function open(store: ProjectionStore, onProjection?: (p: WorkspaceProjection) =>
     const projection = normalizeProjection(envelope.body);
     // The wire may omit revision inside body; the envelope's is authoritative.
     projection.revision = envelope.revision ?? projection.revision;
-    store.applyUpstream(projection, normalizeNodes(envelope.body), countsReceived(envelope.body));
+    store.applyUpstream(projection, normalizeNodes(envelope.body, projection.revision), countsReceived(envelope.body));
     onProjection?.(projection);
   };
   source.addEventListener('snapshot', apply);

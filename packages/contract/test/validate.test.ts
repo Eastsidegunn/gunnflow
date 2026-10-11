@@ -10,6 +10,8 @@ import {
   EXECUTION_MAX_LABEL_CHARS,
   EXECUTION_MAX_SESSIONS,
   EXECUTION_MAX_STATUS_CHARS,
+  NODE_SHORT_NAME_MAX_CHARS,
+  NODE_SUMMARY_MAX_CHARS,
   artifactRefProblem,
   capabilityProblem,
   digestOfBody,
@@ -17,13 +19,15 @@ import {
   lookupCapability,
   nodeProblem,
   parseSemver,
+  snapshotNodeProblem,
+  snapshotProblem,
   streamEventProblem,
   validateExecutionSnapshot,
   validateIntent,
   validateNodeDetail,
   type Capability,
 } from '../src/index.js';
-import { streamSequenceProblem } from '../src/conformance/index.js';
+import { snapshotConformanceProblem, streamSequenceProblem, type ConformanceTarget } from '../src/conformance/index.js';
 
 const node = {
   capabilities: [
@@ -36,10 +40,11 @@ const node = {
 const intent = (action: string, extra: object = {}) => ({ nodeId: 'n', action, idempotencyKey: 'k', ...extra });
 
 describe('contract', () => {
-  it('exports a semver version — 0.5.0: wiring kind shape and size', () => {
+  it('exports a semver version — 0.6.0: optional node decorations, snapshot rule, relation role', () => {
     expect(CONTRACT_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(CONTRACT_VERSION).toBe('0.5.0');
-    expect(isCompatibleContractVersion('0.5.0', CONTRACT_VERSION)).toBe(true);
+    expect(CONTRACT_VERSION).toBe('0.6.0');
+    expect(isCompatibleContractVersion('0.6.0', CONTRACT_VERSION)).toBe(true);
+    expect(isCompatibleContractVersion('0.5.0', CONTRACT_VERSION)).toBe(false);
     expect(isCompatibleContractVersion('0.4.0', CONTRACT_VERSION)).toBe(false);
     expect(isCompatibleContractVersion('0.3.2', CONTRACT_VERSION)).toBe(false);
     expect(isCompatibleContractVersion('0.2.0', CONTRACT_VERSION)).toBe(false);
@@ -150,6 +155,152 @@ describe('closed nested shapes and node structure', () => {
     expect(nodeProblem(node({ capabilities: [{ action: 'x', level: 'enabled' }, { action: 'x', level: 'hidden' }] }))).toContain('duplicate capability');
     const art = { id: 'a', mediaType: 't', access: { kind: 'snapshot' } };
     expect(nodeProblem(node({ artifacts: [art, art] }))).toContain('duplicate artifact');
+  });
+});
+
+describe('optional node decorations (0.6.0)', () => {
+  const node = (over: object = {}) => ({
+    id: 'n',
+    kind: 'doc',
+    state: { value: 'open' },
+    relations: [],
+    capabilities: [],
+    attention: [],
+    artifacts: [],
+    ...over,
+  });
+  const p = (over: object) => nodeProblem(node(over));
+
+  it('a node with every decoration passes; a node with none still passes', () => {
+    expect(p({})).toBeNull();
+    expect(
+      p({
+        shortName: 'Site',
+        summary: 'One line of upstream text.',
+        active: true,
+        lastActivityTs: 1_757_400_000_000,
+        changedAtRevision: 7,
+        originNodeId: 'not-in-this-snapshot',
+        steps: { done: 2, total: 5 },
+      }),
+    ).toBeNull();
+    expect(p({ active: false })).toBeNull();
+  });
+
+  it('shortName: 1..32 code points, no line breaks', () => {
+    expect(NODE_SHORT_NAME_MAX_CHARS).toBe(32);
+    expect(p({ shortName: 'x' })).toBeNull();
+    expect(p({ shortName: 'x'.repeat(32) })).toBeNull();
+    expect(p({ shortName: 'x'.repeat(33) })).toContain('shortName');
+    // Counted by code points: 32 astral characters are 64 UTF-16 units and still pass.
+    expect(p({ shortName: '🚀'.repeat(32) })).toBeNull();
+    expect(p({ shortName: '🚀'.repeat(33) })).toContain('shortName');
+    expect(p({ shortName: '' })).toContain('shortName');
+    expect(p({ shortName: 'a\nb' })).toContain('shortName');
+    expect(p({ shortName: 'a\rb' })).toContain('shortName');
+    expect(p({ shortName: 7 })).toContain('shortName');
+  });
+
+  it('no line breaks means none of LF, VT, FF, CR, NEL, U+2028, U+2029 — in shortName and summary', () => {
+    for (const br of ['\n', '\v', '\f', '\r', '\u0085', '\u2028', '\u2029']) {
+      const label = JSON.stringify(br);
+      expect(p({ shortName: `a${br}b` }), label).toContain('shortName');
+      expect(p({ summary: `a${br}b` }), label).toContain('summary');
+      expect(p({ shortName: br }), label).toContain('shortName');
+    }
+    // A tab and other spacing stay one line.
+    expect(p({ shortName: 'a\tb', summary: 'a\u00a0b' })).toBeNull();
+  });
+
+  it('summary: 1..200 code points, no line breaks', () => {
+    expect(NODE_SUMMARY_MAX_CHARS).toBe(200);
+    expect(p({ summary: 's'.repeat(200) })).toBeNull();
+    expect(p({ summary: 's'.repeat(201) })).toContain('summary');
+    expect(p({ summary: '한'.repeat(200) })).toBeNull();
+    expect(p({ summary: '' })).toContain('summary');
+    expect(p({ summary: 'first\nsecond' })).toContain('summary');
+    expect(p({ summary: 'first\r\nsecond' })).toContain('summary');
+  });
+
+  it('active is a boolean; lastActivityTs a positive integer', () => {
+    expect(p({ active: 'true' })).toContain('active');
+    expect(p({ active: 1 })).toContain('active');
+    expect(p({ lastActivityTs: 1 })).toBeNull();
+    expect(p({ lastActivityTs: 0 })).toContain('lastActivityTs');
+    expect(p({ lastActivityTs: -5 })).toContain('lastActivityTs');
+    expect(p({ lastActivityTs: 1.5 })).toContain('lastActivityTs');
+    expect(p({ lastActivityTs: '1757400000000' })).toContain('lastActivityTs');
+  });
+
+  it('changedAtRevision is an integer ≥ 1', () => {
+    expect(p({ changedAtRevision: 1 })).toBeNull();
+    expect(p({ changedAtRevision: 0 })).toContain('changedAtRevision');
+    expect(p({ changedAtRevision: 2.5 })).toContain('changedAtRevision');
+    expect(p({ changedAtRevision: '3' })).toContain('changedAtRevision');
+  });
+
+  it('originNodeId is a non-empty string other than the node itself', () => {
+    expect(p({ originNodeId: 'other' })).toBeNull();
+    expect(p({ originNodeId: 'n' })).toContain('own id');
+    expect(p({ originNodeId: '' })).toContain('originNodeId');
+    expect(p({ originNodeId: 3 })).toContain('originNodeId');
+  });
+
+  it('steps: closed { done, total } integers, 0 ≤ done ≤ total, total ≥ 1', () => {
+    expect(p({ steps: { done: 0, total: 1 } })).toBeNull();
+    expect(p({ steps: { done: 4, total: 4 } })).toBeNull();
+    expect(p({ steps: { done: 5, total: 4 } })).toContain('steps');
+    expect(p({ steps: { done: 0, total: 0 } })).toContain('steps');
+    expect(p({ steps: { done: -1, total: 3 } })).toContain('steps');
+    expect(p({ steps: { done: 1.5, total: 3 } })).toContain('steps');
+    expect(p({ steps: { done: 1, total: 3.5 } })).toContain('steps');
+    expect(p({ steps: { done: 1 } })).toContain('steps');
+    expect(p({ steps: { done: 1, total: 3, percent: 33 } })).toContain('steps');
+    expect(p({ steps: [1, 3] })).toContain('steps');
+  });
+
+  it('unknown node keys are still refused', () => {
+    expect(p({ progress: 0.5 })).toBe("unknown node key 'progress'");
+  });
+
+  it('snapshot rule: changedAtRevision ≤ the snapshot revision, per node', () => {
+    expect(snapshotNodeProblem(node({ changedAtRevision: 5 }), 5)).toBeNull();
+    expect(snapshotNodeProblem(node({ changedAtRevision: 6 }), 5)).toContain('after the snapshot revision 5');
+    expect(snapshotNodeProblem(node(), 0)).toBeNull();
+    // Structure problems come first, through nodeProblem.
+    expect(snapshotNodeProblem(node({ changedAtRevision: 0 }), 5)).toContain('≥ 1');
+  });
+
+  it('snapshotProblem: closed { revision, nodes }, non-negative integer revision, unique ids, every node checked', () => {
+    expect(snapshotProblem({ revision: 0, nodes: [] })).toBeNull();
+    expect(snapshotProblem({ revision: 5, nodes: [node({ changedAtRevision: 5 }), node({ id: 'm' })] })).toBeNull();
+    expect(snapshotProblem({ revision: 5, nodes: [node({ id: 'm' }), node({ changedAtRevision: 6 })] })).toContain('nodes[1]');
+    expect(snapshotProblem({ revision: -1, nodes: [] })).toContain('revision');
+    expect(snapshotProblem({ revision: 1.5, nodes: [] })).toContain('revision');
+    expect(snapshotProblem({ revision: 1 })).toContain('nodes');
+    expect(snapshotProblem({ revision: 1, nodes: [], body: {} })).toContain("unknown snapshot key 'body'");
+    expect(snapshotProblem({ revision: 1, nodes: [node(), node()] })).toContain('duplicate node id');
+    expect(snapshotProblem([])).toContain('object');
+  });
+});
+
+describe('conformance snapshot check', () => {
+  const node = (over: object = {}) => ({
+    id: 'n', kind: 'doc', state: { value: 'open' }, relations: [], capabilities: [], attention: [], artifacts: [], ...over,
+  });
+
+  it('a target whose node changed after the served snapshot revision fails; one within it passes', async () => {
+    expect(await snapshotConformanceProblem({ snapshot: () => ({ revision: 4, nodes: [node({ changedAtRevision: 4 })] }) })).toBeNull();
+    const bad = await snapshotConformanceProblem({
+      snapshot: async () => ({ revision: 4, nodes: [node({ changedAtRevision: 5 })] as never }),
+    });
+    expect(bad).toContain('changedAtRevision 5 is after the snapshot revision 4');
+  });
+
+  it('snapshot() is required on a conformance target (0.6.0)', () => {
+    // @ts-expect-error — a target without snapshot() does not type-check.
+    const t: ConformanceTarget = { contractVersion: '0.6.0', nodes: () => [], relay: async () => ({ accepted: false }) };
+    expect(t).toBeDefined();
   });
 });
 

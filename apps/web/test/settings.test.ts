@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NodeProjection } from '@gunnflow/contract';
 import { gatesFixture, normalFixture, projectNodes } from '@gunnflow-testing/fake-contracts';
-import { WIRING_SCHEMA_VERSION, type WiringConfig } from '@gunnflow/contract/wiring';
+import { WIRING_SCHEMA_VERSION, relationRoleFor, type WiringConfig } from '@gunnflow/contract/wiring';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
 import {
   DEFAULT_TAB_ID,
@@ -17,6 +17,7 @@ import {
   resetKey,
   setAttention,
   setRelation,
+  keptRole,
   setRender,
   setViewer,
   sourceName,
@@ -73,6 +74,18 @@ describe('settings model', () => {
     expect(provenance('render', 'queued', layers, draft)).toBe('default');
     expect(provenance('render', 'something-new', layers, draft)).toBe('engine default');
     expect(previewConfig(draft, layers).render!.running).toEqual({ glyph: '●', tone: '#ff5d5d' });
+  });
+
+  it('a style or layout edit keeps the relation role an earlier layer gave it', () => {
+    const layers = [{ file: '10-backend.json', config: { version: V, relations: { dependency: { style: 'solid', arrange: 'flow', role: 'blocks' } } } as WiringConfig }];
+    let d = emptyUserConfig();
+    d = setRelation(d, 'dependency', { style: 'bold', arrange: 'flow', ...keptRole(previewConfig(d, layers), 'dependency') });
+    expect(relationRoleFor(previewConfig(d, layers), 'dependency')).toBe('blocks');
+    d = setRelation(d, 'dependency', { style: 'bold', arrange: 'none', ...keptRole(previewConfig(d, layers), 'dependency') });
+    expect(relationRoleFor(previewConfig(d, layers), 'dependency')).toBe('blocks');
+    // Without it, the user entry replaces the layer's entry whole and the role is gone.
+    expect(relationRoleFor(previewConfig(setRelation(emptyUserConfig(), 'dependency', { style: 'bold' }), layers), 'dependency')).toBeUndefined();
+    expect(keptRole(previewConfig(emptyUserConfig(), layers), 'evidence')).toEqual({});
   });
 
   it('edits use closed tokens only, and "back to default" removes the key from my file', () => {

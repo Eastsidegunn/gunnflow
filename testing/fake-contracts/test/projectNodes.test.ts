@@ -1,8 +1,8 @@
 // The simulator's domain → NodeProjection translation passes the contract's
 // node checks and carries domain vocabulary through as opaque strings.
 import { describe, expect, it } from 'vitest';
-import { nodeProblem } from '@gunnflow/contract';
-import { CHORE_KIND, FAKE_CHORE_COMMAND, FLAGGED, MEMBER_OF, NEEDS_HANDS, UNSTATED, WAITING_FOR_HUMAN, WORKSPACE_NODE_ID, detailOf, emptyFixture, inboxFixture, blockedFixture, gatesFixture, largeFixture, normalFixture, projectNodes } from '../src/index.js';
+import { nodeProblem, snapshotProblem } from '@gunnflow/contract';
+import { CHORE_KIND, FAKE_CHORE_COMMAND, FLAGGED, MEMBER_OF, NEEDS_HANDS, UNSTATED, WAITING_FOR_HUMAN, WORKSPACE_NODE_ID, detailOf, emptyFixture, inboxFixture, blockedFixture, gatesFixture, largeFixture, normalFixture, projectNodes, viewsFixture } from '../src/index.js';
 
 describe('projectNodes', () => {
   it('every fixture translates into well-formed contract nodes: one per domain node plus the root', () => {
@@ -11,6 +11,22 @@ describe('projectNodes', () => {
       expect(nodes).toHaveLength(1 + p.missions.length + p.tasks.length + p.gates.length + p.deliverables.length);
       for (const n of nodes) expect(nodeProblem(n), n.id).toBeNull();
     }
+  });
+
+  it('the views fixture carries decorations verbatim on some nodes, none on others, all within its revision', () => {
+    const p = viewsFixture();
+    const nodes = projectNodes(p);
+    expect(snapshotProblem({ revision: p.revision, nodes })).toBeNull();
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    expect(byId.get('m1')).toMatchObject({ shortName: 'Website', active: true, steps: { done: 1, total: 4 } });
+    expect(byId.get('t-test')!.active).toBeUndefined();
+    expect(byId.get('t-test')!.originNodeId).toBe('plan-review');
+    expect(byId.has('plan-review')).toBe(false);
+    // The undecorated scenario stays as it was.
+    expect(projectNodes(normalFixture()).some((n) => 'summary' in n || 'changedAtRevision' in n)).toBe(false);
+    expect(nodes.map(({ id, kind, label, state, relations }) => ({ id, kind, label, state, relations }))).toEqual(
+      projectNodes(normalFixture()).map(({ id, kind, label, state, relations }) => ({ id, kind, label, state, relations })),
+    );
   });
 
   it('maps kinds, states, relations, capabilities, attention and artifacts', () => {
