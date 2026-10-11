@@ -48,8 +48,8 @@ const dbg = <T,>(page: Page, f: string, arg?: string) =>
   page.evaluate(([fn, a]) => ((window as unknown as { __gunnflowDebug: Record<string, (x?: string) => unknown> }).__gunnflowDebug[fn!]!(a)), [f, arg] as const) as Promise<T>;
 
 async function open(page: Page) {
-  expect((await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'nested-flow' } })).ok()).toBeTruthy();
-  expect((await page.request.put('http://127.0.0.1:8787/api/personal', { data: { version: 2, notes: {}, stickies: [], boxes: [], links: [] } })).ok()).toBeTruthy();
+  expect((await page.request.post('/api/_fake/fixture', { data: { name: 'nested-flow' } })).ok()).toBeTruthy();
+  expect((await page.request.put('/api/personal', { data: { version: 2, notes: {}, stickies: [], boxes: [], links: [] } })).ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await expect(page.getByTestId('layout-source')).toHaveText('layered', { timeout: 15_000 });

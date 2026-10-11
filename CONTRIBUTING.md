@@ -16,7 +16,9 @@ Gunnflow is alpha software built in public. Issues and small pull requests are w
   fixture line with `data-scan:allow`); patterns of your own can go in
   `~/.gunnflow/data-scan.local.json` (array of `{ name, pattern, flags }`) without being published.
 - UI behaviour changes: run `pnpm e2e` (first `pnpm --filter @gunnflow/web exec playwright install chromium`),
-  add or update a scenario in `apps/web/e2e/`, and attach a screenshot to the PR.
+  add or update a scenario in `apps/web/e2e/`, and attach a screenshot to the PR. While a live
+  cockpit is running, use `npx playwright test -c playwright.isolated.config.ts` (in `apps/web`)
+  instead; scenarios reach servers through `/api` or `e2e/ports.ts`, never a literal port.
 - Keep each PR to one behaviour.
 
 ## Rules that keep the cockpit honest

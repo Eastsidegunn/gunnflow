@@ -22,8 +22,8 @@ async function holdPick(page: Page, at: { x: number; y: number }, itemId: string
 }
 
 async function open(page: Page, fixture = 'normal') {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: fixture } });
-  await page.request.put('http://127.0.0.1:8787/api/personal', { data: EMPTY });
+  await page.request.post('/api/_fake/fixture', { data: { name: fixture } });
+  await page.request.put('/api/personal', { data: EMPTY });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
 }
@@ -83,7 +83,7 @@ test('deleting a received node is an intent: it leaves only when the projection 
   // No local mutation: the node disappears only via the projection (relay → upstream → snapshot).
   await expect(page.getByTestId('node-t-research')).toHaveCount(0);
   // And the upstream agrees — a fresh read has no such task.
-  const ws = (await (await page.request.get('http://127.0.0.1:8787/api/_fake/projection').catch(() => null))?.json().catch(() => null)) as
+  const ws = (await (await page.request.get('/api/_fake/projection').catch(() => null))?.json().catch(() => null)) as
     | { tasks?: { id: string }[] }
     | null;
   if (ws?.tasks) expect(ws.tasks.some((t) => t.id === 't-research')).toBe(false);

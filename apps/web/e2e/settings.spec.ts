@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { SIMULATOR_WIRING_FILE } from '@gunnflow-testing/fake-contracts';
 import { E2E_WIRING_DIR } from '../playwright.config.js';
 const ACCENT = '#4da3ff';
 const DANGER = '#ff5d5d';
@@ -13,12 +14,12 @@ const tone = (page: Page, id: string) =>
   page.evaluate((nodeId) => (window as unknown as { __gunnflowDebug: { nodeStyle: (i: string) => { tone: string } | undefined } }).__gunnflowDebug.nodeStyle(nodeId)?.tone, id);
 
 test.afterEach(async ({ request }) => {
-  await request.delete('http://127.0.0.1:8787/api/wiring/user');
+  await request.delete('/api/wiring/user');
 });
 
 test('settings View tab: task · running tone saved → canvas recoloured at once → in 90-user.json → kept after reload', async ({ page }) => {
-  await page.request.delete('http://127.0.0.1:8787/api/wiring/user');
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
+  await page.request.delete('/api/wiring/user');
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await expect.poll(() => tone(page, 't-build')).toBe(ACCENT);
@@ -30,11 +31,12 @@ test('settings View tab: task · running tone saved → canvas recoloured at onc
   const box = (await screen.boundingBox())!;
   const vp = page.viewportSize()!;
   expect([box.x, box.y, box.width, box.height]).toEqual([0, 0, vp.width, vp.height]);
-  // No wiring files in the e2e dir → the only backend tab is the built-in default.
-  await expect(page.getByTestId('settings-src-default')).toHaveAttribute('aria-selected', 'true');
+  // No wiring files in the e2e dir → the backend tab is the simulator's own layer (fake mode), then the built-in default.
+  await expect(page.getByTestId('settings-src-simulator')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('settings-src-default')).toHaveAttribute('aria-selected', 'false');
   const task = page.getByTestId('kind-task');
   await expect(task).toBeVisible();
-  await expect(task.getByTestId('state-task-running')).toContainText('default');
+  await expect(task.getByTestId('state-task-running')).toContainText(SIMULATOR_WIRING_FILE);
   // The colour wheel writes a hex literal (the same value the danger token resolves to).
   await page.getByTestId('tone-task-running').fill(DANGER);
   await expect(task.getByTestId('prov-render-running')).toContainText('my settings');

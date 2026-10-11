@@ -2,7 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function loadFixture(page: Page, name: string) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name } });
+  const res = await page.request.post('/api/_fake/fixture', { data: { name } });
   expect(res.ok()).toBeTruthy();
 }
 
@@ -119,7 +119,7 @@ test('performance: 10k-line PTY stays virtualized; typing stays enabled during b
   await page.getByTestId('open-execution').click();
   await page.getByTestId('open-terminal').click();
   await expect(page.getByTestId('pty-line').first()).toBeVisible();
-  const big = await page.request.post('http://127.0.0.1:8787/api/_fake/pty-burst', {
+  const big = await page.request.post('/api/_fake/pty-burst', {
     data: { sessionId: 's-184', count: 10_000 },
   });
   expect(big.ok()).toBeTruthy();

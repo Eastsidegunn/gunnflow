@@ -4,7 +4,7 @@
 import { expect, test, type Request } from '@playwright/test';
 
 test('switch to 한국어 in the corner → inbox title in Korean → kept after reload, no request made', async ({ page }) => {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'blocked' } });
+  const res = await page.request.post('/api/_fake/fixture', { data: { name: 'blocked' } });
   expect(res.ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
@@ -48,7 +48,7 @@ test('switch to 한국어 in the corner → inbox title in Korean → kept after
 });
 
 test('settings offers the same choice (one store with the corner switch)', async ({ page }) => {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'blocked' } });
+  const res = await page.request.post('/api/_fake/fixture', { data: { name: 'blocked' } });
   expect(res.ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();

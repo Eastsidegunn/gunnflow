@@ -67,11 +67,12 @@ async function stubClipboard(page: Page, mode: 'record' | 'refuse') {
 }
 
 async function open(page: Page) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'inbox' } });
+  const res = await page.request.post('/api/_fake/fixture', { data: { name: 'inbox' } });
   expect(res.ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
-  await expect(page.getByTestId('wiring-files-loaded')).toHaveText('1');
+  // The simulator's own layer (fake mode) and this scenario's file.
+  await expect(page.getByTestId('wiring-files-loaded')).toHaveText('2');
 }
 
 test('groups: the toggle counts per group; interrupt groups open, the ambient group starts folded (count shown)', async ({ page }) => {

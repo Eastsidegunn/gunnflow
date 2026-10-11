@@ -7,12 +7,10 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { E2E_WIRING_DIR } from '../playwright.config.js';
 
-const BFF = 'http://127.0.0.1:8787';
-
 /** The e2e home lands on `all` for the canvas scenarios; this scenario opens on the product default. */
 async function setLanding(page: Page, landingView: 'now' | 'all') {
-  const cur = (await (await page.request.get(`${BFF}/api/prefs`)).json()) as { prefs: Record<string, unknown> | null };
-  const res = await page.request.put(`${BFF}/api/prefs`, { data: { ...(cur.prefs ?? {}), landingView } });
+  const cur = (await (await page.request.get(`/api/prefs`)).json()) as { prefs: Record<string, unknown> | null };
+  const res = await page.request.put(`/api/prefs`, { data: { ...(cur.prefs ?? {}), landingView } });
   expect(res.ok()).toBeTruthy();
 }
 
@@ -22,14 +20,14 @@ async function setLanding(page: Page, landingView: 'now' | 'all') {
  * Without it the visit is a first look, which starts at the current revision.
  */
 async function lookedBefore(page: Page) {
-  const { label } = (await (await page.request.get(`${BFF}/api/upstream`)).json()) as { label: string };
+  const { label } = (await (await page.request.get(`/api/upstream`)).json()) as { label: string };
   await page.addInitScript((key) => {
     if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify({ lastSeen: 0, nodes: {} }));
   }, `gunnflow.now.seen.v1|${label}`);
 }
 
 async function open(page: Page, fixture = 'views') {
-  const res = await page.request.post(`${BFF}/api/_fake/fixture`, { data: { name: fixture } });
+  const res = await page.request.post(`/api/_fake/fixture`, { data: { name: fixture } });
   expect(res.ok()).toBeTruthy();
   await setLanding(page, 'now');
 }
@@ -47,9 +45,9 @@ const rowIds = (page: Page, section: string) =>
   page.locator(`[data-testid^="now-row-${section}-"]`).evaluateAll((els, s) => els.map((e) => e.getAttribute('data-testid')!.slice(`now-row-${s}-`.length)), section);
 
 test.afterAll(async ({ request }) => {
-  const cur = (await (await request.get(`${BFF}/api/prefs`)).json()) as { prefs: Record<string, unknown> | null };
-  await request.put(`${BFF}/api/prefs`, { data: { ...(cur.prefs ?? {}), landingView: 'all' } });
-  await request.post(`${BFF}/api/_fake/fixture`, { data: { name: 'normal' } });
+  const cur = (await (await request.get(`/api/prefs`)).json()) as { prefs: Record<string, unknown> | null };
+  await request.put(`/api/prefs`, { data: { ...(cur.prefs ?? {}), landingView: 'all' } });
+  await request.post(`/api/_fake/fixture`, { data: { name: 'normal' } });
 });
 
 test('lands on Now: three sections in order, with the fixture rows; no canvas', async ({ page }) => {
@@ -200,7 +198,7 @@ test('a backend that sends no activity or change revisions is said so, not shown
   await expect(page.getByTestId('now-changed-unsupported')).toHaveText('This backend does not send change revisions (changedAtRevision).');
   await expect(page.getByTestId('now-mark-all-seen')).toHaveCount(0);
   // All empty: the calm state claims emptiness only for what this backend sends.
-  await page.request.post(`${BFF}/api/_fake/fixture`, { data: { name: 'normal' } });
+  await page.request.post(`/api/_fake/fixture`, { data: { name: 'normal' } });
   await expect(page.getByTestId('now-calm')).toBeVisible();
   await expect(page.getByTestId('now-waiting-empty')).toBeVisible();
   await expect(page.getByTestId('now-moving-unsupported')).toBeVisible();
