@@ -440,6 +440,25 @@ export function SettingsScreen(props: { stores: WorkspaceStores; onClose: () => 
                 </span>
                 <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
               </div>
+              <div class="settings-row" data-testid="pref-row-landing-view">
+                <span class="settings-key">{t('settings.prefs.landingView')}</span>
+                <span />
+                <span class="settings-pickers">
+                  <select
+                    value={prefs.prefs().landingView}
+                    data-testid="pref-landing-view"
+                    onChange={(e) => {
+                      const v = e.currentTarget.value;
+                      if (v === 'now' || v === 'all') void prefs.save({ landingView: v });
+                    }}
+                  >
+                    <option value="now">{t('settings.prefs.landingNow')}</option>
+                    <option value="all">{t('settings.prefs.landingAll')}</option>
+                  </select>
+                  <span class="hint">{t('settings.prefs.landingViewHint')}</span>
+                </span>
+                <span class="settings-source">{t('settings.prefs.thisMachine')}</span>
+              </div>
               <div class="settings-row" data-testid="pref-row-lens">
                 <span class="settings-key">{t('settings.prefs.defaultLens')}</span>
                 <span />

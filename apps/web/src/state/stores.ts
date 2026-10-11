@@ -23,6 +23,7 @@ import { PREVIEW_ORIGIN } from '../transport/previewOrigin.js';
 import { createPrefsState } from '../prefs/prefsState.js';
 import { createChangeLog, type Tier } from './relevance.js';
 import { createSignal } from 'solid-js';
+import { createSeenState } from './seenState.js';
 
 export function createWorkspaceStores(post: (intent: Intent) => Promise<IntentResult>) {
   const projectionStore = createProjectionStore();
@@ -49,6 +50,8 @@ export function createWorkspaceStores(post: (intent: Intent) => Promise<IntentRe
     wiring: createWiringState(),
     /** Machine-local ergonomics (zoom feel, default lens); its own store, never upstream. */
     prefs: createPrefsState(),
+    /** View A's "last look" marks: device-local (localStorage), per upstream identity; never upstream. */
+    seen: createSeenState(),
     /** Received-change log (snapshot diff — a permitted view input) for relevance tiers. */
     changeLog: createChangeLog(),
     /** The relevance tiers (dynamic-view P2): computed once by the canvas pipeline, read by every mirror. */

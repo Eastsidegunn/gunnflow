@@ -461,18 +461,20 @@ export function nestedFlowFixture(): FakeWorkspaceProjection {
  * The normal fixture plus the optional node decorations (contract 0.6.0):
  * short names, summaries, activity, change revisions, origins and counted
  * steps — some nodes carry them, some do not. Change revisions stay at or
- * below the fixture revision (10).
+ * below the fixture revision (10). Two tasks are flagged for attention, so
+ * every section of the Now view has rows; the mission is active with no
+ * activity time (it sorts last among the moving).
  */
 export function viewsFixture(): FakeWorkspaceProjection {
   const base = normalFixture();
   return {
     ...base,
+    tasks: base.tasks.map((t) => (t.id === 't-test' || t.id === 't-build' ? { ...t, attention: true } : t)),
     nodeDecorations: {
       m1: {
         shortName: 'Website',
         summary: 'Public site: research done, copy and build under way.',
         active: true,
-        lastActivityTs: NOW - 5_000,
         changedAtRevision: 10,
         steps: { done: 1, total: 4 },
       },

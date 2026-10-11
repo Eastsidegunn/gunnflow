@@ -11,6 +11,7 @@ export const KEYBINDINGS = [
   { name: 'open-decision-inbox', labelKey: 'keys.openDecisionInbox' },
   { name: 'inbox-next', labelKey: 'keys.inboxNext' },
   { name: 'inbox-prev', labelKey: 'keys.inboxPrev' },
+  { name: 'switch-view', labelKey: 'keys.switchView' },
 ] as const satisfies readonly { name: string; labelKey: MessageKey }[];
 
 /** A binding's description in the current locale. */
@@ -25,6 +26,7 @@ export const DEFAULT_KEYS: Record<BindingName, string> = {
   'open-decision-inbox': 'd',
   'inbox-next': 'j',
   'inbox-prev': 'k',
+  'switch-view': 'v',
 };
 
 /** A bindable key: one printable character (stored lowercase, matched case-insensitively). */

@@ -61,6 +61,23 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
   /** The last layered result: the basis for hints and stabilization. */
   let basis: { graph: LayoutGraph; positions: Positions } | null = null;
   let provider: Promise<LayoutProvider> | null = null;
+  /** The one in-flight preload (concurrent calls share it). */
+  let preloading: Promise<void> | null = null;
+  let disposed = false;
+  /** The provider, loaded once; a failed load clears only its own attempt (a newer one stands). */
+  const loadProvider = async (): Promise<LayoutProvider> => {
+    if (disposed) throw new Error('layout state disposed');
+    const mine = (provider ??= load());
+    try {
+      const p = await mine;
+      // Disposed while loading: release what just arrived.
+      if (disposed) p.dispose?.();
+      return p;
+    } catch (err) {
+      if (provider === mine) provider = null; // retried on the next topology change
+      throw err;
+    }
+  };
   let running = false;
   let queued: { graph: LayoutGraph; gen: number } | null = null;
 
@@ -72,7 +89,7 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
   };
 
   const fail = (graph: LayoutGraph, gen: number, why: Why) => {
-    if (gen !== generation) return;
+    if (disposed || gen !== generation) return;
     basis = null;
     show(graph, fallbackLayout(graph), 'fallback', why);
   };
@@ -82,20 +99,18 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
     try {
       let p: LayoutProvider;
       try {
-        provider ??= load();
-        p = await provider;
+        p = await loadProvider();
       } catch (err) {
-        provider = null; // retried on the next topology change
         return fail(graph, gen, { key: 'layout.reason.unavailable', params: { detail: msgOf(err) } });
       }
-      if (gen !== generation) return;
+      if (disposed || gen !== generation) return;
       let result: Positions;
       try {
         result = await p.layout(graph, basis?.positions);
       } catch (err) {
         return fail(graph, gen, { key: 'layout.reason.failed', params: { detail: msgOf(err) } });
       }
-      if (gen !== generation) return;
+      if (disposed || gen !== generation) return;
       const problem = positionsProblem(graph, result);
       if (problem) return fail(graph, gen, { key: 'layout.reason.invalid', params: { detail: problem } });
       const next = basis ? stabilize(graph, result, basis.graph, basis.positions) : result;
@@ -105,11 +120,42 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
       running = false;
       const q = queued;
       queued = null;
-      if (q && q.gen === generation) void pass(q.graph, q.gen);
+      if (q && q.gen === generation && !disposed) void pass(q.graph, q.gen);
     }
   };
 
   return {
+    /**
+     * Loads the layered engine ahead of the first canvas (its code chunk and
+     * worker script), so a later switch to the full view fetches nothing. The
+     * warm-up goes through the provider's own pass path (serialized with
+     * passes, same time limit); a failure leaves the next pass to retry.
+     */
+    preload(): Promise<void> {
+      if (preloading) return preloading;
+      const attempt = (async () => {
+        const p = await loadProvider();
+        await p.warm?.();
+      })();
+      preloading = attempt;
+      attempt.catch(() => {
+        if (preloading === attempt) preloading = null;
+      });
+      return attempt;
+    },
+    /**
+     * Releases the engine: the pass in flight is rejected at once and its
+     * result never applied, queued topology work is dropped, the worker is
+     * terminated, and later updates and loads do nothing.
+     */
+    dispose() {
+      disposed = true;
+      generation++;
+      queued = null;
+      const p = provider;
+      provider = null;
+      void p?.then((x) => x.dispose?.(), () => undefined);
+    },
     positions,
     source,
     reason,
@@ -120,6 +166,7 @@ export function createLayoutState(options: LayoutStateOptions = {}) {
       while (running || queued) await new Promise((r) => setTimeout(r, 1));
     },
     update(graph: LayoutGraph) {
+      if (disposed) return;
       setWithheld(graph.withheld.length);
       if (graph.signature === signature) return;
       signature = graph.signature;
