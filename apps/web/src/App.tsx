@@ -34,6 +34,7 @@ import { cursorNodeId, cursorSection, type CockpitView } from './state/nowView.j
 import { browserIdle, scheduleLayoutPreload, type PreloadState } from './state/layoutPreload.js';
 import { TerminalPanel } from './ui/TerminalPanel.jsx';
 import { terminalPanel } from './state/terminalPanel.js';
+import { dock } from './state/dock.js';
 
 export function App() {
   const stores = createWorkspaceStores(postIntent);
@@ -399,8 +400,36 @@ export function App() {
   };
 
   return (
-    <div class="shell" data-layout-preload={layoutPreload()}>
-      <WorkspaceToolbar stores={stores} searchRef={(el) => (searchEl = el)} view={view} onView={showView} />
+    // The dock insets (state/dock.ts): what floats reads them to stand clear of open docks.
+    <div
+      class="shell"
+      data-layout-preload={layoutPreload()}
+      style={{
+        '--dock-bottom': terminalPanel.open() ? `${dock.height()}px` : '0px',
+        '--dock-right': `${dock.rightWidth()}px`,
+      }}
+    >
+      <WorkspaceToolbar
+        stores={stores}
+        searchRef={(el) => (searchEl = el)}
+        view={view}
+        onView={showView}
+        end={
+          <>
+            <DecisionInboxToggle stores={stores} open={inboxOpen} onToggle={() => toggleInbox()} />
+            <NotificationCenter
+              stores={stores}
+              onGo={(id) => {
+                setTerminalSessionId(null);
+                setExecutionTaskId(null);
+                setWork(null);
+                showView('all');
+                stores.selection.select(id);
+              }}
+            />
+          </>
+        }
+      />
       <Show when={unreachableLong()}>
         <div class="unreachable-banner" data-testid="unreachable-banner" role="alert">
           {t('app.unreachableBanner', { time: unreachableSince() })}
@@ -503,19 +532,10 @@ export function App() {
           </WorkSurface>
         </Show>
       </div>
+      {/* The bottom dock: in the flow, so the work area above gives it room rather than sitting under it. */}
+      <TerminalPanel />
       <WorkspaceStatusStrip stores={stores} onRefresh={() => (stream ? refreshWorkspace(stream) : Promise.resolve({ refreshed: false }))} />
       <RelayErrorToasts stores={stores} />
-      <NotificationCenter
-        stores={stores}
-        onGo={(id) => {
-          setTerminalSessionId(null);
-          setExecutionTaskId(null);
-          setWork(null);
-          showView('all');
-          stores.selection.select(id);
-        }}
-      />
-      <DecisionInboxToggle stores={stores} open={inboxOpen} onToggle={() => toggleInbox()} />
       <Show when={inboxPresence.mounted()}>
         <DecisionInbox
           stores={stores}
@@ -529,7 +549,6 @@ export function App() {
         />
       </Show>
       <SurfacePlaceholder surface={surface} onClose={() => setSurface(null)} />
-      <TerminalPanel />
       {/* Settings: an overlay panel over the cockpit. */}
       <Show when={settingsPresence.mounted()}>
         <SettingsScreen stores={stores} onClose={() => setSettingsOpen(false)} motion={settingsPresence.phase()} />

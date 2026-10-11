@@ -3,8 +3,10 @@
  * Creation, personal items and rewire live in the canvas context menu; zoom
  * is wheel/pinch; interrupt arrivals notify at the top right. The search
  * field is a placeholder: it takes focus (⌘/Ctrl+K) and does nothing yet.
+ * The top-level toggles (Terminals, then `end`: Decisions and ⚠) share this row and never float
+ * over one another (the dock rule, state/dock.ts).
  */
-import { For } from 'solid-js';
+import { For, type JSX } from 'solid-js';
 import type { WorkspaceStores } from '../state/stores.js';
 import { t, type MessageKey } from '../i18n/index.js';
 import { COCKPIT_VIEWS, type CockpitView } from '../state/nowView.js';
@@ -18,6 +20,7 @@ export function WorkspaceToolbar(props: {
   searchRef?: (el: HTMLInputElement) => void;
   view: () => CockpitView | null;
   onView: (v: CockpitView) => void;
+  end?: JSX.Element;
 }) {
   const switchKey = () => resolveKey(props.stores.prefs.prefs().keys, 'switch-view').toUpperCase();
   return (
@@ -50,6 +53,7 @@ export function WorkspaceToolbar(props: {
       />
       <span class="spacer" />
       <TerminalPanelToggle />
+      {props.end}
     </header>
   );
 }

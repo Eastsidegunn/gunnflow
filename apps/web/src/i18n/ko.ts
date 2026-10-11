@@ -50,6 +50,7 @@ export const ko: Messages = {
 
   'term.toggle': '터미널',
   'term.title': '터미널',
+  'term.resize': '터미널 도크 높이 조절 (↑ ↓)',
   'term.loading': '터미널 목록을 불러오는 중…',
   'term.unsupported': '이 백엔드는 터미널을 제공하지 않는다.',
   'term.listFailed': '터미널 목록을 받지 못했다: {reason}',

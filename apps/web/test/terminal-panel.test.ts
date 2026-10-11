@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { base64ToBytes, bytesToBase64, encodeInput, INPUT_CHUNK_BYTES } from '../src/transport/terminalClient.js';
 import { terminalsForNode } from '../src/state/terminalPanel.js';
+import { CHROME_HEIGHT, DOCK_MIN_HEIGHT, WORK_MIN_HEIGHT, clampDockHeight, defaultDockHeight } from '../src/state/dock.js';
 import { en } from '../src/i18n/en.js';
 import { ko } from '../src/i18n/ko.js';
 
@@ -32,6 +33,17 @@ describe('terminal panel (GF-T1)', () => {
     expect(terminalsForNode(list, 'n1').map((x) => x.terminalId)).toEqual(['a']);
     expect(terminalsForNode({ ok: false, unsupported: true, reason: 'x' }, 'n1')).toEqual([]);
     expect(terminalsForNode(null, 'n1')).toEqual([]);
+  });
+
+  it('the bottom dock keeps a usable terminal and a usable work area above it (GF-T3)', () => {
+    // 900px window: toolbar + status line take CHROME_HEIGHT, the work area keeps WORK_MIN_HEIGHT.
+    const max = 900 - CHROME_HEIGHT - WORK_MIN_HEIGHT;
+    expect(clampDockHeight(10, 900)).toBe(DOCK_MIN_HEIGHT);
+    expect(clampDockHeight(5000, 900)).toBe(max);
+    expect(clampDockHeight(300.4, 900)).toBe(300);
+    expect(defaultDockHeight(900)).toBe(360);
+    // A window too short for both: the terminal keeps its minimum.
+    expect(clampDockHeight(400, 300)).toBe(DOCK_MIN_HEIGHT);
   });
 
   it('every terminal string exists in English and Korean', () => {

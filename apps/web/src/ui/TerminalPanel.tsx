@@ -8,6 +8,7 @@ import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import '@xterm/xterm/css/xterm.css';
 import { t } from '../i18n/index.js';
 import { terminalPanel } from '../state/terminalPanel.js';
+import { dock, DOCK_KEY_STEP } from '../state/dock.js';
 import {
   closeTerminal,
   connectOutput,
@@ -33,11 +34,13 @@ export function TerminalPanelToggle() {
   );
 }
 
+/** The bottom dock (state/dock.ts): full width above the status line, its height set by the handle. */
 export function TerminalPanel() {
   const p = terminalPanel;
   return (
     <Show when={p.open()}>
-      <aside class="term-panel" data-testid="term-panel" role="dialog" aria-label={t('term.title')}>
+      <aside class="term-panel" data-testid="term-panel" aria-label={t('term.title')} style={{ height: `${dock.height()}px` }}>
+        <DockHandle />
         <header class="term-head">
           <Show when={p.active()} fallback={<strong>{t('term.title')}</strong>}>
             {(e) => (
@@ -55,6 +58,47 @@ export function TerminalPanel() {
         </Show>
       </aside>
     </Show>
+  );
+}
+
+/** Drag up to grow, down to shrink; ↑/↓ step it from the keyboard. */
+function DockHandle() {
+  const onPointerDown = (e: PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const startY = e.clientY;
+    const startH = dock.height();
+    const move = (m: PointerEvent) => dock.setHeight(startH + (startY - m.clientY));
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const onKeyDown = (e: KeyboardEvent) => {
+    const step = e.key === 'ArrowUp' ? DOCK_KEY_STEP : e.key === 'ArrowDown' ? -DOCK_KEY_STEP : 0;
+    if (!step) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dock.setHeight(dock.height() + step);
+  };
+  return (
+    <div
+      class="dock-handle"
+      data-testid="term-dock-handle"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label={t('term.resize')}
+      aria-valuenow={dock.height()}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+    />
   );
 }
 

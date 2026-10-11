@@ -55,6 +55,7 @@ export const en = {
 
   'term.toggle': 'Terminals',
   'term.title': 'Terminals',
+  'term.resize': 'Resize the terminal dock (↑ ↓)',
   'term.loading': 'Loading terminals…',
   'term.unsupported': 'This backend serves no terminals.',
   'term.listFailed': 'Could not list terminals: {reason}',
