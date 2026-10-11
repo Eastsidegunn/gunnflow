@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { E2E_PERSONAL_DIR } from '../playwright.config.js';
+import { PREVIEW } from './ports.js';
 
 const FILE = join(E2E_PERSONAL_DIR, 'fake.json');
 
@@ -19,8 +20,8 @@ async function holdPick(page: Page, at: { x: number; y: number }, itemId: string
 }
 const EMPTY = { version: 2, notes: {}, stickies: [], boxes: [], links: [] };
 test('personal note and sticky: saved locally, back after a reload, never part of the workspace', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
-  expect((await page.request.put('http://127.0.0.1:8787/api/personal', { data: EMPTY })).ok()).toBeTruthy();
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
+  expect((await page.request.put('/api/personal', { data: EMPTY })).ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
 
@@ -56,8 +57,8 @@ test('personal note and sticky: saved locally, back after a reload, never part o
 });
 
 test('a personal diagram without a built-in renderer: source kept, honestly unavailable, back after a reload', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
-  expect((await page.request.put('http://127.0.0.1:8787/api/personal', { data: EMPTY })).ok()).toBeTruthy();
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
+  expect((await page.request.put('/api/personal', { data: EMPTY })).ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await holdPick(page, { x: 80, y: 80 }, 'context-item-personal-diagram');
@@ -74,7 +75,7 @@ test('a personal diagram without a built-in renderer: source kept, honestly unav
   expect(sticky).toMatchObject({ kind: 'mermaid', text: source });
   // Nothing is served for it on the isolated origin.
   const hash = createHash('sha256').update(source, 'utf8').digest('hex');
-  expect((await page.request.get(`http://127.0.0.1:8788/personal-render/${hash}`)).status()).toBe(404);
+  expect((await page.request.get(`${PREVIEW}/personal-render/${hash}`)).status()).toBe(404);
 
   await page.reload();
   await expect(page.getByTestId('live-dot')).toBeVisible();

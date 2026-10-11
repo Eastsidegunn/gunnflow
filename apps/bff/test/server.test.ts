@@ -128,6 +128,9 @@ describe('BFF transport', () => {
     const loaded = await loadUpstream({});
     expect(loaded.fake).not.toBeNull();
     expect(loaded.label).toBe('fake');
+    // The simulator brings its own wiring layer; the engine default knows none of its words.
+    expect(loaded.wiring?.file).toBe('00-simulator.json');
+    expect(loaded.wiring && 'config' in loaded.wiring && (loaded.wiring.config as { kinds?: object }).kinds).toHaveProperty('task');
 
     const imported: string[] = [];
     const deps = (mod: unknown) => ({ importModule: async (n: string) => (imported.push(n), mod) });

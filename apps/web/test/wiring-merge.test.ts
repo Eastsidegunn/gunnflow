@@ -1,7 +1,9 @@
 // WP-K: the wiring directory's files merge over the default in file-name order.
+// (The merge rules are exercised over the simulator's wiring: a base with every table.)
 import { describe, expect, it } from 'vitest';
 import { WIRING_SCHEMA_VERSION, detailEmphasis, type WiringConfig } from '@gunnflow/contract/wiring';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { createWiringState, loadWiringFiles, mergeWiring, type WiringFileEntry } from '../src/wiring/loadWiring.js';
 import { configGroups } from '../src/state/decisionInbox.js';
 
@@ -17,30 +19,30 @@ describe('mergeWiring', () => {
       viewers: { 'text/csv': 'text' },
       kinds: { mission: { parts: [{ id: 'status', part: 'glyph' }] } },
     };
-    const m = mergeWiring(DEFAULT_WIRING, over);
+    const m = mergeWiring(SIM_WIRING, over);
     expect(m.render!.running).toEqual({ glyph: '●', tone: '#6ee7a8' });
     expect(m.render!.triaged).toEqual({ glyph: '◆', tone: '#4da3ff' });
-    expect(m.render!.queued).toEqual(DEFAULT_WIRING.render!.queued);
+    expect(m.render!.queued).toEqual(SIM_WIRING.render!.queued);
     expect(m.relations!.blocks).toEqual({ style: 'bold' });
-    expect(m.relations!.dependency).toEqual(DEFAULT_WIRING.relations!.dependency);
+    expect(m.relations!.dependency).toEqual(SIM_WIRING.relations!.dependency);
     expect(m.viewers!['text/csv']).toBe('text');
     expect(m.kinds!.mission).toEqual({ parts: [{ id: 'status', part: 'glyph' }] });
-    expect(m.kinds!.task).toEqual(DEFAULT_WIRING.kinds!.task);
-    expect(m.version).toBe(DEFAULT_WIRING.version);
+    expect(m.kinds!.task).toEqual(SIM_WIRING.kinds!.task);
+    expect(m.version).toBe(SIM_WIRING.version);
   });
 
   it('detail merges per list: a stated list replaces that list whole; absence keeps the base', () => {
-    expect(mergeWiring(DEFAULT_WIRING, { version: V }).detail).toEqual(DEFAULT_WIRING.detail);
-    expect(mergeWiring(DEFAULT_WIRING, { version: V, detail: { emphasis: ['권고'] } }).detail).toEqual({ emphasis: ['권고'] });
-    const both = mergeWiring(DEFAULT_WIRING, { version: V, detail: { copyable: ['command'] } });
-    expect(both.detail).toEqual({ emphasis: DEFAULT_WIRING.detail!.emphasis, copyable: ['command'] });
+    expect(mergeWiring(SIM_WIRING, { version: V }).detail).toEqual(SIM_WIRING.detail);
+    expect(mergeWiring(SIM_WIRING, { version: V, detail: { emphasis: ['권고'] } }).detail).toEqual({ emphasis: ['권고'] });
+    const both = mergeWiring(SIM_WIRING, { version: V, detail: { copyable: ['command'] } });
+    expect(both.detail).toEqual({ emphasis: SIM_WIRING.detail!.emphasis, copyable: ['command'] });
     expect(mergeWiring(both, { version: V, detail: { copyable: ['명령'] } }).detail!.copyable).toEqual(['명령']);
     expect(mergeWiring({ version: V }, { version: V }).detail).toBeUndefined();
   });
 
   it('detail: {} keeps its old meaning — it replaces (clears) the base detail whole', () => {
-    const base = mergeWiring(DEFAULT_WIRING, { version: V, detail: { copyable: ['command'], collapsed: ['digest'] } });
-    expect(base.detail).toEqual({ emphasis: DEFAULT_WIRING.detail!.emphasis, copyable: ['command'], collapsed: ['digest'] });
+    const base = mergeWiring(SIM_WIRING, { version: V, detail: { copyable: ['command'], collapsed: ['digest'] } });
+    expect(base.detail).toEqual({ emphasis: SIM_WIRING.detail!.emphasis, copyable: ['command'], collapsed: ['digest'] });
     const cleared = mergeWiring(base, { version: V, detail: {} });
     expect(cleared.detail).toEqual({});
     expect(detailEmphasis(cleared)).toEqual([]);
@@ -65,7 +67,7 @@ describe('mergeWiring', () => {
         { match: { cause: 'flagged' }, mechanism: 'ambient', group: 'C' },
       ],
     };
-    const m = mergeWiring({ ...DEFAULT_WIRING, attention: [...DEFAULT_WIRING.attention!, { match: { cause: 'other' }, mechanism: 'ambient' }] }, over);
+    const m = mergeWiring({ ...SIM_WIRING, attention: [...SIM_WIRING.attention!, { match: { cause: 'other' }, mechanism: 'ambient' }] }, over);
     expect(m.attention!.map((r) => [r.match.cause, r.group])).toEqual([
       ['decide', 'A'],
       ['waiting_for_human', 'A'],
@@ -95,7 +97,7 @@ describe('mergeWiring', () => {
   });
 
   it('attention merges per cause: a known cause is replaced in place, a new cause is appended', () => {
-    const m = mergeWiring(DEFAULT_WIRING, {
+    const m = mergeWiring(SIM_WIRING, {
       version: V,
       attention: [
         { match: { cause: 'escalated' }, mechanism: 'interrupt' },
@@ -119,7 +121,7 @@ describe('loadWiringFiles', () => {
         file('10-a.json', { version: V, render: { running: { glyph: '●', tone: '#5b6672' } } }),
         file('20-b.json', { version: V, render: { running: { glyph: '▶', tone: '#e8a33d' } } }),
       ],
-      DEFAULT_WIRING,
+      SIM_WIRING,
       quiet,
     );
     expect(r.config.render!.running).toEqual({ glyph: '▶', tone: '#e8a33d' });
@@ -136,14 +138,14 @@ describe('loadWiringFiles', () => {
         { file: 'c.json', error: 'invalid JSON: Unexpected token' },
         file('d.json', { version: V, relations: { blocks: { style: 'bold' } } }),
       ],
-      DEFAULT_WIRING,
+      SIM_WIRING,
       (m) => logs.push(m),
     );
     expect(r.files.loaded).toEqual(['d.json']);
     expect(r.files.rejected.map((x) => x.file)).toEqual(['a.json', 'b.json', 'c.json']);
     expect(r.files.rejected.every((x) => x.reasons.length > 0)).toBe(true);
     expect(r.files.rejected[2]!.reasons).toEqual(['invalid JSON: Unexpected token']);
-    expect(r.config.render!.running).toEqual(DEFAULT_WIRING.render!.running);
+    expect(r.config.render!.running).toEqual(SIM_WIRING.render!.running);
     expect(r.config.relations!.blocks).toEqual({ style: 'bold' });
     expect(logs.length).toBe(3);
   });
@@ -153,17 +155,17 @@ describe('loadWiringFiles', () => {
       Object.fromEntries(Array.from({ length: 150 }, (_, i) => [`${prefix}-${i}`, { glyph: '●', tone: '#dde3ea' }]));
     const r = loadWiringFiles(
       [file('a.json', { version: V, render: many('a') }), file('b.json', { version: V, render: many('b') })],
-      DEFAULT_WIRING,
+      SIM_WIRING,
       quiet,
     );
     expect(r.files.loaded).toEqual(['a.json', 'b.json']);
     expect(r.problems.length).toBeGreaterThan(0);
-    expect(r.config).toBe(DEFAULT_WIRING);
+    expect(r.config).toBe(SIM_WIRING);
   });
 
   it('no files: the default, unchanged', () => {
-    const r = loadWiringFiles([], DEFAULT_WIRING, quiet);
-    expect(r.config).toEqual(DEFAULT_WIRING);
+    const r = loadWiringFiles([], SIM_WIRING, quiet);
+    expect(r.config).toEqual(SIM_WIRING);
     expect(r.files).toEqual({ loaded: [], rejected: [] });
   });
 });

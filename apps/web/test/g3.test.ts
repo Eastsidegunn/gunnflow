@@ -19,7 +19,7 @@ import { guardPost } from '../src/state/intentValidator.js';
 import { fixBase, markRendered } from '../src/state/editorLogic.js';
 import { resolveParts } from '../src/canvas/parts.js';
 import { actionGate, opensPanel } from '../src/state/genericActions.js';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 
 function harness(initial: FakeWorkspaceProjection = normalFixture()) {
   return createRoot((dispose) => {
@@ -37,7 +37,7 @@ function harness(initial: FakeWorkspaceProjection = normalFixture()) {
 describe('workspace root node: creation is its capability', () => {
   it('the toolbar reads mission.create from the root; it needs text, so it opens a panel', () => {
     const root = projectNodes(normalFixture()).find((n) => n.kind === WORKSPACE_ROOT_KIND)!;
-    const [create] = resolveParts(root, DEFAULT_WIRING).actions;
+    const [create] = resolveParts(root, SIM_WIRING).actions;
     expect(create).toMatchObject({ kind: 'assembled', action: 'mission.create', inputs: [{ part: 'text' }] });
     expect(opensPanel(create!)).toBe(true);
   });
@@ -67,7 +67,7 @@ describe('evidence viewing condition (bound by artifact id)', () => {
   it('approval of g-publish is refused until its evidence is viewed, then attests exactly that view', async () => {
     const h = harness(attentionFixture());
     const gate = h.nodes().get('g-publish')!;
-    const approve = resolveParts(gate, DEFAULT_WIRING).actions.find((a) => a.action === 'gate.approve')!;
+    const approve = resolveParts(gate, SIM_WIRING).actions.find((a) => a.action === 'gate.approve')!;
     expect(approve.evidence).toEqual(['art-research-report']);
 
     const blind = h.state.compose({ nodeId: gate.id, action: 'gate.approve' }, undefined, { displays: [] });
@@ -123,7 +123,7 @@ describe('human text travels in decision.text', () => {
 describe('generic parts depend on capabilities', () => {
   it('the default assembly shows only what each node declares; privileged actions cannot run from a click', () => {
     const nodes = new Map(projectNodes(normalFixture()).map((n) => [n.id, n]));
-    const actionsOf = (id: string) => resolveParts(nodes.get(id)!, DEFAULT_WIRING).actions;
+    const actionsOf = (id: string) => resolveParts(nodes.get(id)!, SIM_WIRING).actions;
     // t-research: instruct/pause/cancel are hidden upstream → absent, even though the task assembly declares them.
     // Declared delete and rewiring remain; rewiring needs a target choice, so it cannot run from a click.
     expect(actionsOf('t-research')).toEqual([

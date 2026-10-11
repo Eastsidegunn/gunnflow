@@ -2,7 +2,6 @@
 import { fetchWiringFiles } from './wiring/loadWiring.js';
 import { Show, createEffect, createSignal, onCleanup, onMount, createMemo } from 'solid-js';
 import { createWorkspaceStores } from './state/stores.js';
-import { workspaceRoot } from './state/workspaceRoot.js';
 import { gateById, taskById, workspaceEmpty } from './model/selectors.js';
 import { postIntent } from './transport/relayClient.js';
 import { openWorkspaceStream, refreshWorkspace, type WorkspaceStream } from './transport/stream.js';
@@ -299,13 +298,6 @@ export function App() {
     stores.projectionStore.hasSnapshot() &&
     workspaceEmpty(stores.projectionStore.projection(), stores.projectionStore.genericNodes()?.nodes ?? null);
 
-  // Creation is the workspace root's capability; without a root there is nothing to address.
-  const rootId = () => workspaceRoot(stores.projectionStore.genericNodes()?.nodes ?? null).root?.id;
-  const startMission = (name: string) => {
-    const nodeId = rootId();
-    if (nodeId) void stores.pendingIntents.submit({ nodeId, action: 'mission.create', decision: { text: name } });
-  };
-
   const enterSurface = (surfaceName: string, id: string) => {
     if (surfaceName === 'inspector' || surfaceName === 'approval') {
       // Node-addressed deep surfaces are ③ of the one continuum (queue carried on lateral moves).
@@ -447,7 +439,7 @@ export function App() {
         <Show when={!workActive() && view() === 'all'}>
           <WorkspaceSidebar stores={stores} onOpenSettings={() => setSettingsOpen(true)} />
           <main class="canvas-area">
-            <Show when={!isEmpty()} fallback={<EmptyState stores={stores} onStartMission={startMission} />}>
+            <Show when={!isEmpty()} fallback={<EmptyState stores={stores} />}>
               <CanvasViewport
                 stores={stores}
                 rewireArmed={rewireArmed}

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { NodeProjection } from '@gunnflow/contract';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { DEFAULT_THEME } from '../src/theme/defaultTheme.js';
 import { computeSpatialTiers, computeTiers, sizeForTier, spatialNeighbors, type Tier } from '../src/state/relevance.js';
 import {
@@ -208,7 +208,7 @@ describe('transition moments (the only gate for geometry)', () => {
   });
 
   it('sizedGraph re-keys the layout cache only when the locked sizes change', () => {
-    const g = layoutGraphOf([node('a'), node('b')], DEFAULT_WIRING);
+    const g = layoutGraphOf([node('a'), node('b')], SIM_WIRING);
     const base = new Map<string, { w: number; h: number }>([['a', { ...GENERIC_NODE_SIZE }], ['b', { ...GENERIC_NODE_SIZE }]]);
     const grown = new Map([['a', sizeForTier(3, GEO.node, GEO.tierScale)], ['b', { ...GENERIC_NODE_SIZE }]]);
     expect(sizedGraph(g, base).signature).toBe(sizedGraph(g, base).signature);
@@ -398,12 +398,12 @@ describe('pins: position held, size follows tier within slack (rulings 2026-10-0
 
 const elk = new ELK();
 const inThreadElk = (): LayoutProvider => elkProvider((g) => elk.layout(g));
-const elkBase = (nodes: NodeProjection[]) => inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING));
+const elkBase = (nodes: NodeProjection[]) => inThreadElk().layout(layoutGraphOf(nodes, SIM_WIRING));
 
 describe('ELK-base regressions (strict audit)', () => {
   it('reviewer repro (a): one pinned-in-place leaf in a FOREIGN container — every focus × pin combo stays strictly clean', async () => {
     const nodes = chains(3, 4);
-    const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const graph = layoutGraphOf(nodes, SIM_WIRING);
     const base = await elkBase(nodes);
     const m0Leaves = leafIds(graph).filter((id) => id.startsWith('m0'));
     const m1Leaves = leafIds(graph).filter((id) => id.startsWith('m1'));
@@ -425,7 +425,7 @@ describe('ELK-base regressions (strict audit)', () => {
 
   it('reviewer repro (b): two foci in different containers — both grow in their own slack, strictly clean', async () => {
     const nodes = chains(3, 4);
-    const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const graph = layoutGraphOf(nodes, SIM_WIRING);
     const base = await elkBase(nodes);
     const m0Leaves = leafIds(graph).filter((id) => id.startsWith('m0'));
     const m2Leaves = leafIds(graph).filter((id) => id.startsWith('m2'));
@@ -451,7 +451,7 @@ describe('ELK-base regressions (strict audit)', () => {
   ] as const) {
     it(`reviewer shape — ${name}: a single focus with no pins stays strictly clean for every leaf`, async () => {
       const nodes = make();
-      const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+      const graph = layoutGraphOf(nodes, SIM_WIRING);
       const base = await elkBase(nodes);
       const shift = defaultMaxShift(GEO.pushHops, GEO.node);
       for (const focus of leafIds(graph)) {
@@ -488,7 +488,7 @@ describe('ELK-base regressions (strict audit)', () => {
     for (let i = 0; i < 20; i++) {
       nodes.push(node(`p${String(i).padStart(2, '0')}`, i % 4 === 0 ? [] : [{ type: 'dependency', target: `p${String(i - 1).padStart(2, '0')}` }]));
     }
-    const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const graph = layoutGraphOf(nodes, SIM_WIRING);
     const first = { focusIds: new Set(['p00']), pendingIds: new Set<string>() };
     const locked = tierSizes(computeSpatialTiers(nodes, first), GEO);
     const base = await inThreadElk().layout(sizedGraph(graph, locked));
@@ -522,7 +522,7 @@ describe('ELK-base regressions (strict audit)', () => {
       return top;
     };
     for (const [name, nodes] of shapes) {
-      const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+      const graph = layoutGraphOf(nodes, SIM_WIRING);
       const base = await elkBase(nodes);
       const leaves = leafIds(graph);
       for (let run = 0; run < 12; run++) {
@@ -565,18 +565,18 @@ describe('transition relayout with tier sizes', () => {
   it('no transition → no geometry: an unchanged signature leaves the positions signal untouched', async () => {
     const s = createLayoutState({ loadProvider: async () => inThreadElk() });
     const sizes = new Map(twoMissions().map((n) => [n.id, { ...GENERIC_NODE_SIZE }]));
-    s.update(sizedGraph(layoutGraphOf(twoMissions(), DEFAULT_WIRING), sizes));
+    s.update(sizedGraph(layoutGraphOf(twoMissions(), SIM_WIRING), sizes));
     await s.settled();
     const before = s.positions();
     // The same topology and the same locked sizes again (a tier flickered, no moment opened).
-    s.update(sizedGraph(layoutGraphOf(twoMissions(), DEFAULT_WIRING), sizes));
+    s.update(sizedGraph(layoutGraphOf(twoMissions(), SIM_WIRING), sizes));
     await s.settled();
     expect(s.positions()).toBe(before);
   });
 
   it('a transition locks the then-current tier sizes: the grown component re-lays out overlap-free, the untouched one keeps its exact positions', async () => {
     const s = createLayoutState({ loadProvider: async () => inThreadElk() });
-    const graph = layoutGraphOf(twoMissions(), DEFAULT_WIRING);
+    const graph = layoutGraphOf(twoMissions(), SIM_WIRING);
     const base = new Map<string, { w: number; h: number }>(twoMissions().map((n) => [n.id, { ...GENERIC_NODE_SIZE }]));
     s.update(sizedGraph(graph, base));
     await s.settled();
@@ -605,7 +605,7 @@ describe('transition relayout with tier sizes', () => {
   });
 
   it('the fallback honours per-node sizes too (overlap-free without the layered engine)', () => {
-    const graph = layoutGraphOf(twoMissions(), DEFAULT_WIRING);
+    const graph = layoutGraphOf(twoMissions(), SIM_WIRING);
     const sizes = new Map([['a1', sizeForTier(3, GEO.node, GEO.tierScale)]]);
     const grownGraph = sizedGraph(graph, sizes);
     const pos = fallbackLayout(grownGraph);
@@ -619,7 +619,7 @@ describe('the scene (and so every hit test) follows the on-screen rects', () => 
   it('buildScene takes interpolated geometry verbatim; nodes it does not cover keep the base path', () => {
     const nodes = [node('a'), node('b')];
     const mid = { x: 10, y: 20, w: 263.5, h: 101.2 }; // a mid-animation rect
-    const scene = buildScene(nodes, DEFAULT_WIRING, new Map(), new Map(), new Map([['a', mid]]));
+    const scene = buildScene(nodes, SIM_WIRING, new Map(), new Map(), new Map([['a', mid]]));
     expect(scene.layout.nodes.get('a')).toMatchObject(mid);
     expect(scene.layout.nodes.get('b')).toMatchObject({ w: GEO.node.w, h: GEO.node.h });
   });

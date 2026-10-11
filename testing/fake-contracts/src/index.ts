@@ -17,3 +17,4 @@ export * from './executionFixtures.js';
 export { NullIntentRelay as NullExecutionIntentRelay } from './relay.js';
 /** Human Gate brief §32 naming: gate decisions ride the same TEST-ONLY relay. */
 export { NullIntentRelay as NullHumanDecisionRelay } from './relay.js';
+export * from './wiring.js';

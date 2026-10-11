@@ -18,7 +18,7 @@ const rect = (page: Page, id: string) =>
 const overlaps = (a: DrawnRect, b: DrawnRect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 test('P3 space: focus grows 1.6×, settles overlap-free, and returns on refocus', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await expect(page.getByTestId('layout-source')).toHaveText('layered', { timeout: 15_000 });

@@ -1,9 +1,10 @@
 // Human Gate (Screen #5) acceptance: context, decision paths, permission,
 // pending/failure separation, credential metadata, preview isolation.
 import { expect, test, type Page } from '@playwright/test';
+import { PREVIEW } from './ports.js';
 
 async function loadFixture(page: Page, name: string) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', {
+  const res = await page.request.post('/api/_fake/fixture', {
     data: { name },
   });
   expect(res.ok()).toBeTruthy();
@@ -53,7 +54,7 @@ test('B: publish approval — overlay (external effect) with evidence on the iso
   const frame = page.getByTestId('gate-preview-frame');
   await expect(frame).toBeVisible();
   await expect(frame).toHaveAttribute('sandbox', '');
-  expect(await frame.getAttribute('src')).toContain('127.0.0.1:8788/preview/');
+  expect(await frame.getAttribute('src')).toContain(`${PREVIEW}/preview/`);
 });
 
 test('C: approve goes pending → attributed APPROVED (capability-gated, no modes)', async ({ page }) => {

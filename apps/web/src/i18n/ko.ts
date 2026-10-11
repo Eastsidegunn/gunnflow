@@ -405,8 +405,6 @@ export const ko: Messages = {
   'menu.delete': '삭제',
   'menu.releaseToCancel': '놓으면 취소',
   'overlay.emptyTitle': '무엇을 작업할까?',
-  'overlay.missionPlaceholder': '미션을 설명한다…',
-  'overlay.startMission': '+ 미션 시작',
   'overlay.notSent': '보내지 않음',
   'overlay.unconfirmed': '전달 미확인 (상류에 도달했을 수 있음)',
   'overlay.rejectedAfterApplied': '적용된 것처럼 보인 뒤 거부됨',

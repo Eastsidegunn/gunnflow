@@ -1,0 +1,103 @@
+/**
+ * The simulator's wiring: how its vocabulary (states, relations, attention
+ * causes, kinds and their actions) is presented. Data only — it passes the
+ * contract's wiring validator. The engine's default knows none of these words;
+ * the BFF layers this config under the wiring directory in fake mode only, and
+ * a direct-wire run of the simulator gets it as a file in its wiring directory.
+ */
+import { WIRING_SCHEMA_VERSION, type WiringConfig } from '@gunnflow/contract/wiring';
+
+/** The layer's name in the wiring file list (sorts before any numbered file). */
+export const SIMULATOR_WIRING_FILE = '00-simulator.json';
+
+export const SIMULATOR_WIRING: WiringConfig = {
+  version: WIRING_SCHEMA_VERSION,
+  render: {
+    queued: { glyph: '◌', tone: '#5b6672' },
+    running: { glyph: '▶', tone: '#4da3ff' },
+    waiting: { glyph: '◷', tone: '#ffb02e' },
+    paused: { glyph: '❙❙', tone: '#e8a33d' },
+    blocked: { glyph: '■', tone: '#ff5d5d' },
+    completed: { glyph: '✓', tone: '#6ee7a8' },
+    failed: { glyph: '✕', tone: '#ff5d5d' },
+    approved: { glyph: '✓', tone: '#6ee7a8' },
+    rejected: { glyph: '✕', tone: '#5b6672' },
+    expired: { glyph: '◷', tone: '#5b6672' },
+    superseded: { glyph: '○', tone: '#5b6672' },
+    canceled: { glyph: '✕', tone: '#5b6672' },
+    draft: { glyph: '▤', tone: '#dde3ea' },
+  },
+  relations: {
+    // role: what the simulator's relation word is, for presentation (source → target); arrange still lays out.
+    dependency: { style: 'solid', arrange: 'flow', role: 'blocks' },
+    spawn: { style: 'muted', arrange: 'flow' },
+    produces: { style: 'bold', arrange: 'flow', role: 'produces' },
+    gate: { style: 'double', arrange: 'flow' },
+    'member-of': { style: 'muted', arrange: 'contain' },
+    evidence: { style: 'solid' },
+    'superseded-by': { style: 'muted' },
+  },
+  attention: [
+    { match: { cause: 'waiting_for_human' }, mechanism: 'interrupt' },
+    { match: { cause: 'flagged' }, mechanism: 'ambient' },
+  ],
+  // Sidebar lenses for the simulator's states and kinds — pure match tables.
+  lenses: [
+    { id: 'running', label: 'Running', match: { states: ['running'] } },
+    { id: 'deliverables', label: 'Deliverables', match: { kinds: ['deliverable'] } },
+    { id: 'blocked', label: 'Blocked', match: { states: ['blocked'] } },
+  ],
+  // The simulator's recommendation label, emphasized in detail views (label match only).
+  detail: { emphasis: ['recommendation'] },
+  actions: {
+    'mission.create': { label: '+ Start a mission' },
+  },
+  kinds: {
+    task: {
+      parts: [
+        { id: 'status', part: 'glyph' },
+        { id: 'state', part: 'label', source: 'state' },
+        { id: 'artifact', part: 'viewer', source: { artifact: 0 } },
+        { id: 'artifact-2', part: 'viewer', source: { artifact: 1 } },
+        { id: 'instruction', part: 'text', action: 'task.instruct' },
+        { id: 'send-instruction', part: 'send', action: 'task.instruct', requires: ['instruction'] },
+        { id: 'pause', part: 'send', action: 'task.pause', requires: [] },
+        { id: 'resume', part: 'send', action: 'task.resume', requires: [] },
+        { id: 'body', part: 'editor', action: 'artifact.edit', rows: 12, wrap: 'soft' },
+        { id: 'save', part: 'send', action: 'artifact.edit', requires: ['body'] },
+      ],
+    },
+    gate: {
+      parts: [
+        { id: 'status', part: 'glyph' },
+        { id: 'state', part: 'label', source: 'state' },
+        { id: 'evidence', part: 'viewer', source: { artifact: 0 } },
+        { id: 'reason', part: 'text', action: 'gate.approve' },
+        // The reason is optional unless upstream requires it; the send carries it either way.
+        { id: 'approve', part: 'send', action: 'gate.approve', requires: [] },
+        { id: 'reject-reason', part: 'text', action: 'gate.reject' },
+        { id: 'reject', part: 'send', action: 'gate.reject', requires: [] },
+        { id: 'changes', part: 'text', action: 'gate.requestChanges' },
+        { id: 'request-changes', part: 'send', action: 'gate.requestChanges', requires: ['changes'] },
+      ],
+    },
+    workspace: {
+      parts: [
+        { id: 'mission-name', part: 'text', action: 'mission.create' },
+        { id: 'create-mission', part: 'send', action: 'mission.create', requires: ['mission-name'] },
+      ],
+    },
+    mission: {
+      parts: [
+        { id: 'status', part: 'glyph' },
+        { id: 'kind', part: 'label', source: 'kind' },
+      ],
+    },
+    deliverable: {
+      parts: [
+        { id: 'status', part: 'glyph' },
+        { id: 'kind', part: 'label', source: 'kind' },
+      ],
+    },
+  },
+};

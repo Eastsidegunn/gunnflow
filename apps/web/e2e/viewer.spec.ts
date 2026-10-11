@@ -1,8 +1,9 @@
 // G4b: interpreted artifacts render only on the isolated origin, from digest-verified bytes.
 import { expect, test } from '@playwright/test';
+import { PREVIEW } from './ports.js';
 
 test('an HTML artifact opens in a sandboxed iframe on the isolated origin, pinned to its digest', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await page.getByTestId('node-t-build').dispatchEvent('click');
@@ -10,14 +11,14 @@ test('an HTML artifact opens in a sandboxed iframe on the isolated origin, pinne
   await expect(frame).toBeVisible();
   await expect(frame).toHaveAttribute('sandbox', '');
   await expect(frame).toHaveAttribute('data-grade', 'claim');
-  expect(await frame.getAttribute('src')).toMatch(/^http:\/\/127\.0\.0\.1:8788\/artifact\/art-build-report\/[0-9a-f]{64}$/);
+  expect(await frame.getAttribute('src')).toMatch(new RegExp(`^${PREVIEW}/artifact/art-build-report/[0-9a-f]{64}$`));
   await expect(page.frameLocator('[data-testid="generic-viewer-isolated-art-build-report"]').locator('h1')).toHaveText('Build report');
   // The post-load re-check (CORS-limited to the web origin) confirmed the digest address.
   await expect(frame).toHaveAttribute('data-status', 'confirmed');
 });
 
 test('a mermaid artifact: no renderer is built in — explicitly unavailable, the source shown as text', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await page.getByTestId('node-t-research').dispatchEvent('click');
@@ -29,7 +30,7 @@ test('a mermaid artifact: no renderer is built in — explicitly unavailable, th
 });
 
 test('an Excalidraw scene draws in the isolated read-only viewer and reports back before it counts', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
+  await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await page.getByTestId('node-t-build').dispatchEvent('click');

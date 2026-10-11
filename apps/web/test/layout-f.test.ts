@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { NodeProjection } from '@gunnflow/contract';
 import { WIRING_SCHEMA_VERSION } from '@gunnflow/contract/wiring';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { loadWiringFiles } from '../src/wiring/loadWiring.js';
 import {
   GENERIC_NODE_SIZE,
@@ -47,7 +47,7 @@ describe('F1 fallback budget', () => {
   it('a very deep containment chain completes without recursion and is capped at the nesting limit', () => {
     const chain = Array.from({ length: 5000 }, (_, i) => (i === 0 ? n('c0') : n(`c${i}`, [{ type: 'member-of', target: `c${i - 1}` }])));
     const t = performance.now();
-    const g = layoutGraphOf(chain, DEFAULT_WIRING);
+    const g = layoutGraphOf(chain, SIM_WIRING);
     const pos = fallbackLayout(g);
     expect(performance.now() - t).toBeLessThan(2000);
     let deepest = 0;
@@ -62,10 +62,10 @@ describe('F1 fallback budget', () => {
 
   it('a long flow chain is layered iteratively; over the budget the block grid is used', () => {
     const flowChain = Array.from({ length: 6000 }, (_, i) => n(`f${i}`, i === 0 ? [] : [{ type: 'dependency', target: `f${i - 1}` }]));
-    expect(fallbackLayout(layoutGraphOf(flowChain, DEFAULT_WIRING)).size).toBe(6000);
+    expect(fallbackLayout(layoutGraphOf(flowChain, SIM_WIRING)).size).toBe(6000);
     const huge = Array.from({ length: LAYOUT.fallbackBudget + 10 }, (_, i) => n(`h${i}`));
     const t = performance.now();
-    const pos = fallbackLayout(layoutGraphOf(huge, DEFAULT_WIRING));
+    const pos = fallbackLayout(layoutGraphOf(huge, SIM_WIRING));
     expect(performance.now() - t).toBeLessThan(2000);
     expect(pos.size).toBe(huge.length);
   });
@@ -80,17 +80,17 @@ describe('F2 honest grouping', () => {
   ];
 
   it('a node with several containers, or on a containment cycle, is grouped nowhere', () => {
-    const g = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const g = layoutGraphOf(nodes, SIM_WIRING);
     expect(g.withheld).toEqual(['both', 'x', 'y']);
     expect(g.parentOf.has('both')).toBe(false);
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     expect(scene.groups.find((gr) => gr.id === 'm1')!.members).toEqual(['solo']);
     expect(scene.groups.some((gr) => gr.members.includes('both'))).toBe(false);
     expect(scene.withheld).toEqual(['both', 'x', 'y']);
   });
 
   it('the withheld containing relations stay visible as ordinary edges', () => {
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     const drawn = scene.edges.map((e) => `${e.from}>${e.to}:${e.type}`);
     expect(drawn).toEqual(expect.arrayContaining(['both>m1:member-of', 'both>m2:member-of', 'x>y:member-of', 'y>x:member-of']));
     expect(drawn).not.toContain('solo>m1:member-of');
@@ -98,7 +98,7 @@ describe('F2 honest grouping', () => {
 
   it('the count reaches the layout state (debug summary)', () => {
     const s = createLayoutState({ loadProvider: () => Promise.reject(new Error('off')) });
-    s.update(layoutGraphOf(nodes, DEFAULT_WIRING));
+    s.update(layoutGraphOf(nodes, SIM_WIRING));
     expect(s.withheld()).toBe(3);
   });
 });
@@ -106,7 +106,7 @@ describe('F2 honest grouping', () => {
 describe('F3/F4 groups as endpoints and headers', () => {
   it('a non-contain edge ending at a group parent gets the group box as its endpoint', () => {
     const nodes = [mission('m1'), member('a', 'm1'), n('outside', [{ type: 'dependency', target: 'm1' }])];
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     expect(scene.edges.some((e) => e.from === 'outside' && e.to === 'm1')).toBe(true);
     const box = endpointBox(scene, 'm1')!;
     expect(box).toMatchObject({ id: 'm1', kind: 'mission' });
@@ -137,7 +137,7 @@ describe('F3/F4 groups as endpoints and headers', () => {
       mission('m1', { label: long, state: { value: 'running' }, attention: [{ cause: 'waiting_for_human' }] }),
       member('a', 'm1'),
     ];
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     const { ctx, ops } = recorder();
     drawGeneric(ctx, 800, 600, { ...frame, emphasis: new Map(), scene });
     const glyph = ops.find((o) => o.op === 'text' && o.text === '▶');
@@ -151,7 +151,7 @@ describe('F3/F4 groups as endpoints and headers', () => {
 
   it('ambient attention is a dot; lens emphasis dims the header like any node', () => {
     const nodes = [mission('m1', { attention: [{ cause: 'flagged' }] }), member('a', 'm1')];
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     const { ctx, ops } = recorder();
     drawGeneric(ctx, 800, 600, { ...frame, emphasis: new Map([['m1', 'dim']]), scene });
     expect(ops.some((o) => o.op === 'arc' && o.fill === ATTENTION_COLOR)).toBe(true);
@@ -173,17 +173,17 @@ describe('F5 signature', () => {
 describe('F6/F7 per-component stability and interim placement', () => {
   it('an unchanged component keeps its exact positions when another component changes', async () => {
     const s = createLayoutState({ loadProvider: async () => inThreadElk() });
-    s.update(layoutGraphOf(twoMissions(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(twoMissions(), SIM_WIRING));
     await s.settled();
     const before = s.positions();
     const grown = [...twoMissions(), member('a3', 'm1', [{ type: 'dependency', target: 'a2' }]), member('a4', 'm1')];
-    s.update(layoutGraphOf(grown, DEFAULT_WIRING));
+    s.update(layoutGraphOf(grown, SIM_WIRING));
     await s.settled();
     expect(s.source()).toBe('layered');
     const after = s.positions();
     for (const id of ['b1', 'b2']) expect(after.get(id)).toEqual(before.get(id));
     // Nothing overlaps after stabilization.
-    const g = layoutGraphOf(grown, DEFAULT_WIRING);
+    const g = layoutGraphOf(grown, SIM_WIRING);
     const boxes = leafIds(g).map((id) => rectOf(after.get(id)!));
     for (const a of boxes) for (const b of boxes) if (a !== b) expect(overlaps(a, b)).toBe(false);
     const groups = [...containerRects(g, (id) => (after.get(id) ? rectOf(after.get(id)!) : undefined)).values()];
@@ -191,9 +191,9 @@ describe('F6/F7 per-component stability and interim placement', () => {
   });
 
   it('a new node\'s interim position avoids existing nodes and groups', () => {
-    const prevGraph = layoutGraphOf(twoMissions(), DEFAULT_WIRING);
+    const prevGraph = layoutGraphOf(twoMissions(), SIM_WIRING);
     const previous = fallbackLayout(prevGraph);
-    const next = layoutGraphOf([...twoMissions(), n('lonely')], DEFAULT_WIRING);
+    const next = layoutGraphOf([...twoMissions(), n('lonely')], SIM_WIRING);
     // A fallback that would drop the new node right on top of an existing one.
     const collide = new Map([...fallbackLayout(next), ['lonely', previous.get('a1')!]]) as Positions;
     const interim = interimLayout(next, collide, prevGraph, previous);
@@ -208,12 +208,12 @@ describe('F6/F7 per-component stability and interim placement', () => {
 describe('F8–F10 source, validation, lifecycle', () => {
   it('source is interim while a pass is pending, layered after it, and fallback (with the reason) over the limit', async () => {
     const s = createLayoutState({ loadProvider: async () => inThreadElk(), maxNodes: 7 });
-    s.update(layoutGraphOf(twoMissions(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(twoMissions(), SIM_WIRING));
     expect(s.source()).toBe('interim');
     await s.settled();
     expect(s.source()).toBe('layered');
     expect(s.reason()).toBeNull();
-    s.update(layoutGraphOf([...twoMissions(), n('p'), n('q')], DEFAULT_WIRING));
+    s.update(layoutGraphOf([...twoMissions(), n('p'), n('q')], SIM_WIRING));
     expect(s.source()).toBe('fallback');
     expect(s.reason()).toMatch(/over the layered limit/);
   });
@@ -224,7 +224,7 @@ describe('F8–F10 source, validation, lifecycle', () => {
       (g: Parameters<LayoutProvider['layout']>[0]) => new Map(leafIds(g).map((id) => [id, { x: NaN, y: 1 }])),
     ]) {
       const s = createLayoutState({ loadProvider: async () => ({ layout: async (g) => broken(g) }) });
-      const g = layoutGraphOf(twoMissions(), DEFAULT_WIRING);
+      const g = layoutGraphOf(twoMissions(), SIM_WIRING);
       s.update(g);
       await s.settled();
       expect(s.source()).toBe('fallback');
@@ -242,11 +242,11 @@ describe('F8–F10 source, validation, lifecycle', () => {
         return inThreadElk();
       },
     });
-    s.update(layoutGraphOf(twoMissions(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(twoMissions(), SIM_WIRING));
     await s.settled();
     expect(s.source()).toBe('fallback');
     expect(s.reason()).toMatch(/layered engine unavailable: chunk failed/);
-    s.update(layoutGraphOf([...twoMissions(), n('z')], DEFAULT_WIRING));
+    s.update(layoutGraphOf([...twoMissions(), n('z')], SIM_WIRING));
     await s.settled();
     expect(calls).toBe(2);
     expect(s.source()).toBe('layered');
@@ -266,10 +266,10 @@ describe('F8–F10 source, validation, lifecycle', () => {
         },
       }),
     });
-    s.update(layoutGraphOf(twoMissions(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(twoMissions(), SIM_WIRING));
     await new Promise((r) => setTimeout(r, 5));
     for (const extra of [['z1'], ['z1', 'z2'], ['z1', 'z2', 'z3']]) {
-      s.update(layoutGraphOf([...twoMissions(), ...extra.map((id) => n(id))], DEFAULT_WIRING));
+      s.update(layoutGraphOf([...twoMissions(), ...extra.map((id) => n(id))], SIM_WIRING));
     }
     release();
     await s.settled();
@@ -297,7 +297,7 @@ describe('wiring integration', () => {
   it('a wiring file with an unknown arrange value is rejected on the loadWiring path', () => {
     const r = loadWiringFiles(
       [{ file: 'x.json', config: { version: WIRING_SCHEMA_VERSION, relations: { r: { style: 'solid', arrange: 'radial' } } } }],
-      DEFAULT_WIRING,
+      SIM_WIRING,
       () => undefined,
     );
     expect(r.files.rejected.map((f) => f.file)).toEqual(['x.json']);

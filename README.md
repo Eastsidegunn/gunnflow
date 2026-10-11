@@ -164,6 +164,9 @@ pnpm render-sweep  # audit a live wire's vocabulary against wiring/ (see below)
 `pnpm e2e` starts its own servers pinned to the simulator, both in-process (`fake`) and over a
 local direct-wire reference server, with `GUNNFLOW_HOME` pointed at a temporary directory, so it
 never touches your local config, your `~/.gunnflow` or a real backend.
+While a live cockpit is running (:5173, :8787, :8788), run the suite as
+`npx playwright test -c playwright.isolated.config.ts` from `apps/web`: every port +40000, every
+server fresh, its own temporary directories.
 
 `pnpm render-sweep --url <backend base URL>` fetches `/nodes` from a live wire (the URL may also
 come from `GUNNFLOW_SWEEP_URL`, or from the config file — resolved as above — when it selects

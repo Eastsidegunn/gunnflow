@@ -313,6 +313,7 @@ describe('direct wire edge cases', () => {
     );
     expect(imported).toEqual([DIRECT_MODULE]);
     expect(loaded.fake).toBeNull();
+    expect(loaded.wiring).toBeNull(); // a direct backend's wiring is only its wiring directory
     expect(loaded.label).toBe(`direct → ${ref.url}`);
     (loaded.upstream as { close?(): void }).close?.();
     await expect(loadUpstream({ GUNNFLOW_UPSTREAM: 'direct' })).rejects.toThrow(/needs a url/);

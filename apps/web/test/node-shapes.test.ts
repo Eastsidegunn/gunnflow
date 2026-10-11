@@ -4,19 +4,19 @@
 import { describe, expect, it } from 'vitest';
 import type { NodeProjection } from '@gunnflow/contract';
 import { WIRING_SCHEMA_VERSION, type WiringConfig } from '@gunnflow/contract/wiring';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { mergeWiring } from '../src/wiring/loadWiring.js';
 import { LABEL_ROOM, SHAPE_SIZE, hitsLeaf, isBand, labelBeside, leafBaseSize, leafShapeOf, shapeRect } from '../src/canvas/shapes.js';
 import { containerRects, fallbackLayout, layoutGraphOf } from '../src/canvas/layoutGraph.js';
 import { DEFAULT_THEME } from '../src/theme/defaultTheme.js';
 
 const V = WIRING_SCHEMA_VERSION;
-const cfg = (kinds: WiringConfig['kinds']): WiringConfig => ({ ...DEFAULT_WIRING, kinds: { ...(DEFAULT_WIRING.kinds ?? {}), ...kinds } });
+const cfg = (kinds: WiringConfig['kinds']): WiringConfig => ({ ...SIM_WIRING, kinds: { ...(SIM_WIRING.kinds ?? {}), ...kinds } });
 
 describe('node shapes', () => {
   it('unstated kinds keep the classic rectangle at the theme node size', () => {
-    expect(leafShapeOf(DEFAULT_WIRING, 'anything')).toEqual({ shape: 'rect', size: 1 });
-    expect(leafBaseSize(DEFAULT_WIRING, 'anything')).toEqual(DEFAULT_THEME.geometry.node);
+    expect(leafShapeOf(SIM_WIRING, 'anything')).toEqual({ shape: 'rect', size: 1 });
+    expect(leafBaseSize(SIM_WIRING, 'anything')).toEqual(DEFAULT_THEME.geometry.node);
   });
 
   it('a shape sets the base box; the size factor scales it; a circle adds room for its title beside it', () => {
@@ -90,7 +90,7 @@ describe('band containers', () => {
   const nodes = [node('M', 'mission'), ...Array.from({ length: 8 }, (_, i) => node(`t${i}`, 'task', [{ type: 'member-of', target: 'M' }]))];
 
   it('a band packs its unrelated members into a wide row; the default packs toward the engine aspect', () => {
-    const plain = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const plain = layoutGraphOf(nodes, SIM_WIRING);
     const band = layoutGraphOf(nodes, cfg({ mission: { shape: 'band' } }));
     expect(band.bands?.has('M')).toBe(true);
     expect(band.signature).not.toBe(plain.signature);
@@ -109,7 +109,7 @@ describe('band containers', () => {
   });
 
   it('kind sizes reach the layout graph (and its signature): a circle task is smaller than a rect one', () => {
-    const plain = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const plain = layoutGraphOf(nodes, SIM_WIRING);
     const circles = layoutGraphOf(nodes, cfg({ task: { shape: 'circle', size: 0.6 } }));
     const w = (g: typeof plain) => g.nodes.find((n) => n.id === 't0')!.w;
     expect(w(circles)).toBeLessThan(w(plain));

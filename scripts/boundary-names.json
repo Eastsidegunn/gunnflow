@@ -5,5 +5,23 @@
     { "name": "JANUS", "pattern": "\\bjanus\\b", "flags": "i" }
   ],
   "forbiddenPackages": [],
-  "siblingRepos": ["Rhizome", "JANUS"]
+  "siblingRepos": ["Rhizome", "JANUS"],
+  "simulatorDoors": [
+    {
+      "$comment": "The one place app runtime source may name the simulator: the BFF composition loads it dynamically, in fake mode only.",
+      "file": "apps/bff/src/composition.ts",
+      "line": "export const SIMULATOR_MODULE = '@gunnflow-testing/fake-contracts';"
+    }
+  ],
+  "domainVocabulary": {
+    "$comment": "The simulator's domain words must not steer the engine: kinds, actions and states are the backend's, read through wiring. Tests, the i18n catalogs and the simulator (testing/, not scanned) are exempt. Existing hits are frozen in boundary-baseline.json.",
+    "scan": ["apps/", "packages/"],
+    "exclude": ["apps/web/src/i18n/"],
+    "patterns": [
+      { "name": "dotted domain action in a string (not a t('…') catalog key)", "pattern": "(?<!\\bt\\()['\"`](mission|task|gate|deliverable|session)\\.[a-zA-Z]+" },
+      { "name": "kind compared to a domain word", "pattern": "\\bkind\\s*[!=]==?\\s*['\"](mission|task|gate|deliverable|session)['\"]" },
+      { "name": "domain word compared to a kind", "pattern": "['\"](mission|task|gate|deliverable|session)['\"]\\s*[!=]==?\\s*[\\w.?]*kind\\b" },
+      { "name": "domain collection", "pattern": "\\.(missions|tasks|gates|deliverables|sessions)\\b(?!['\"`])" }
+    ]
+  }
 }

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { NodeProjection } from '@gunnflow/contract';
 import { gatesFixture, normalFixture, projectNodes } from '@gunnflow-testing/fake-contracts';
 import { WIRING_SCHEMA_VERSION, relationRoleFor, type WiringConfig } from '@gunnflow/contract/wiring';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import {
   DEFAULT_TAB_ID,
   USER_FILE,
@@ -31,7 +31,7 @@ const V = WIRING_SCHEMA_VERSION;
 
 describe('View tab: organised by kind, tables stay global', () => {
   it('lists each observed kind with the states its nodes show and the relations they take part in', () => {
-    const { sections } = viewSections(projectNodes(normalFixture()), DEFAULT_WIRING);
+    const { sections } = viewSections(projectNodes(normalFixture()), SIM_WIRING);
     expect(sections[0]!.kind).toBe('workspace');
     const task = sections.find((s) => s.kind === 'task')!;
     expect(task.states.map((s) => s.key)).toEqual(expect.arrayContaining(['running', 'queued', 'completed']));
@@ -45,7 +45,7 @@ describe('View tab: organised by kind, tables stay global', () => {
       { id: 't', kind: 'task', state: { value: 'waiting' }, relations: [], capabilities: [], attention: [], artifacts: [] },
       { id: 'g', kind: 'gate', state: { value: 'waiting' }, relations: [{ type: 'gate', target: 't' }], capabilities: [], attention: [], artifacts: [] },
     ];
-    const { sections } = viewSections(nodes, DEFAULT_WIRING);
+    const { sections } = viewSections(nodes, SIM_WIRING);
     for (const kind of ['task', 'gate']) {
       const s = sections.find((x) => x.kind === kind)!;
       expect(s.states).toEqual([{ key: 'waiting', kinds: ['gate', 'task'] }]);
@@ -54,11 +54,11 @@ describe('View tab: organised by kind, tables stay global', () => {
   });
 
   it('keys the config maps but the workspace does not show are grouped as unobserved', () => {
-    const { unobserved } = viewSections(projectNodes(normalFixture()), DEFAULT_WIRING);
+    const { unobserved } = viewSections(projectNodes(normalFixture()), SIM_WIRING);
     expect(unobserved.states).toEqual(expect.arrayContaining(['approved', 'rejected', 'expired']));
     expect(unobserved.states).not.toContain('running');
     expect(unobserved.relations).toEqual(expect.arrayContaining(['superseded-by']));
-    expect(viewSections(projectNodes(gatesFixture()), DEFAULT_WIRING).unobserved.relations).not.toContain('gate');
+    expect(viewSections(projectNodes(gatesFixture()), SIM_WIRING).unobserved.relations).not.toContain('gate');
   });
 });
 
@@ -71,7 +71,8 @@ describe('settings model', () => {
     const draft = layers[1]!.config;
     expect(provenance('render', 'running', layers, draft)).toBe('my settings');
     expect(provenance('render', 'blocked', layers, draft)).toBe('10-backend.json');
-    expect(provenance('render', 'queued', layers, draft)).toBe('default');
+    expect(provenance('viewers', 'text/markdown', layers, draft)).toBe('default');
+    expect(provenance('render', 'queued', layers, draft)).toBe('engine default');
     expect(provenance('render', 'something-new', layers, draft)).toBe('engine default');
     expect(previewConfig(draft, layers).render!.running).toEqual({ glyph: '●', tone: '#ff5d5d' });
   });
@@ -111,7 +112,7 @@ describe('settings model', () => {
     expect(viewerOptions('image/svg+xml')).toEqual(['html-isolated', 'fallback']);
     expect(viewerOptions('text/vnd.mermaid')).toContain('mermaid');
     expect(viewerOptions('application/json')).not.toContain('excalidraw');
-    expect(mediaTypes(projectNodes(normalFixture()), DEFAULT_WIRING)).toContain('text/vnd.mermaid');
+    expect(mediaTypes(projectNodes(normalFixture()), SIM_WIRING)).toContain('text/vnd.mermaid');
   });
 
   it('accepts literal glyphs (emoji) and hex tones — the render tables are open', () => {

@@ -9,7 +9,7 @@ import { resolveParts } from '../src/canvas/parts.js';
 import { buildScene, genericEmphasis } from '../src/canvas/genericScene.js';
 import { drawGeneric } from '../src/canvas/draw.js';
 import { CONFIG_EDGE_DASH, DEFAULT_EDGE_STROKE, EDGE_STROKE, NEUTRAL_GLYPH, NEUTRAL_TONE, PENDING_DASH } from '../src/canvas/tokens.js';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { EMPTY_WIRING } from '../src/wiring/loadWiring.js';
 import type { InFlightEntry } from '../src/state/pendingIntents.js';
 
@@ -126,7 +126,7 @@ describe('empty config shows everything undistorted', () => {
   });
 
   it('the simulator workspace renders with the default config and with an empty one', () => {
-    for (const cfg of [DEFAULT_WIRING, EMPTY_WIRING]) {
+    for (const cfg of [SIM_WIRING, EMPTY_WIRING]) {
       const nodes = projectNodes(gatesFixture());
       const scene = buildScene(nodes, cfg);
       // The workspace root belongs to the toolbar, not the canvas.
@@ -134,12 +134,12 @@ describe('empty config shows everything undistorted', () => {
       expect(scene.nodes.size).toBe(canvasNodes.length);
       // Every canvas node is placed: as a node box, or (a `contain` parent) as a group box.
       expect(scene.layout.nodes.size + scene.groups.length).toBe(canvasNodes.length);
-      expect(scene.groups.length > 0).toBe(cfg === DEFAULT_WIRING);
+      expect(scene.groups.length > 0).toBe(cfg === SIM_WIRING);
       expect(scene.nodes.get('t-draft')!.title).toBe('Draft');
       const { ctx } = recordingContext();
       expect(() => drawGeneric(ctx, 800, 600, { ...frame, pending: [], scene })).not.toThrow();
     }
-    const scene = buildScene(projectNodes(gatesFixture()), DEFAULT_WIRING);
+    const scene = buildScene(projectNodes(gatesFixture()), SIM_WIRING);
     expect(scene.nodes.get('g-review')!.attention?.mechanism).toBe('interrupt');
     expect(scene.nodes.get('t-draft')!.glyph).not.toBe(NEUTRAL_GLYPH);
   });
@@ -151,7 +151,7 @@ describe('the renderer never interprets config or received strings', () => {
     const nodes = hostile.map((h, i) =>
       node({ id: `n${i}`, kind: h, state: { value: h }, attention: [{ cause: h }], relations: [{ type: h, target: 'n0' }] }),
     );
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     for (const [i, h] of hostile.entries()) {
       const s = scene.nodes.get(`n${i}`)!;
       expect(s.state).toBe(h);
@@ -175,7 +175,7 @@ describe('dashes are engine-only', () => {
     expect(PENDING_DASH.length).toBeGreaterThan(0);
     for (const stroke of Object.values(EDGE_STROKE)) expect(Object.keys(stroke).sort()).toEqual(['color', 'double', 'width']);
     const nodes = projectNodes(normalFixture());
-    const scene = buildScene(nodes, DEFAULT_WIRING);
+    const scene = buildScene(nodes, SIM_WIRING);
     const pending = [
       { phase: 'in-flight', localId: 'l', idempotencyKey: 'k', sentAt: 0, intent: { nodeId: 't-draft', action: 'edge.rewire', decision: { option: 't-test' }, idempotencyKey: 'k' } },
     ] as unknown as InFlightEntry[];

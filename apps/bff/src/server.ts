@@ -6,7 +6,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { validateNodeDetail, type NodeDetail } from '@gunnflow/contract';
 import { UnsupportedDetail, type UpstreamUnsupported, type WorkspaceUpstream } from '@gunnflow/upstream-port';
-import { readUserWiring, readWiringDir, removeUserWiring, userWiringProblem, writeUserWiring } from './wiringFiles.js';
+import { readUserWiring, readWiringDir, removeUserWiring, userWiringProblem, writeUserWiring, type WiringFileEntry } from './wiringFiles.js';
 import { personalStructureProblem, readPersonal, writePersonal } from './personalStore.js';
 import { prefsStructureProblem, readPrefs, writePrefs } from './prefsStore.js';
 import { PERSONAL_SOURCE_MAX_CHARS, type PersonalRenders } from './personalRender.js';
@@ -52,6 +52,8 @@ export interface BuildServerOptions {
   coalesceMs?: number;
   /** Directory of wiring config files; absent directory = no files. */
   wiringDir?: string;
+  /** A wiring layer the upstream brings (the simulator's), served before the directory's files. */
+  upstreamWiring?: WiringFileEntry;
   /** The composition root's label for the upstream (`fake`, `direct → <url>`). */
   upstreamLabel?: string;
   /** The personal layer's local file for this workspace (never sent upstream). */
@@ -116,7 +118,7 @@ export function buildServer(opts: BuildServerOptions): FastifyInstance {
   });
 
   // Wiring config files, carried as-is in file-name order; the web validates and merges them.
-  app.get('/api/wiring', async () => readWiringDir(opts.wiringDir));
+  app.get('/api/wiring', async () => [...(opts.upstreamWiring ? [opts.upstreamWiring] : []), ...readWiringDir(opts.wiringDir)]);
 
   // The settings screen's wiring file: only <wiringDir>/90-user.json is ever read or written here.
   app.get('/api/wiring/user', async (_req, reply) => {

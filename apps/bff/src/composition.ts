@@ -12,7 +12,14 @@ interface BuiltinUpstream {
   createUpstream: UpstreamFactory;
 }
 
+/** The simulator module also carries its own wiring (its vocabulary's presentation). */
+interface SimulatorModule extends BuiltinUpstream {
+  SIMULATOR_WIRING: unknown;
+  SIMULATOR_WIRING_FILE: string;
+}
+
 import { UPSTREAM_CHOICES } from '../../../scripts/gunnflow-settings.mjs';
+import type { WiringFileEntry } from './wiringFiles.js';
 
 // One list, shared with config validation.
 export { UPSTREAM_CHOICES };
@@ -37,6 +44,8 @@ export interface LoadedUpstream {
   /** Simulator controls, present only in fake mode. */
   fake: SimulatorControls | null;
   label: string;
+  /** A wiring layer the upstream brings, under the wiring directory's files (the simulator's, in fake mode only). */
+  wiring: WiringFileEntry | null;
 }
 
 export interface LoadDeps {
@@ -66,7 +75,7 @@ export async function loadUpstream(
     throw new Error(`GUNNFLOW_UPSTREAM must be ${UPSTREAM_CHOICES.map((c) => `'${c}'`).join(' or ')}; refusing '${choice}'`);
   }
   const moduleName = choice === 'fake' ? SIMULATOR_MODULE : DIRECT_MODULE;
-  const mod = (await deps.importModule(moduleName)) as Partial<BuiltinUpstream>;
+  const mod = (await deps.importModule(moduleName)) as Partial<SimulatorModule>;
   if (typeof mod.createUpstream !== 'function') {
     throw new Error(`upstream module '${moduleName}' does not export createUpstream`);
   }
@@ -74,9 +83,11 @@ export async function loadUpstream(
     const upstream = await mod.createUpstream({});
     const controls = simulatorControls(upstream);
     if (!controls) throw new Error(`simulator module '${moduleName}' exposes no test controls`);
-    return { upstream, fake: controls, label: 'fake' };
+    const wiring = mod.SIMULATOR_WIRING && mod.SIMULATOR_WIRING_FILE ? { file: mod.SIMULATOR_WIRING_FILE, config: mod.SIMULATOR_WIRING } : null;
+    return { upstream, fake: controls, label: 'fake', wiring };
   }
   const url = env.GUNNFLOW_UPSTREAM_URL;
   const upstream = await mod.createUpstream(url ? { url } : {});
-  return { upstream, fake: null, label: url ? `direct → ${url}` : 'direct' };
+  // A direct backend's wiring is its own: only the wiring directory's files.
+  return { upstream, fake: null, label: url ? `direct → ${url}` : 'direct', wiring: null };
 }

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 
 for (const fixture of ['normal', 'large']) {
   test(`layout: the layered pass replaces the fallback (${fixture})`, async ({ page }) => {
-    await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: fixture } });
+    await page.request.post('/api/_fake/fixture', { data: { name: fixture } });
     await page.goto('/');
     await expect(page.getByTestId('live-dot')).toBeVisible();
     await expect(page.getByTestId('layout-source')).toHaveText('layered', { timeout: 15_000 });
@@ -14,7 +14,7 @@ for (const fixture of ['normal', 'large']) {
 }
 
 test('layout: once the user has moved the view, the layered pass does not re-frame it', async ({ page }) => {
-  await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'large' } });
+  await page.request.post('/api/_fake/fixture', { data: { name: 'large' } });
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   await page.getByTestId('canvas-host').hover();

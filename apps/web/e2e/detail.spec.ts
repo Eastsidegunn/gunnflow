@@ -4,7 +4,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function loadFixture(page: Page, name: string) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', {
+  const res = await page.request.post('/api/_fake/fixture', {
     data: { name },
   });
   expect(res.ok()).toBeTruthy();

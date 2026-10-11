@@ -45,9 +45,9 @@ async function still(page: Page, ids: string[]) {
 const EMPTY_PERSONAL = { version: 2, notes: {}, stickies: [], boxes: [], links: [] };
 
 async function open(page: Page) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: 'normal' } });
+  const res = await page.request.post('/api/_fake/fixture', { data: { name: 'normal' } });
   expect(res.ok()).toBeTruthy();
-  expect((await page.request.put('http://127.0.0.1:8787/api/personal', { data: EMPTY_PERSONAL })).ok()).toBeTruthy();
+  expect((await page.request.put('/api/personal', { data: EMPTY_PERSONAL })).ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
   // The layered pass replaces the first layout with an animated move: measure only after it has landed.

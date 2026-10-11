@@ -410,8 +410,6 @@ export const en = {
   'menu.delete': 'Delete',
   'menu.releaseToCancel': 'release to cancel',
   'overlay.emptyTitle': 'What are we working on?',
-  'overlay.missionPlaceholder': 'Describe the mission…',
-  'overlay.startMission': '+ Start a mission',
   'overlay.notSent': 'Not sent',
   'overlay.unconfirmed': 'Delivery unconfirmed (may have reached upstream)',
   'overlay.rejectedAfterApplied': 'Rejected after it appeared applied',

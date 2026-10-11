@@ -5,32 +5,35 @@ import { interruptNodes } from '../state/attention.js';
 import { escStack } from '../state/escStack.js';
 import type { EntryError } from '../state/pendingIntents.js';
 import { t } from '../i18n/index.js';
+import { workspaceRoot } from '../state/workspaceRoot.js';
+import { resolveParts } from '../canvas/parts.js';
+import { NodeActions } from './nodeParts.jsx';
 
-/** Charter §19.4 — quiet first-run, no onboarding dashboard. */
-export function EmptyState(props: {
-  stores: WorkspaceStores;
-  onStartMission: (name: string) => void;
-}) {
-  const [name, setName] = createSignal('');
+/**
+ * Charter §19.4 — quiet first-run, no onboarding dashboard. What can be
+ * created is the workspace root's to declare: its capabilities, assembled by
+ * the wiring's parts for its kind. A root that declares none (or no root)
+ * offers no form.
+ */
+export function EmptyState(props: { stores: WorkspaceStores }) {
+  const { projectionStore, wiring } = props.stores;
+  const root = () => workspaceRoot(projectionStore.genericNodes()?.nodes ?? null).root;
+  const rootActions = createMemo(() => {
+    const r = root();
+    if (!r) return null;
+    const resolved = resolveParts(r, wiring.config);
+    return resolved.actions.length > 0 ? { node: r, resolved } : null;
+  });
   return (
     <div class="empty-state" data-testid="empty-state">
       <h1>{t('overlay.emptyTitle')}</h1>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name().trim()) props.onStartMission(name().trim());
-        }}
-      >
-        <input
-          data-testid="mission-name"
-          placeholder={t('overlay.missionPlaceholder')}
-          value={name()}
-          onInput={(e) => setName(e.currentTarget.value)}
-        />
-        <button type="submit" data-testid="start-mission" disabled={!name().trim()}>
-          {t('overlay.startMission')}
-        </button>
-      </form>
+      <Show when={rootActions()}>
+        {(v) => (
+          <div class="empty-actions" data-testid="empty-actions">
+            <NodeActions stores={props.stores} node={v().node} resolved={v().resolved} />
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

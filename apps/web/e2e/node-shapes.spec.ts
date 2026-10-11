@@ -69,11 +69,12 @@ type Preview = { shape: string; x: number; y: number; w: number; h: number }[];
 const preview = (page: Page) => page.evaluate(() => (window as unknown as { __gunnflowDebug: { dropPreview: () => Preview } }).__gunnflowDebug.dropPreview());
 
 async function open(page: Page, fixture: string) {
-  expect((await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: fixture } })).ok()).toBeTruthy();
-  expect((await page.request.put('http://127.0.0.1:8787/api/personal', { data: { version: 2, notes: {}, stickies: [], boxes: [], links: [] } })).ok()).toBeTruthy();
+  expect((await page.request.post('/api/_fake/fixture', { data: { name: fixture } })).ok()).toBeTruthy();
+  expect((await page.request.put('/api/personal', { data: { version: 2, notes: {}, stickies: [], boxes: [], links: [] } })).ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();
-  await expect(page.getByTestId('wiring-files-loaded')).toHaveText('1');
+  // The simulator's own layer (fake mode) and this scenario's file.
+  await expect(page.getByTestId('wiring-files-loaded')).toHaveText('2');
   await expect(page.getByTestId('layout-source')).toHaveText('layered', { timeout: 15_000 });
   await still(page, ['t-build', 't-draft', 'd-report']);
 }

@@ -6,7 +6,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function open(page: Page, fixture: string) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', { data: { name: fixture } });
+  const res = await page.request.post('/api/_fake/fixture', { data: { name: fixture } });
   expect(res.ok()).toBeTruthy();
   await page.goto('/');
   await expect(page.getByTestId('live-dot')).toBeVisible();

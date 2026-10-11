@@ -2,7 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function loadFixture(page: Page, name: string) {
-  const res = await page.request.post('http://127.0.0.1:8787/api/_fake/fixture', {
+  const res = await page.request.post('/api/_fake/fixture', {
     data: { name },
   });
   expect(res.ok()).toBeTruthy();
@@ -24,10 +24,13 @@ test('F1: empty / first run — quiet prompt, mission starts via relay', async (
   await expect(page.getByTestId('empty-state')).toBeVisible();
   await expect(page.getByText('What are we working on?')).toBeVisible();
 
-  // The entry point is live; the write flows through the relay (capability-gated).
-  await expect(page.getByTestId('start-mission')).toBeDisabled(); // empty name
-  await page.getByTestId('mission-name').fill('Ship Website');
-  await page.getByTestId('start-mission').click();
+  // The entry point is the workspace root's own capability, assembled by the simulator's wiring;
+  // the write flows through the relay (capability-gated).
+  const send = page.getByTestId('generic-send-mission.create');
+  await expect(send).toHaveText('+ Start a mission');
+  await expect(send).toBeDisabled(); // the capability requires text
+  await page.getByTestId('generic-text-mission.create').fill('Ship Website');
+  await send.click();
   await expect(page.getByTestId('canvas-host')).toBeVisible();
 });
 
