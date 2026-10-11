@@ -5,6 +5,7 @@
  * snapshot. Esc belongs to the shell — the panel closes by its button only.
  */
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import type { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { t, tn } from '../i18n/index.js';
 import { foldAttached, terminalPanel, type TerminalRow } from '../state/terminalPanel.js';
@@ -186,6 +187,65 @@ function TerminalList() {
 }
 
 /**
+ * Input-method composition (Hangul, kana, pinyin…) is committed here, not by xterm. xterm 5.5
+ * reads the committed text off its textarea on 0 ms timers, and the browser runs those after
+ * the input events that keep arriving while one types — so a syllable went out as loose jamo,
+ * late, or not at all. Here the composing keys and composition events stop at the host before
+ * xterm sees them, the in-progress text shows in xterm's own composition view, and only each
+ * compositionend's finished text is sent, in order with the keys around it.
+ */
+function commitCompositions(host: HTMLElement, term: Terminal, send: (text: string) => void): () => void {
+  let composing = false;
+  const show = (text: string) => {
+    const view = host.querySelector<HTMLElement>('.composition-view');
+    const screen = host.querySelector<HTMLElement>('.xterm-screen');
+    if (!view || !screen) return;
+    view.textContent = text;
+    view.classList.toggle('active', text !== '');
+    const cellW = screen.clientWidth / term.cols;
+    const cellH = screen.clientHeight / term.rows;
+    const cursor = term.buffer.active;
+    Object.assign(view.style, {
+      left: `${Math.min(cursor.cursorX, term.cols - 1) * cellW}px`,
+      top: `${cursor.cursorY * cellH}px`,
+      height: `${cellH}px`,
+      lineHeight: `${cellH}px`,
+      fontFamily: term.options.fontFamily ?? '',
+      fontSize: `${term.options.fontSize ?? 13}px`,
+    });
+  };
+  const onStart = (e: CompositionEvent) => {
+    e.stopPropagation();
+    composing = true;
+    show('');
+  };
+  const onUpdate = (e: CompositionEvent) => {
+    e.stopPropagation();
+    show(e.data);
+  };
+  const onEnd = (e: CompositionEvent) => {
+    e.stopPropagation();
+    composing = false;
+    show('');
+    if (e.data) send(e.data);
+  };
+  // 229 is the key an input method took; the text it makes arrives by composition (or as plain input).
+  const onKey = (e: KeyboardEvent) => {
+    if (composing || e.isComposing || e.keyCode === 229) e.stopPropagation();
+  };
+  const listeners = [
+    ['compositionstart', onStart],
+    ['compositionupdate', onUpdate],
+    ['compositionend', onEnd],
+    ['keydown', onKey],
+  ] as const;
+  for (const [name, fn] of listeners) host.addEventListener(name, fn as EventListener, true);
+  return () => {
+    for (const [name, fn] of listeners) host.removeEventListener(name, fn as EventListener, true);
+  };
+}
+
+/**
  * A shell row is a terminal: the view talks to it by its id. An attachable row
  * is a target: the view opens a terminal onto it and talks to the id the open
  * returns; leaving the view closes that terminal and the target keeps running.
@@ -247,9 +307,11 @@ function TerminalView(props: { entry: TerminalEntry }) {
       void resizeTerminal(id, term.cols, term.rows);
     }
     const send = inputSender(id, (reason) => setError(t('term.inputFailed', { reason })));
-    const onData = term.onData((d) => {
+    const type = (d: string) => {
       if (status() !== 'exited') send(d);
-    });
+    };
+    const onData = term.onData(type);
+    const dropCompositions = commitCompositions(host, term, type);
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const onResize = term.onResize(({ cols, rows }) => {
       clearTimeout(resizeTimer);
@@ -281,6 +343,7 @@ function TerminalView(props: { entry: TerminalEntry }) {
       clearTimeout(resizeTimer);
       observer.disconnect();
       onData.dispose();
+      dropCompositions();
       onResize.dispose();
       term.dispose();
     };

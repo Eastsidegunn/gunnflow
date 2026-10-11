@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
+import { IME_SERVERS } from './playwright.ime.config.js';
 import { STRANGE_SERVERS } from './playwright.strange.config.js';
 
 /** The personal layer's files during e2e: a temporary directory, never the person's ~/.gunnflow. */
@@ -91,5 +92,7 @@ export default defineConfig({
     },
     // An unfamiliar backend (e2e/strange-backend.spec.ts): its own servers, ports and home.
     ...STRANGE_SERVERS,
+    // Typing through an input method (e2e/terminal-ime.spec.ts): its own servers, ports and home.
+    ...IME_SERVERS,
   ],
 });
