@@ -101,7 +101,55 @@ export interface WorkspaceUpstream {
    * UnsupportedDetail, which the BFF also answers with 501.
    */
   nodeDetail?(nodeId: string): Promise<NodeDetail | undefined>;
+  /**
+   * Interactive terminals (0.2.0, optional as a set). The upstream is a dumb
+   * pipe for bytes it already runs; neither it nor the BFF interprets them.
+   * Missing methods = the surface is unsupported (the BFF answers 501).
+   */
+  listTerminals?(): UpstreamTerminal[] | Promise<UpstreamTerminal[]>;
+  openTerminal?(request: UpstreamTerminalOpen): UpstreamTerminalOpened | Promise<UpstreamTerminalOpened>;
+  /**
+   * Output as byte chunks. The first event is always a `snapshot` of what the
+   * upstream retains, so a reconnecting viewer starts from it; `exit` is last.
+   * `undefined` = no such terminal (the BFF answers 404).
+   */
+  subscribeTerminalOutput?(
+    terminalId: string,
+    listener: (event: UpstreamTerminalEvent) => void,
+  ): Unsubscribe | undefined;
+  terminalInput?(terminalId: string, bytesBase64: string): UpstreamTerminalAck | Promise<UpstreamTerminalAck>;
+  terminalResize?(terminalId: string, cols: number, rows: number): UpstreamTerminalAck | Promise<UpstreamTerminalAck>;
+  closeTerminal?(terminalId: string): UpstreamTerminalAck | Promise<UpstreamTerminalAck>;
 }
+
+/**
+ * A terminal the upstream offers. `attachable` = already running, joinable;
+ * `shell` = one opened on request. `nodeId` (optional) binds it to a node.
+ */
+export interface UpstreamTerminal {
+  terminalId: string;
+  label: string;
+  kind: 'attachable' | 'shell';
+  state: 'running' | 'exited';
+  nodeId?: string;
+}
+
+/** Attach to an offered terminal, or ask for a new shell in a folder. */
+export interface UpstreamTerminalOpen {
+  target: { attach: string } | { shell: { cwd: string } };
+  cols: number;
+  rows: number;
+}
+
+export type UpstreamTerminalOpened = { ok: true; terminalId: string } | { ok: false; reason: string };
+
+export type UpstreamTerminalEvent =
+  | { type: 'snapshot'; bytesBase64: string }
+  | { type: 'data'; bytesBase64: string }
+  | { type: 'exit'; code: number | null };
+
+/** `unknown` = no such terminal (404); `exited` = it no longer takes input (409). */
+export type UpstreamTerminalAck = { ok: true } | { ok: false; reason: 'unknown' | 'exited' };
 
 export interface UpstreamArtifactSnapshot {
   mediaType: string;

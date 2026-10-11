@@ -17,6 +17,7 @@ import { projectNodes } from './projectNodes.js';
 import { FakeWorkspaceStream } from './stream.js';
 import { type FakeStreamFeed, fakePtyFeed, fakePtyStreamRef } from './streams.js';
 import { FakePtyStream, fakePtyBuffer, largePtyBuffer, type FakeTerminalIntent } from './terminal.js';
+import { FakeTerminals } from './shellTerminal.js';
 
 export interface FakeUpstreamControls {
   /** Test-only: swap the whole scenario (used by e2e via /api/_fake/fixture). */
@@ -45,6 +46,7 @@ export function createFakeUpstream(
   let relay = new NullIntentRelay(stream, { latencyMs: 120, rejectWith });
   let fixtureName: FixtureName = initial;
   let executionStreams = new Map<string, FakeExecutionEventStream>();
+  let terminals = new FakeTerminals();
 
   function executionStream(taskId: string): FakeExecutionEventStream {
     let es = executionStreams.get(taskId);
@@ -191,6 +193,15 @@ export function createFakeUpstream(
         if (delta.type === 'session') listener({ type: 'session', session: withStreams(delta.session) });
       });
     },
+    // Interactive terminals: echo shells standing in for real PTYs.
+    listTerminals: () => terminals.list(),
+    openTerminal: (request) => terminals.open(request),
+    subscribeTerminalOutput: (terminalId, listener) => terminals.get(terminalId)?.subscribe(listener),
+    terminalInput: (terminalId, bytesBase64) =>
+      terminals.get(terminalId)?.input(bytesBase64) ?? { ok: false, reason: 'unknown' },
+    terminalResize: (terminalId, cols, rows) =>
+      terminals.get(terminalId)?.resize(cols, rows) ?? { ok: false, reason: 'unknown' },
+    closeTerminal: (terminalId) => terminals.close(terminalId),
     // On-demand detail from the current fixture; undefined = no detail for that node.
     async nodeDetail(nodeId) {
       return detailOf(stream.current(), nodeId);
@@ -232,6 +243,7 @@ export function createFakeUpstream(
       executionStreams = new Map();
       ptyStreams = new Map();
       ptyFeeds = new Map();
+      terminals = new FakeTerminals();
       unhook = hook();
       for (const l of listeners) l(envelope());
     },

@@ -9,6 +9,7 @@ import type { WorkspaceStores } from '../state/stores.js';
 import { t, type MessageKey } from '../i18n/index.js';
 import { COCKPIT_VIEWS, type CockpitView } from '../state/nowView.js';
 import { resolveKey } from '../state/keybindings.js';
+import { TerminalPanelToggle } from './TerminalPanel.jsx';
 
 const VIEW_LABEL: Record<CockpitView, MessageKey> = { now: 'view.now', all: 'view.all' };
 
@@ -48,6 +49,7 @@ export function WorkspaceToolbar(props: {
         ref={(el) => props.searchRef?.(el)}
       />
       <span class="spacer" />
+      <TerminalPanelToggle />
     </header>
   );
 }

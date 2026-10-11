@@ -15,6 +15,7 @@ import { ArtifactViewer } from './ArtifactViewer.jsx';
 import { PersonalNoteSection } from '../personal/PersonalUi.jsx';
 import { DetailSection, NodeActions } from './nodeParts.jsx';
 import { t } from '../i18n/index.js';
+import { terminalPanel, terminalsForNode } from '../state/terminalPanel.js';
 
 export function NodeStage(props: {
   stores: WorkspaceStores;
@@ -94,6 +95,15 @@ export function NodeStage(props: {
                     <DomainQuickSection nodeId={v().n.id} />
                     <PersonalNoteSection personal={props.stores.personal} nodeId={v().n.id} />
                     <NodeActions stores={props.stores} node={v().n} resolved={v().r} />
+                    <For each={terminalsForNode(terminalPanel.list(), v().n.id)}>
+                      {(x) => (
+                        <div class="actions">
+                          <button data-testid={`stage-open-terminal-${x.terminalId}`} onClick={() => terminalPanel.show(x)}>
+                            {t('stage.openTerminal')}
+                          </button>
+                        </div>
+                      )}
+                    </For>
                   </div>
                   <footer class="stage-foot hint">{t('stage.foot')}</footer>
                 </div>

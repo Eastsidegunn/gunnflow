@@ -54,7 +54,8 @@ export const createMyUpstream: UpstreamFactory = async ({ url }) => {
     terminalSnapshot: () => ({ unsupported: 'no terminal surface' }),
     subscribeTerminal: () => ({ unsupported: 'no terminal surface' }),
     subscribeStream: () => ({ unsupported: 'no stream surface' }),
-    // Optional: artifactSnapshot, nodeDetail, status, subscribeStatus, refresh.
+    // Optional: artifactSnapshot, nodeDetail, status, subscribeStatus, refresh,
+    // and the interactive terminal set (listTerminals … closeTerminal, below).
     // nodeDetail may throw new UnsupportedDetail() when support is only discovered at call time.
   };
   return upstream;
@@ -67,6 +68,26 @@ Exports: `WorkspaceUpstream`, `UpstreamFactory`, `UpstreamFactoryOptions`,
 `UnsupportedDetail` (an `Error` subclass, the package's only runtime code). The doc comments in
 the type declarations state the meaning of each return value (`undefined` vs. unsupported vs. a
 rejection).
+
+### Interactive terminals (0.2.0, optional)
+
+An upstream that already runs terminals may offer them to the cockpit as a dumb byte pipe. All
+six methods are optional; leave them out and every terminal route answers 501.
+
+| Method | Meaning | BFF route |
+|---|---|---|
+| `listTerminals()` | `UpstreamTerminal[]`: `{ terminalId, label, kind: 'attachable' \| 'shell', state: 'running' \| 'exited', nodeId? }` | `GET /api/terminals` |
+| `openTerminal({ target, cols, rows })` | `target` = `{ attach: terminalId }` (join one, stating this viewer's size) or `{ shell: { cwd } }` (a new shell); `{ ok, terminalId }` or `{ ok: false, reason }` | `POST /api/terminals` (422 on refusal) |
+| `subscribeTerminalOutput(id, listener)` | `snapshot` (retained bytes) first — on every subscribe, so a reconnect restarts from it — then `data`, then `exit { code }`; `undefined` = no such terminal | `GET /api/terminals/:id/output` (SSE) |
+| `terminalInput(id, bytesBase64)` | raw bytes typed or pasted | `POST /api/terminals/:id/input` (≤ 64 KiB base64) |
+| `terminalResize(id, cols, rows)` | the viewer's size (1–1000) | `POST /api/terminals/:id/resize` |
+| `closeTerminal(id)` | end it | `DELETE /api/terminals/:id` |
+
+Acks are `{ ok: true }` or `{ ok: false, reason: 'unknown' | 'exited' }` (404 / 409). Bytes travel
+base64; neither the BFF nor the cockpit interprets them. Until remote authentication exists the BFF
+takes the steering routes (open, input, resize, close) from loopback callers only, and refuses a
+browser `Origin` that is not loopback. The older `terminalSnapshot` / `subscribeTerminal` pair
+(session record + line tail, read-only) is unchanged.
 
 ## Versioning
 
