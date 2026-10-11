@@ -14,9 +14,9 @@
     }
   ],
   "domainVocabulary": {
-    "$comment": "The simulator's domain words must not steer the engine: kinds, actions and states are the backend's, read through wiring. Tests, the i18n catalogs, the built-in default wiring and the simulator (testing/, not scanned) are exempt. Existing hits are frozen in boundary-baseline.json.",
+    "$comment": "The simulator's domain words must not steer the engine: kinds, actions and states are the backend's, read through wiring. Tests, the i18n catalogs and the simulator (testing/, not scanned) are exempt. Existing hits are frozen in boundary-baseline.json.",
     "scan": ["apps/", "packages/"],
-    "exclude": ["apps/web/src/i18n/", "apps/web/src/wiring/defaultWiring.ts"],
+    "exclude": ["apps/web/src/i18n/"],
     "patterns": [
       { "name": "dotted domain action in a string (not a t('…') catalog key)", "pattern": "(?<!\\bt\\()['\"`](mission|task|gate|deliverable|session)\\.[a-zA-Z]+" },
       { "name": "kind compared to a domain word", "pattern": "\\bkind\\s*[!=]==?\\s*['\"](mission|task|gate|deliverable|session)['\"]" },

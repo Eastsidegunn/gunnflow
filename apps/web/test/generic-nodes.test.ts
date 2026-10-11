@@ -7,6 +7,7 @@ import { coveredActions, relationRoleFor } from '@gunnflow/contract/wiring';
 import { normalizeNodes, normalizeProjection } from '../src/model/normalize.js';
 import { createProjectionStore } from '../src/state/projectionStore.js';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { EMPTY_WIRING, loadWiring } from '../src/wiring/loadWiring.js';
 
 describe('generic node intake', () => {
@@ -64,14 +65,23 @@ describe('generic node intake', () => {
 });
 
 describe('wiring config loading', () => {
-  it('the default config states the simulator relation roles (dependency blocks, produces produces)', () => {
-    expect(relationRoleFor(DEFAULT_WIRING, 'dependency')).toBe('blocks');
-    expect(relationRoleFor(DEFAULT_WIRING, 'produces')).toBe('produces');
+  it("the engine default names no backend's words: no states, relations, causes, kinds or actions", () => {
+    expect(loadWiring(DEFAULT_WIRING, () => undefined).problems).toEqual([]);
+    for (const table of ['render', 'relations', 'attention', 'kinds', 'actions', 'detail'] as const) {
+      expect(DEFAULT_WIRING[table], table).toBeUndefined();
+    }
+    // Its one lens matches on attention (a contract fact), never on a state or kind.
+    expect(DEFAULT_WIRING.lenses?.map((l) => l.match)).toEqual([{ attention: true }]);
   });
 
-  it('the default config validates and every kind the simulator emits has an assembly', () => {
+  it('the simulator wiring states its relation roles (dependency blocks, produces produces)', () => {
+    expect(relationRoleFor(SIM_WIRING, 'dependency')).toBe('blocks');
+    expect(relationRoleFor(SIM_WIRING, 'produces')).toBe('produces');
+  });
+
+  it('the simulator wiring validates and every kind the simulator emits has an assembly', () => {
     const logs: string[] = [];
-    const loaded = loadWiring(DEFAULT_WIRING, (m) => logs.push(m));
+    const loaded = loadWiring(SIM_WIRING, (m) => logs.push(m));
     expect(loaded.problems).toEqual([]);
     expect(logs).toEqual([]);
     const kinds = new Set(projectNodes(normalFixture()).map((n) => n.kind));

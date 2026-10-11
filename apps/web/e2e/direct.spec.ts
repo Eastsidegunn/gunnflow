@@ -3,7 +3,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { E2E_WIRING_DIR } from '../playwright.config.js';
+import { E2E_DIRECT_WIRING_DIR } from '../playwright.config.js';
 
 test.use({ baseURL: 'http://127.0.0.1:5174' });
 
@@ -58,8 +58,8 @@ test('direct: the ↻ refresh pulls both legs — safe while unreachable, and br
 
 test('direct: the wire sends no counts — "need you" and the inbox total are counted from received attention (view)', async ({ page }) => {
   // Every cause of the 'inbox' fixture mapped to interrupt, each in its own group (the simulator's words; the engine reads none).
-  const file = join(E2E_WIRING_DIR, '50-direct-needs-you.json');
-  mkdirSync(E2E_WIRING_DIR, { recursive: true });
+  const file = join(E2E_DIRECT_WIRING_DIR, '50-direct-needs-you.json');
+  mkdirSync(E2E_DIRECT_WIRING_DIR, { recursive: true });
   writeFileSync(
     file,
     JSON.stringify({

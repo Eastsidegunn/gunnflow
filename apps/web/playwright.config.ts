@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from '@playwright/test';
+import { SIMULATOR_WIRING, SIMULATOR_WIRING_FILE } from '@gunnflow-testing/fake-contracts';
 import { IME_SERVERS } from './playwright.ime.config.js';
 import { STRANGE_SERVERS } from './playwright.strange.config.js';
 
@@ -13,6 +14,14 @@ export const E2E_PERSONAL_DIR = join(tmpdir(), 'gunnflow-e2e-personal');
  * default (the settings scenario writes 90-user.json there and removes it again).
  */
 export const E2E_WIRING_DIR = join(tmpdir(), 'gunnflow-e2e-wiring');
+
+/**
+ * The direct path's wiring directory: a backend on the direct wire brings its wiring as files, so the
+ * simulator served over the wire gets its own wiring here (fake mode gets the same layer from the BFF).
+ */
+export const E2E_DIRECT_WIRING_DIR = join(tmpdir(), 'gunnflow-e2e-direct-wiring');
+mkdirSync(E2E_DIRECT_WIRING_DIR, { recursive: true });
+writeFileSync(join(E2E_DIRECT_WIRING_DIR, SIMULATOR_WIRING_FILE), JSON.stringify(SIMULATOR_WIRING, null, 2));
 
 /**
  * The Gunnflow home during e2e: a temporary directory, never the person's ~/.gunnflow — so a
@@ -79,7 +88,7 @@ export default defineConfig({
         GUNNFLOW_BFF_PORT: '8797',
         GUNNFLOW_PREVIEW_PORT: '8798',
         GUNNFLOW_WEB_ORIGIN: 'http://127.0.0.1:5174',
-        GUNNFLOW_WIRING_DIR: E2E_WIRING_DIR,
+        GUNNFLOW_WIRING_DIR: E2E_DIRECT_WIRING_DIR,
         GUNNFLOW_PERSONAL_DIR: E2E_PERSONAL_DIR,
       },
     },

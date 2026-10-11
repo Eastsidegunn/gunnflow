@@ -33,7 +33,7 @@ const settings = (() => {
   }
 })();
 const loaded = await loadUpstream(settings).catch(refuse);
-const { upstream, fake, label } = loaded;
+const { upstream, fake, label, wiring } = loaded;
 
 // The personal layer lives next to nothing upstream: one local file per workspace.
 const personalFile = join(
@@ -45,6 +45,7 @@ const wiringDir = wiringDirOf(settings, home);
 const app = buildServer({
   upstream,
   wiringDir,
+  upstreamWiring: wiring ?? undefined,
   upstreamLabel: label,
   personalFile,
   prefsFile: process.env.GUNNFLOW_PREFS_FILE ?? defaultPrefsFile(home),

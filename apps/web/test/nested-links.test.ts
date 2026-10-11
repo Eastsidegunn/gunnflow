@@ -3,7 +3,7 @@
 // on the descendant. Decided by containment geometry only — never by name.
 import { describe, expect, it } from 'vitest';
 import type { NodeProjection } from '@gunnflow/contract';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { buildScene, nestedChipRect } from '../src/canvas/genericScene.js';
 
 const node = (id: string, kind: string, relations: { type: string; target: string }[] = []): NodeProjection => ({
@@ -35,7 +35,7 @@ describe('nested links', () => {
     ]),
   ];
   const g2 = { ...nodes[0]!, relations: [{ type: 'produces', target: 'b' }] };
-  const scene = buildScene([g2, ...nodes.slice(1)], DEFAULT_WIRING);
+  const scene = buildScene([g2, ...nodes.slice(1)], SIM_WIRING);
 
   it('container → own member, grandparent → descendant and descendant → container: chips, no lines', () => {
     const lines = scene.edges.map((e) => `${e.from}>${e.to}:${e.type}`);

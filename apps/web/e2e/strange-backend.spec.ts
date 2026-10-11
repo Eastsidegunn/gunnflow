@@ -78,15 +78,13 @@ test('strange: the open ticket served an execution can be entered', async ({ pag
 });
 
 test('strange: with zero nodes the empty screen offers no simulator action', async ({ page }) => {
-  test.fail(true, "known failure — audit M2: the empty state always offers '+ start mission' (mission.create)");
   await open(page, { empty: true });
   await expect(page.getByTestId('empty-state')).toBeVisible();
-  await expect(page.getByTestId('start-mission')).toHaveCount(0);
+  await expect(page.getByTestId('generic-send-mission.create')).toHaveCount(0);
   await expect(page.getByTestId('empty-state')).not.toContainText(/mission/i);
 });
 
 test('strange: the default lenses assume no simulator kinds or states, and every node shows', async ({ page }) => {
-  test.fail(true, 'known failure — audit M3: the built-in lenses are Running/Deliverables/Blocked (simulator states and kinds)');
   await open(page);
   for (const id of ['b-1', 'k-1', 'k-2']) await expect(page.getByTestId(`node-${id}`)).toHaveCount(1);
   for (const lens of ['running', 'deliverables', 'blocked']) await expect(page.getByTestId(`lens-${lens}`)).toHaveCount(0);

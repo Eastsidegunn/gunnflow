@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { NodeProjection } from '@gunnflow/contract';
 import { largeFixture, normalFixture, projectNodes } from '@gunnflow-testing/fake-contracts';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { LAYOUT, fallbackLayout, layoutGraphOf, leafIds, type LayoutProvider, type Positions } from '../src/canvas/layoutGraph.js';
 import { elkProvider } from '../src/canvas/elkLayout.js';
 import { buildScene } from '../src/canvas/genericScene.js';
@@ -39,7 +39,7 @@ function nestedGoal(): NodeProjection[] {
 }
 
 const sceneOf = (nodes: NodeProjection[], pos: Positions, packContainers: boolean) =>
-  buildScene(nodes, DEFAULT_WIRING, new Map(), pos, new Map(), { packContainers });
+  buildScene(nodes, SIM_WIRING, new Map(), pos, new Map(), { packContainers });
 
 function assertNoOverlaps(scene: ReturnType<typeof buildScene>, label: string) {
   // Nesting by membership (members = every descendant leaf), never by geometry:
@@ -69,7 +69,7 @@ function assertNoOverlaps(scene: ReturnType<typeof buildScene>, label: string) {
 }
 
 const layouts = async (nodes: NodeProjection[], packContainers: boolean): Promise<[string, Positions][]> => {
-  const graph = layoutGraphOf(nodes, DEFAULT_WIRING, { packContainers });
+  const graph = layoutGraphOf(nodes, SIM_WIRING, { packContainers });
   return [
     ['fallback', fallbackLayout(graph)],
     ['layered', await inThreadElk().layout(graph)],
@@ -102,8 +102,8 @@ describe('container packing (packContainers)', { timeout: 30_000 }, () => {
 
   it('the internal arrangement of a connected component is kept (rigid shift)', async () => {
     const nodes = nestedGoal();
-    const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
-    const flat = await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING, { packContainers: false }));
+    const graph = layoutGraphOf(nodes, SIM_WIRING);
+    const flat = await inThreadElk().layout(layoutGraphOf(nodes, SIM_WIRING, { packContainers: false }));
     const packed = await inThreadElk().layout(graph);
     const rel = (p: Positions, a: string, b: string) => ({ x: p.get(b)!.x - p.get(a)!.x, y: p.get(b)!.y - p.get(a)!.y });
     expect(rel(packed, 'm0-a', 'm0-b')).toEqual(rel(flat, 'm0-a', 'm0-b'));
@@ -120,23 +120,23 @@ describe('container packing (packContainers)', { timeout: 30_000 }, () => {
     for (const [name, nodes] of fixtures)
       for (const on of [true, false])
         for (const [label, pos] of await layouts(nodes, on)) {
-          expect(new Set(pos.keys())).toEqual(new Set(leafIds(layoutGraphOf(nodes, DEFAULT_WIRING))));
+          expect(new Set(pos.keys())).toEqual(new Set(leafIds(layoutGraphOf(nodes, SIM_WIRING))));
           assertNoOverlaps(sceneOf(nodes, pos, on), `${name} ${label} pack=${on}`);
         }
   });
 
   it('determinism: the same input lays out identically', async () => {
-    const graph = layoutGraphOf(nestedGoal(), DEFAULT_WIRING);
+    const graph = layoutGraphOf(nestedGoal(), SIM_WIRING);
     expect(fallbackLayout(graph)).toEqual(fallbackLayout(graph));
     expect(await inThreadElk().layout(graph)).toEqual(await inThreadElk().layout(graph));
   });
 
   it('the flag is a layout input: it re-keys the signature, so flipping it relayouts once', async () => {
     const nodes = nestedGoal();
-    const on = layoutGraphOf(nodes, DEFAULT_WIRING);
-    const off = layoutGraphOf(nodes, DEFAULT_WIRING, { packContainers: false });
+    const on = layoutGraphOf(nodes, SIM_WIRING);
+    const off = layoutGraphOf(nodes, SIM_WIRING, { packContainers: false });
     expect(on.signature).not.toBe(off.signature);
-    expect(layoutGraphOf(nodes, DEFAULT_WIRING, { packContainers: true }).signature).toBe(on.signature);
+    expect(layoutGraphOf(nodes, SIM_WIRING, { packContainers: true }).signature).toBe(on.signature);
     const s = createLayoutState({ loadProvider: async () => inThreadElk() });
     s.update(off);
     await s.settled();
@@ -192,7 +192,7 @@ describe('container packing (packContainers)', { timeout: 30_000 }, () => {
 
   it('review repros (ELK): the linked outside node stays adjacent to the packed group', async () => {
     for (const [name, nodes, ext, group, end] of repros) {
-      const pos = await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING));
+      const pos = await inThreadElk().layout(layoutGraphOf(nodes, SIM_WIRING));
       const scene = sceneOf(nodes, pos, true);
       const g = scene.groups.find((x) => x.id === group)!;
       const e = scene.layout.nodes.get(ext)!;
@@ -221,7 +221,7 @@ describe('container packing (packContainers)', { timeout: 30_000 }, () => {
 
   it('the nested goal (ELK): the outside node stays adjacent to the packed goal', async () => {
     const nodes = nestedGoal();
-    const scene = sceneOf(nodes, await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING)), true);
+    const scene = sceneOf(nodes, await inThreadElk().layout(layoutGraphOf(nodes, SIM_WIRING)), true);
     const goal = scene.groups.find((g) => g.id === 'goal')!;
     expect(rectGap(goal, scene.layout.nodes.get('outside')!)).toBeLessThanOrEqual(2 * maxGap);
   });

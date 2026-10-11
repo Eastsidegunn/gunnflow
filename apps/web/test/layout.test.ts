@@ -5,7 +5,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import type { NodeProjection } from '@gunnflow/contract';
 import { WIRING_SCHEMA_VERSION, relationArrangeFor, validateWiringConfig, type WiringConfig } from '@gunnflow/contract/wiring';
 import { largeFixture, normalFixture, projectNodes } from '@gunnflow-testing/fake-contracts';
-import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
+import { SIM_WIRING } from './simWiring.js';
 import { EMPTY_WIRING } from '../src/wiring/loadWiring.js';
 import { fallbackLayout, layoutGraphOf, leafIds, type LayoutProvider, type Positions } from '../src/canvas/layoutGraph.js';
 import { elkProvider } from '../src/canvas/elkLayout.js';
@@ -34,11 +34,11 @@ function withNewTask(nodes: NodeProjection[]): NodeProjection[] {
 
 describe('layout graph', () => {
   it('only flow/contain relations shape layout; unregistered relations are none', () => {
-    expect(relationArrangeFor(DEFAULT_WIRING, 'dependency')).toBe('flow');
-    expect(relationArrangeFor(DEFAULT_WIRING, 'member-of')).toBe('contain');
-    expect(relationArrangeFor(DEFAULT_WIRING, 'evidence')).toBe('none');
-    expect(relationArrangeFor(DEFAULT_WIRING, 'unknown')).toBe('none');
-    const g = layoutGraphOf(nodesOf(), DEFAULT_WIRING);
+    expect(relationArrangeFor(SIM_WIRING, 'dependency')).toBe('flow');
+    expect(relationArrangeFor(SIM_WIRING, 'member-of')).toBe('contain');
+    expect(relationArrangeFor(SIM_WIRING, 'evidence')).toBe('none');
+    expect(relationArrangeFor(SIM_WIRING, 'unknown')).toBe('none');
+    const g = layoutGraphOf(nodesOf(), SIM_WIRING);
     expect(g.parentOf.get('t-build')).toBe('m1');
     expect(g.flow.length).toBeGreaterThan(0);
     const bare = layoutGraphOf(nodesOf(), EMPTY_WIRING);
@@ -47,10 +47,10 @@ describe('layout graph', () => {
   });
 
   it('the signature ignores everything but ids and layout-shaping relations', () => {
-    const a = layoutGraphOf(nodesOf(), DEFAULT_WIRING).signature;
+    const a = layoutGraphOf(nodesOf(), SIM_WIRING).signature;
     const restated = nodesOf().map((n) => ({ ...n, state: { value: 'something-else' }, label: 'x', attention: [{ cause: 'c' }] }));
-    expect(layoutGraphOf(restated, DEFAULT_WIRING).signature).toBe(a);
-    expect(layoutGraphOf(withNewTask(nodesOf()), DEFAULT_WIRING).signature).not.toBe(a);
+    expect(layoutGraphOf(restated, SIM_WIRING).signature).toBe(a);
+    expect(layoutGraphOf(withNewTask(nodesOf()), SIM_WIRING).signature).not.toBe(a);
   });
 
   it('contain cycles are withheld, never followed', () => {
@@ -58,7 +58,7 @@ describe('layout graph', () => {
       id, kind: 'k', state: { value: 's' }, relations: [{ type: 'member-of', target: id === 'a' ? 'b' : 'a' }],
       capabilities: [], attention: [], artifacts: [],
     }));
-    const g = layoutGraphOf(cyc, DEFAULT_WIRING);
+    const g = layoutGraphOf(cyc, SIM_WIRING);
     expect(g.parentOf.size).toBe(0);
     expect(g.withheld).toEqual(['a', 'b']);
     expect(fallbackLayout(g).size).toBe(2);
@@ -141,19 +141,19 @@ describe('P1: no-overlap invariant and fresh-pass determinism', () => {
   ];
 
   it('fallback layout: no two leaves, sibling groups or foreign leaf/group pairs overlap', () => {
-    for (const [label, nodes] of graphs) assertNoOverlaps(buildScene(nodes, DEFAULT_WIRING), label);
+    for (const [label, nodes] of graphs) assertNoOverlaps(buildScene(nodes, SIM_WIRING), label);
   });
 
   it('layered layout (ELK in-thread): same invariant', async () => {
     for (const [label, nodes] of graphs) {
-      const pos = await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING));
-      assertNoOverlaps(buildScene(nodes, DEFAULT_WIRING, new Map(), pos), label);
+      const pos = await inThreadElk().layout(layoutGraphOf(nodes, SIM_WIRING));
+      assertNoOverlaps(buildScene(nodes, SIM_WIRING, new Map(), pos), label);
     }
   });
 
   it('a fresh pass is deterministic: the same snapshot lays out identically twice', async () => {
     const nodes = nodesOf();
-    const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const graph = layoutGraphOf(nodes, SIM_WIRING);
     expect(fallbackLayout(graph)).toEqual(fallbackLayout(graph));
     const a = await inThreadElk().layout(graph);
     const b = await inThreadElk().layout(graph);
@@ -171,8 +171,8 @@ describe('component packing', () => {
       mk(`m${m}-a`, [{ type: 'member-of', target: `m${m}` }]),
       mk(`m${m}-b`, [{ type: 'member-of', target: `m${m}` }, { type: 'dependency', target: `m${m}-a` }]),
     ]).flat();
-    for (const pos of [fallbackLayout(layoutGraphOf(nodes, DEFAULT_WIRING)), await inThreadElk().layout(layoutGraphOf(nodes, DEFAULT_WIRING))]) {
-      const scene = buildScene(nodes, DEFAULT_WIRING, new Map(), pos);
+    for (const pos of [fallbackLayout(layoutGraphOf(nodes, SIM_WIRING)), await inThreadElk().layout(layoutGraphOf(nodes, SIM_WIRING))]) {
+      const scene = buildScene(nodes, SIM_WIRING, new Map(), pos);
       const top = scene.groups.filter((g) => g.depth === 0);
       expect(new Set(top.map((g) => Math.round(g.x))).size).toBeGreaterThan(1);
       for (const a of top) for (const b of top) if (a !== b) expect(overlaps(a, b), `${a.id}/${b.id}`).toBe(false);
@@ -182,7 +182,7 @@ describe('component packing', () => {
 
 describe('contain groups in the scene', () => {
   it('a contain parent becomes a labelled group box around its members; the nesting replaces its edges', () => {
-    const scene = buildScene(nodesOf(), DEFAULT_WIRING);
+    const scene = buildScene(nodesOf(), SIM_WIRING);
     const m1 = scene.groups.find((g) => g.id === 'm1')!;
     expect(m1.name).toBe(normalFixture().missions.find((m) => m.id === 'm1')!.name);
     expect(m1.members).toContain('t-build');
@@ -195,7 +195,7 @@ describe('contain groups in the scene', () => {
   });
 
   it('user drags win over computed positions, and the group follows its members', () => {
-    const scene = buildScene(nodesOf(), DEFAULT_WIRING, new Map([['t-build', { x: 5000, y: 4000 }]]));
+    const scene = buildScene(nodesOf(), SIM_WIRING, new Map([['t-build', { x: 5000, y: 4000 }]]));
     expect(scene.layout.nodes.get('t-build')).toMatchObject({ x: 5000, y: 4000 });
     const m1 = scene.groups.find((g) => g.id === 'm1')!;
     expect(m1.x + m1.w).toBeGreaterThanOrEqual(5000 + 200);
@@ -205,10 +205,10 @@ describe('contain groups in the scene', () => {
 describe('ELK provider (in-thread)', () => {
   it('lays out the compound graph: every leaf placed, groups of different parents do not overlap', async () => {
     const nodes = nodesOf();
-    const graph = layoutGraphOf(nodes, DEFAULT_WIRING);
+    const graph = layoutGraphOf(nodes, SIM_WIRING);
     const pos = await inThreadElk().layout(graph);
     expect(new Set(pos.keys())).toEqual(new Set(leafIds(graph)));
-    const scene = buildScene(nodes, DEFAULT_WIRING, new Map(), pos);
+    const scene = buildScene(nodes, SIM_WIRING, new Map(), pos);
     const top = scene.groups.filter((g) => g.depth === 0);
     for (const a of top) for (const b of top) if (a !== b) expect(overlaps(a, b), `${a.id}/${b.id}`).toBe(false);
     const boxes = [...scene.layout.nodes.values()];
@@ -217,10 +217,10 @@ describe('ELK provider (in-thread)', () => {
 
   it('an added node barely moves the existing ones (interactive hints + per-component stabilization)', async () => {
     const s = createLayoutState({ loadProvider: async () => inThreadElk() });
-    s.update(layoutGraphOf(nodesOf(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(nodesOf(), SIM_WIRING));
     await s.settled();
     const before = s.positions();
-    s.update(layoutGraphOf(withNewTask(nodesOf()), DEFAULT_WIRING));
+    s.update(layoutGraphOf(withNewTask(nodesOf()), SIM_WIRING));
     await s.settled();
     const after = s.positions();
     expect(after.has('t-new')).toBe(true);
@@ -241,11 +241,11 @@ describe('layout state: signature cache, fallback, stale results', () => {
   it('the same snapshot re-sent recomputes nothing and moves nothing', async () => {
     const c = counting();
     const s = createLayoutState({ loadProvider: c.loadProvider });
-    s.update(layoutGraphOf(nodesOf(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(nodesOf(), SIM_WIRING));
     await s.settled();
     expect(s.source()).toBe('layered');
     const first = s.positions();
-    for (let i = 0; i < 3; i++) s.update(layoutGraphOf(nodesOf(), DEFAULT_WIRING));
+    for (let i = 0; i < 3; i++) s.update(layoutGraphOf(nodesOf(), SIM_WIRING));
     await s.settled();
     expect(c.calls).toHaveLength(1);
     expect(s.positions()).toBe(first);
@@ -254,10 +254,10 @@ describe('layout state: signature cache, fallback, stale results', () => {
   it('a topology change keeps existing nodes in place at once, then re-lays out with hints', async () => {
     const c = counting();
     const s = createLayoutState({ loadProvider: c.loadProvider });
-    s.update(layoutGraphOf(nodesOf(), DEFAULT_WIRING));
+    s.update(layoutGraphOf(nodesOf(), SIM_WIRING));
     await s.settled();
     const before = s.positions();
-    s.update(layoutGraphOf(withNewTask(nodesOf()), DEFAULT_WIRING));
+    s.update(layoutGraphOf(withNewTask(nodesOf()), SIM_WIRING));
     const interim = s.positions();
     for (const [id, q] of before) expect(interim.get(id)).toEqual(q);
     expect(interim.has('t-new')).toBe(true);
@@ -267,7 +267,7 @@ describe('layout state: signature cache, fallback, stale results', () => {
 
   it('without the layered engine (load fails) the fallback stands', async () => {
     const s = createLayoutState({ loadProvider: () => Promise.reject(new Error('no worker')) });
-    const graph = layoutGraphOf(nodesOf(), DEFAULT_WIRING);
+    const graph = layoutGraphOf(nodesOf(), SIM_WIRING);
     s.update(graph);
     await s.settled();
     expect(s.source()).toBe('fallback');
@@ -285,8 +285,8 @@ describe('layout state: signature cache, fallback, stale results', () => {
       },
     };
     const s = createLayoutState({ loadProvider: async () => slow });
-    s.update(layoutGraphOf(nodesOf(), DEFAULT_WIRING));
-    s.update(layoutGraphOf(withNewTask(nodesOf()), DEFAULT_WIRING));
+    s.update(layoutGraphOf(nodesOf(), SIM_WIRING));
+    s.update(layoutGraphOf(withNewTask(nodesOf()), SIM_WIRING));
     await s.settled();
     release();
     await new Promise((r) => setTimeout(r, 0));
@@ -296,7 +296,7 @@ describe('layout state: signature cache, fallback, stale results', () => {
   it('over the size limit only the fallback runs', async () => {
     const c = counting();
     const s = createLayoutState({ loadProvider: c.loadProvider, maxNodes: 10 });
-    s.update(layoutGraphOf(projectNodes(largeFixture()), DEFAULT_WIRING));
+    s.update(layoutGraphOf(projectNodes(largeFixture()), SIM_WIRING));
     await s.settled();
     expect(c.calls).toHaveLength(0);
     expect(s.source()).toBe('fallback');

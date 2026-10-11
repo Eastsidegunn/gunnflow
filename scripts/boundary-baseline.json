@@ -8,7 +8,7 @@
   },
   "domain-vocabulary": {
     "apps/bff/src/direct-upstream.ts": 1,
-    "apps/web/src/App.tsx": 5,
+    "apps/web/src/App.tsx": 4,
     "apps/web/src/canvas/layout.ts": 2,
     "apps/web/src/model/normalize.ts": 5,
     "apps/web/src/model/selectors.ts": 11,

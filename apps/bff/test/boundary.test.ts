@@ -134,10 +134,9 @@ describe('boundary lint (A1–A3)', () => {
         'apps/web/test/fixtures.ts': "import { normalFixture } from '@gunnflow-testing/fake-contracts';\n",
         'apps/web/src/thing.test.ts': "import { normalFixture } from '@gunnflow-testing/fake-contracts';\n",
         'testing/fake-contracts/src/index.ts': "import type { Intent } from '@gunnflow/contract';\n",
-        // Domain words in tests, the catalog and the default wiring are fine; a catalog key is not an action.
+        // Domain words in tests and the catalog are fine; a catalog key is not an action.
         'apps/web/test/x.test.ts': "if (kind === 'task') submit({ action: 'task.pause' });\n",
         'apps/web/src/i18n/en.ts': "export const en = { 'gate.send': 'Send' };\n",
-        'apps/web/src/wiring/defaultWiring.ts': "export const w = { actions: { 'task.pause': {} } };\n",
         'apps/web/src/Label.tsx': "export const L = () => t('session.pause') + t('inspector.gates');\n",
       },
       (lint) => expect(run(lint)).toContain('boundary-lint OK'),
@@ -159,6 +158,8 @@ describe('boundary lint (A1–A3)', () => {
   it('flags domain vocabulary in the core', () => {
     for (const [file, source] of <Array<[string, string]>>[
       ['apps/web/src/a.ts', "submit({ nodeId, action: 'gate.approve' });\n"],
+      // The engine's default wiring is core too: the simulator's words live in the simulator's wiring.
+      ['apps/web/src/wiring/defaultWiring.ts', "export const w = { actions: { 'task.pause': {} } };\n"],
       ['apps/web/src/b.ts', "if (node.kind === 'mission') open();\n"],
       ['apps/web/src/c.ts', "if ('deliverable' !== n.kind) return;\n"],
       ['apps/web/src/d.ts', 'const all = projection.tasks.length;\n'],
