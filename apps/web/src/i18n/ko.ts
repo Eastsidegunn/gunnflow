@@ -50,6 +50,7 @@ export const ko: Messages = {
 
   'term.toggle': '터미널',
   'term.title': '터미널',
+  'term.resize': '터미널 도크 높이 조절 (↑ ↓)',
   'term.loading': '터미널 목록을 불러오는 중…',
   'term.unsupported': '이 백엔드는 터미널을 제공하지 않는다.',
   'term.listFailed': '터미널 목록을 받지 못했다: {reason}',
@@ -67,6 +68,9 @@ export const ko: Messages = {
   'term.closeFailed': '끝내지 못했다: {reason}',
   'term.back': '← 터미널',
   'term.end': '터미널 끝내기',
+  'term.detach': '분리',
+  'term.openHere.one': '여기서 열림',
+  'term.openHere.other': '여기서 {count}개 열림',
   'term.status.connecting': '연결 중…',
   'term.status.live': '연결됨',
   'term.status.retrying': '연결이 끊김 — 다시 잇는 중…',

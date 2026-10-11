@@ -37,6 +37,7 @@ import {
 } from '../state/decisionInbox.js';
 import { isTypingTarget, matchesKey, resolveKey } from '../state/keybindings.js';
 import { escStack } from '../state/escStack.js';
+import { dock } from '../state/dock.js';
 import { glyphChar, toneColor } from '../canvas/tokens.js';
 import { resolveParts } from '../canvas/parts.js';
 import { keyOwnerFocus, manageFocus } from './focusScope.js';
@@ -327,6 +328,7 @@ export function DecisionInbox(props: {
         ref={(el) => {
           rootEl = el;
           onCleanup(manageFocus(el));
+          onCleanup(dock.registerRight(el));
         }}
       >
         <header class="inbox-header">

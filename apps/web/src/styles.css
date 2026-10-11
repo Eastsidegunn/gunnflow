@@ -4,6 +4,21 @@
   color-scheme: dark;
   /* The bottom status line's height: non-modal overlays stop above it so it stays reachable. */
   --status-strip-height: 36px;
+  /* The toolbar row: it holds every top-level toggle, and no dock reaches over it. */
+  --top-bar-height: 48px;
+  /* The dock rule (state/dock.ts): open docks' insets, set on .shell; what floats stands clear of them. */
+  --dock-bottom: 0px;
+  --dock-right: 0px;
+  /* Stacking order, the only place it is decided (lowest first). The docks in the flow need none. */
+  --z-canvas-chrome: 5;   /* panels and banners drawn over the canvas */
+  --z-stage: 6;           /* the node stage (right dock, inside the canvas area) */
+  --z-canvas-float: 20;   /* banners and popovers anchored in the canvas or work area */
+  --z-drawer: 50;         /* the decision inbox (right dock, over the work area) */
+  --z-menu: 60;           /* the radial canvas menu */
+  --z-toast: 70;          /* toasts: above the docks, placed clear of them */
+  --z-popover: 80;        /* the notifications list: above the docks, placed clear of them */
+  --z-modal: 90;          /* modal placeholders */
+  --z-settings: 100;      /* the settings overlay */
 }
 
 * { box-sizing: border-box; }
@@ -41,7 +56,7 @@ input {
 /* Header: brand + search only (48px); actions live in the context menu. */
 .toolbar {
   display: flex; align-items: center; gap: 10px;
-  height: 48px; padding: 0 14px; box-sizing: border-box;
+  height: var(--top-bar-height); flex-shrink: 0; padding: 0 14px; box-sizing: border-box;
   border-bottom: 1px solid var(--border);
 }
 .workspace-search {
@@ -391,7 +406,7 @@ input {
 /* Modals */
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(5, 7, 9, 0.6);
-  display: grid; place-content: center; z-index: 20;
+  display: grid; place-content: center; z-index: var(--z-modal);
 }
 .modal {
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -401,14 +416,21 @@ input {
 .privileged-note { color: var(--blocked); }
 
 /* Toasts (upstream rejections, verbatim) */
-.toasts { position: fixed; bottom: 52px; right: 16px; display: grid; gap: 8px; z-index: 30; }
-/* Notification centre (design decision 2026-10-02): a top-right toggle carrying the count; the list opens under it. */
-.notification-center { position: fixed; top: 8px; right: 14px; z-index: 40; }
+/* Toasts stand clear of the open docks: above the bottom dock, left of the right dock. */
+.toasts {
+  position: fixed; display: grid; gap: 8px; z-index: var(--z-toast);
+  bottom: calc(var(--status-strip-height) + var(--dock-bottom) + 16px); right: calc(var(--dock-right) + 16px);
+}
+/* Notification centre (design decision 2026-10-02): a toggle in the toolbar carrying the count; the list
+   opens under the toolbar, clear of the docks (left of an open right dock, above the bottom dock). */
+.notification-center { position: relative; }
 .notification-center > button { display: inline-flex; align-items: center; gap: 6px; }
 .notification-center > button.alerting { border-color: var(--gate); color: var(--gate); }
 .notification-center .count { background: var(--gate); color: #14100a; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 7px; }
 .notifications-panel {
-  position: absolute; right: 0; top: 40px; width: 320px; max-height: 60vh; overflow-y: auto;
+  position: fixed; z-index: var(--z-popover); width: 320px; overflow-y: auto;
+  top: calc(var(--top-bar-height) + 4px); right: calc(var(--dock-right) + 14px);
+  max-height: min(60vh, calc(100vh - var(--top-bar-height) - var(--status-strip-height) - var(--dock-bottom) - 16px));
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px;
   animation: gf-enter-top var(--duration-moderate01) var(--ease-entrance) both;
@@ -448,7 +470,7 @@ input {
 /* Generic node panel (assembly × capabilities) */
 .generic-panel {
   position: absolute; left: 16px; bottom: 16px; width: 320px; max-height: 60%; overflow: auto;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; z-index: 5;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; z-index: var(--z-canvas-chrome);
 }
 .generic-panel header { display: flex; justify-content: space-between; align-items: center; }
 .generic-panel h2 { margin: 0; font-size: 15px; }
@@ -478,9 +500,9 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 .personal-text { white-space: pre-wrap; font-size: 12px; margin: 4px 0; color: var(--text); }
 .personal-source { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .personal-panel input { width: 100%; box-sizing: border-box; }
-.personal-connect-banner { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 20; background: var(--panel); border: 1px solid var(--personal); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--personal); display: flex; gap: 10px; align-items: center; }
+.personal-connect-banner { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: var(--z-canvas-float); background: var(--panel); border: 1px solid var(--personal); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--personal); display: flex; gap: 10px; align-items: center; }
 /* Settings: an overlay panel over the cockpit — the canvas stays visible behind. */
-.settings-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(6, 9, 13, 0.62); display: flex; align-items: center; justify-content: center; }
+.settings-overlay { position: fixed; inset: 0; z-index: var(--z-settings); background: rgba(6, 9, 13, 0.62); display: flex; align-items: center; justify-content: center; }
 .settings-panel { position: relative; width: min(1240px, 94vw); height: min(860px, 90vh); background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55); display: grid; grid-template-columns: 168px 1fr; overflow: hidden; }
 .settings-close { position: absolute; top: 10px; right: 12px; z-index: 2; width: 28px; height: 28px; padding: 0; background: transparent; border-color: transparent; color: var(--subtext); font-size: 14px; }
 .settings-close:hover { color: var(--text); border-color: var(--border); }
@@ -591,7 +613,7 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 .field-label { font-size: 11px; color: var(--subtext); }
 
 /* Radial canvas menu: a ring at the cursor; hold-drag highlights, release runs. */
-.radial-menu { position: fixed; z-index: 60; width: 2px; height: 2px; margin: -1px; pointer-events: none; }
+.radial-menu { position: fixed; z-index: var(--z-menu); width: 2px; height: 2px; margin: -1px; pointer-events: none; }
 .radial-menu > * { pointer-events: auto; }
 .radial-hub { pointer-events: none !important; }
 .radial-menu[data-motion='enter'] { animation: gf-scale-in var(--duration-fast02) var(--ease-entrance) both; }
@@ -618,7 +640,7 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 
 /* Rewire armed: the state lives on the canvas now that the toolbar has no toggle. */
 .rewire-banner {
-  position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 20;
+  position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: var(--z-canvas-float);
   background: var(--panel); border: 1px solid var(--pending); border-radius: 8px;
   padding: 6px 10px; font-size: 12px; color: var(--pending);
 }
@@ -633,7 +655,7 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
   /* An overlay over the canvas area: opening it never reflows the canvas, so a
      double-click's two hits share one coordinate space; the canvas pans the
      selected node clear of this region instead. */
-  position: absolute; top: 0; right: 0; bottom: 0; z-index: 6;
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-stage);
   width: 40%; min-width: 360px; max-width: 620px; min-height: 0;
   display: flex; flex-direction: column; overflow: hidden;
   border-left: 1px solid var(--border); background: var(--panel);
@@ -672,17 +694,18 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 }
 .node-detail-item[data-emphasis='config'] > .field-label { color: var(--accent); }
 
-/* ---- 결정함 (decision inbox): top-right toggle + wide right drawer over the dimmed canvas. */
-.decision-inbox-toggle { position: fixed; top: 8px; right: 84px; z-index: 40; }
+/* ---- 결정함 (decision inbox): a toggle in the toolbar + wide right drawer over the dimmed canvas. */
 .decision-inbox-toggle > button { display: inline-flex; align-items: center; gap: 6px; }
 .decision-inbox-toggle > button.alerting { border-color: var(--gate); color: var(--gate); }
 .decision-inbox-toggle .count, .inbox-header .count {
   background: var(--gate); color: #14100a; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 7px;
 }
 /* Non-modal (S3): the dimmed canvas left of the drawer keeps taking pointer input; only the drawer catches it. */
-/* The drawer is non-modal: it and its dim stop above the status line, which stays visible and usable
-   (connection state, refresh, the language switch) while the inbox is open. */
-.inbox-scrim { position: fixed; inset: 0 0 var(--status-strip-height) 0; z-index: 50; background: rgba(5, 7, 9, 0.35); pointer-events: none; }
+/* The drawer is non-modal: it and its dim sit between the toolbar and the bottom dock (or the status line),
+   which stay visible and usable (toggles, the terminal, connection state, the language switch). */
+.inbox-scrim {
+  position: fixed; z-index: var(--z-drawer);
+  inset: var(--top-bar-height) 0 calc(var(--status-strip-height) + var(--dock-bottom)) 0; background: rgba(5, 7, 9, 0.35); pointer-events: none; }
 .inbox-scrim[data-motion='enter'] { animation: gf-fade-in var(--duration-moderate01) var(--ease-entrance) both; }
 .inbox-scrim[data-motion='exit'] { animation: gf-fade-out var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
 .decision-inbox {
@@ -744,7 +767,7 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
    floating element over the strip-less work surface, present only when a
    decision-inbox queue was carried in. */
 .work-queue {
-  position: absolute; top: 10px; right: 16px; z-index: 30;
+  position: absolute; top: 10px; right: 16px; z-index: var(--z-canvas-float);
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 11.5px; color: var(--subtext);
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
@@ -851,7 +874,7 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 .zoom-ladder .zoom-current { position: absolute; right: 0; width: 14px; height: 2px; background: var(--accent); transform: translateY(50%); transition: bottom var(--duration-fast01) var(--ease-standard); }
 
 /* Nested-link chip popover (GF-E): the relations between a node and its own containers, verbatim. */
-.nested-popover { position: absolute; z-index: 30; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.nested-popover { position: absolute; z-index: var(--z-canvas-float); display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
 .nested-popover button { text-align: left; background: transparent; border-color: transparent; color: var(--text, #e6e6e6); white-space: nowrap; }
 
 
@@ -892,17 +915,22 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
 .now-view-note.warn { color: var(--gate); font-style: normal; }
 .now-calm-notes { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 0; }
 
-/* Terminal panel (GF-T1): a backend terminal drawn by xterm.js; the panel closes by its button (Esc is the shell's). */
+/* Terminal panel (GF-T1): a backend terminal drawn by xterm.js; the panel closes by its button (Esc is the shell's).
+   GF-T3: the bottom dock — full width in the flow above the status line, its height inline (state/dock.ts). */
 .term-panel {
-  position: fixed; top: 52px; right: 12px; bottom: 40px; width: min(760px, calc(100vw - 24px)); z-index: 40;
-  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border);
-  border-radius: 8px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28); overflow: hidden;
+  position: relative; flex-shrink: 0;
+  display: flex; flex-direction: column; background: var(--panel); border-top: 1px solid var(--border);
 }
+.term-toggle[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+.dock-handle {
+  position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: ns-resize; touch-action: none;
+}
+.dock-handle:hover, .dock-handle:focus-visible { background: var(--accent); opacity: 0.6; outline: none; }
 .term-head, .term-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
 .term-head { border-bottom: 1px solid var(--border); }
 .term-foot { border-top: 1px solid var(--border); font-size: 12px; }
 .term-head .spacer, .term-foot .spacer { flex: 1; }
-.term-list { padding: 10px; overflow: auto; }
+.term-list { flex: 1; min-height: 0; padding: 10px; overflow: auto; }
 .term-list ul { list-style: none; margin: 0 0 12px; padding: 0; }
 .term-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .term-row .term-label { flex: 1; }

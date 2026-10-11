@@ -113,23 +113,25 @@ describe('terminals over the direct wire', () => {
     expect(after.terminals.map((t) => t.terminalId)).toEqual(['term-build']);
   });
 
-  it('joins an attachable terminal; exited input is 409; unknown ids are 404; a refused open carries the reason', async () => {
+  it('joining an attachable opens a new terminal; exited input is 409; unknown ids are 404; a refused open carries the reason', async () => {
     const { bff } = await wired();
     const joined = await post(`${bff}/api/terminals`, { target: { attach: 'term-build' }, cols: 80, rows: 24 });
-    expect(await joined.json()).toEqual({ terminalId: 'term-build' });
+    expect(await joined.json()).toEqual({ terminalId: 'view-1' });
+    // The target id names what to join, not a terminal.
+    expect((await post(`${bff}/api/terminals/term-build/input`, { bytesBase64: b64('x') })).status).toBe(404);
     const refused = await post(`${bff}/api/terminals`, { target: { attach: 'nope' }, cols: 80, rows: 24 });
     expect(refused.status).toBe(422);
-    expect(await refused.json()).toEqual({ reason: 'no such terminal' });
+    expect(await refused.json()).toEqual({ reason: 'no such session' });
 
     expect((await post(`${bff}/api/terminals/nope/input`, { bytesBase64: b64('x') })).status).toBe(404);
     expect((await post(`${bff}/api/terminals/nope/resize`, { cols: 80, rows: 24 })).status).toBe(404);
     expect((await fetch(`${bff}/api/terminals/nope`, { method: 'DELETE' })).status).toBe(404);
     expect((await watch(bff, 'nope')).status).toBe(404);
 
-    await post(`${bff}/api/terminals/term-build/input`, { bytesBase64: b64('exit\r') });
-    const ended = await watch(bff, 'term-build');
+    await post(`${bff}/api/terminals/view-1/input`, { bytesBase64: b64('exit\r') });
+    const ended = await watch(bff, 'view-1');
     await until(() => ended.state.events.join(',') === 'snapshot,exit');
-    expect((await post(`${bff}/api/terminals/term-build/input`, { bytesBase64: b64('x') })).status).toBe(409);
+    expect((await post(`${bff}/api/terminals/view-1/input`, { bytesBase64: b64('x') })).status).toBe(409);
   });
 
   it('a dropped wire stream reconnects underneath: the viewer gets a fresh snapshot, then live output again', async () => {

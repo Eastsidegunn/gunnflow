@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { base64ToBytes, bytesToBase64, encodeInput, INPUT_CHUNK_BYTES } from '../src/transport/terminalClient.js';
-import { terminalsForNode } from '../src/state/terminalPanel.js';
+import { foldAttached, terminalsForNode } from '../src/state/terminalPanel.js';
+import { CHROME_HEIGHT, DOCK_MIN_HEIGHT, WORK_MIN_HEIGHT, clampDockHeight, defaultDockHeight } from '../src/state/dock.js';
 import { en } from '../src/i18n/en.js';
 import { ko } from '../src/i18n/ko.js';
 
@@ -32,6 +33,40 @@ describe('terminal panel (GF-T1)', () => {
     expect(terminalsForNode(list, 'n1').map((x) => x.terminalId)).toEqual(['a']);
     expect(terminalsForNode({ ok: false, unsupported: true, reason: 'x' }, 'n1')).toEqual([]);
     expect(terminalsForNode(null, 'n1')).toEqual([]);
+  });
+
+  it('folds the terminals this viewer opened by attaching under their target (GF-T4)', () => {
+    const target = { terminalId: 's1', label: 'Console', kind: 'attachable' as const, state: 'running' as const, nodeId: 'n1' };
+    const mine = { ...target, terminalId: 'v1' };
+    const theirs = { ...target, terminalId: 'v9' };
+    const orphan = { ...target, terminalId: 'v5', nodeId: 'n2' };
+    const shell = { terminalId: 'sh', label: 'shell', kind: 'shell' as const, state: 'running' as const };
+    const attached = new Map([
+      ['v1', 's1'],
+      ['v5', 'gone-target'],
+    ]);
+    // Mine folds under its target; one whose target is not listed, and one this viewer did not open, stay.
+    expect(foldAttached([target, mine, theirs, orphan, shell], attached).map((x) => [x.terminalId, x.openHere])).toEqual([
+      ['s1', 1],
+      ['v9', 0],
+      ['v5', 0],
+      ['sh', 0],
+    ]);
+    const list = { ok: true as const, terminals: [target, mine] };
+    expect(terminalsForNode(list, 'n1', attached).map((x) => x.terminalId)).toEqual(['s1']);
+    // With no record (another viewer's, or a reload elsewhere) the list is shown as is.
+    expect(terminalsForNode(list, 'n1').map((x) => x.terminalId)).toEqual(['s1', 'v1']);
+  });
+
+  it('the bottom dock keeps a usable terminal and a usable work area above it (GF-T3)', () => {
+    // 900px window: toolbar + status line take CHROME_HEIGHT, the work area keeps WORK_MIN_HEIGHT.
+    const max = 900 - CHROME_HEIGHT - WORK_MIN_HEIGHT;
+    expect(clampDockHeight(10, 900)).toBe(DOCK_MIN_HEIGHT);
+    expect(clampDockHeight(5000, 900)).toBe(max);
+    expect(clampDockHeight(300.4, 900)).toBe(300);
+    expect(defaultDockHeight(900)).toBe(360);
+    // A window too short for both: the terminal keeps its minimum.
+    expect(clampDockHeight(400, 300)).toBe(DOCK_MIN_HEIGHT);
   });
 
   it('every terminal string exists in English and Korean', () => {

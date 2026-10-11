@@ -6,7 +6,8 @@
  * (and Enter / canvas double-click) descends to the node's ③ work surface.
  */
 import { FRAME_NODE_EVENT } from '../canvas/zoomLadder.js';
-import { For, Show, createEffect, createMemo } from 'solid-js';
+import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
+import { dock } from '../state/dock.js';
 import type { WorkspaceStores } from '../state/stores.js';
 import { resolveParts } from '../canvas/parts.js';
 import { writeAffordance } from '../state/capabilities.js';
@@ -49,7 +50,7 @@ export function NodeStage(props: {
       {(_) => {
         const v = () => ({ n: node()!, r: resolved()! });
         return (
-          <aside class="node-stage" data-motion={props.motion ?? 'enter'} data-testid="node-stage" data-node={v().n.id} aria-label={t('stage.label', { node: v().n.label ?? v().n.id })} onDblClick={onStageDblClick}>
+          <aside class="node-stage" data-motion={props.motion ?? 'enter'} data-testid="node-stage" data-node={v().n.id} aria-label={t('stage.label', { node: v().n.label ?? v().n.id })} onDblClick={onStageDblClick} ref={(el) => onCleanup(dock.registerRight(el))}>
             {/* Keyed on the node: picking another node keeps the stage in place and crossfades its content. */}
             <Show when={props.nodeId} keyed>
               {(_key) => (
@@ -95,7 +96,7 @@ export function NodeStage(props: {
                     <DomainQuickSection nodeId={v().n.id} />
                     <PersonalNoteSection personal={props.stores.personal} nodeId={v().n.id} />
                     <NodeActions stores={props.stores} node={v().n} resolved={v().r} />
-                    <For each={terminalsForNode(terminalPanel.list(), v().n.id)}>
+                    <For each={terminalsForNode(terminalPanel.list(), v().n.id, terminalPanel.attached())}>
                       {(x) => (
                         <div class="actions">
                           <button data-testid={`stage-open-terminal-${x.terminalId}`} onClick={() => terminalPanel.show(x)}>

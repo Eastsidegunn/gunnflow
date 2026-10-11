@@ -55,6 +55,7 @@ export const en = {
 
   'term.toggle': 'Terminals',
   'term.title': 'Terminals',
+  'term.resize': 'Resize the terminal dock (↑ ↓)',
   'term.loading': 'Loading terminals…',
   'term.unsupported': 'This backend serves no terminals.',
   'term.listFailed': 'Could not list terminals: {reason}',
@@ -72,6 +73,9 @@ export const en = {
   'term.closeFailed': 'Could not end: {reason}',
   'term.back': '← Terminals',
   'term.end': 'End terminal',
+  'term.detach': 'Detach',
+  'term.openHere.one': 'open here',
+  'term.openHere.other': 'open here ×{count}',
   'term.status.connecting': 'Connecting…',
   'term.status.live': 'Connected',
   'term.status.retrying': 'Connection lost — reconnecting…',
