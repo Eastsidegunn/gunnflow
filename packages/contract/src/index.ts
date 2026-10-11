@@ -61,4 +61,12 @@ export {
   type SemVer,
 } from './validate.js';
 export { digestOfBody, sha256Hex, utf8Bytes } from './digest.js';
-export { DIRECT_WIRE, type DirectSnapshot } from './wire.js';
+export {
+  DIRECT_WIRE,
+  TERMINAL_SIZE_MAX,
+  directTerminalProblem,
+  isWireBase64,
+  type DirectSnapshot,
+  type DirectTerminal,
+  type DirectTerminalOpen,
+} from './wire.js';

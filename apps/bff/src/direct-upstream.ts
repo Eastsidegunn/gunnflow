@@ -22,6 +22,7 @@ import {
   type UpstreamUnsupported,
   type WorkspaceUpstream,
 } from '@gunnflow/upstream-port';
+import { directTerminals } from './direct-terminals.js';
 import { SseDecoder } from './sse.js';
 
 const NOT_ON_WIRE = (surface: string): UpstreamUnsupported => ({
@@ -80,6 +81,7 @@ export async function createDirectUpstream(
     const stray = s.sessions.find((x) => x.taskId !== taskId);
     return stray ? `session '${stray.id}' carries taskId '${stray.taskId}', not the requested '${taskId}'` : null;
   };
+  const terminals = directTerminals(base, { reconnectMs });
   let wake: (() => void) | null = null;
   const setConnected = (connected: boolean) => {
     if (status.connected === connected) return;
@@ -308,8 +310,16 @@ export async function createDirectUpstream(
     terminalSnapshot: () => NOT_ON_WIRE('terminal'),
     subscribeTerminal: () => NOT_ON_WIRE('terminal'),
     subscribeStream: () => NOT_ON_WIRE('stream channel'),
+    // Interactive terminals: WIRE.md §terminals, 404/501 → unsupported.
+    listTerminals: terminals.listTerminals,
+    openTerminal: terminals.openTerminal,
+    subscribeTerminalOutput: terminals.subscribeTerminalOutput,
+    terminalInput: terminals.terminalInput,
+    terminalResize: terminals.terminalResize,
+    closeTerminal: terminals.closeTerminal,
     close() {
       closed = true;
+      terminals.close();
       abort.abort();
       for (const a of executionAborts) a.abort();
       executionAborts.clear();

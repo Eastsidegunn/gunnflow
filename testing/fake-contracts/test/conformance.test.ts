@@ -14,6 +14,8 @@ import {
   FakeWorkspaceStream,
   NullIntentRelay,
   buildExecutionFixture,
+  createFakeUpstream,
+  upstreamTerminalDriver,
   fakePtyBuffer,
   fakePtyFeed,
   projectNodes,
@@ -22,7 +24,7 @@ import {
 } from '../src/index.js';
 import { detailOf } from '../src/details.js';
 
-function simulatorTarget(): ConformanceTarget {
+async function simulatorTarget(): Promise<ConformanceTarget> {
   // The normal scenario with the optional node decorations, so the suite checks them too.
   const workspace = new FakeWorkspaceStream(viewsFixture());
   const relay = new NullIntentRelay(workspace);
@@ -56,7 +58,9 @@ function simulatorTarget(): ConformanceTarget {
       const make = FAKE_EXECUTIONS[taskId];
       return make ? toExecutionSnapshot(make()) : undefined;
     },
-    features: { edit: true, streams: true },
+    features: { edit: true, streams: true, terminals: true },
+    // The simulator's echo shells, in process (the direct-wire run lives in the BFF tests).
+    terminals: await upstreamTerminalDriver(createFakeUpstream('normal'), { shellCwd: '/conformance' }),
     nodes,
     snapshot: () => {
       const p = workspace.current();

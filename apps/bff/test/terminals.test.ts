@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { base64ToBytes, bytesToBase64, createFakeUpstream } from '@gunnflow-testing/fake-contracts';
-import type { WorkspaceUpstream } from '@gunnflow/upstream-port';
+import type { UpstreamTerminalEvent, WorkspaceUpstream } from '@gunnflow/upstream-port';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/server.js';
 
@@ -158,5 +158,49 @@ describe('terminal relay (upstream-port 0.2.0)', () => {
       { method: 'DELETE', url: '/api/terminals/x' },
     ] as const;
     for (const c of calls) expect((await app.inject(c)).statusCode).toBe(501);
+  });
+
+  it('backpressure: a viewer that stops reading is dropped past the high-water mark, and the upstream is released', async () => {
+    let listener: ((e: UpstreamTerminalEvent) => void) | null = null;
+    let released = false;
+    const upstream: WorkspaceUpstream = {
+      ...createFakeUpstream('normal'),
+      subscribeTerminalOutput: (_id, l) => {
+        listener = l;
+        l({ type: 'snapshot', bytesBase64: '' });
+        return () => {
+          released = true;
+        };
+      },
+    };
+    const app = buildServer({ upstream });
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    open = app;
+    const a = app.server.address();
+    const res = await fetch(`http://127.0.0.1:${typeof a === 'object' && a ? a.port : 0}/api/terminals/x/output`);
+    expect(res.status).toBe(200);
+    // Never read the body: everything written piles up in the BFF's socket buffer.
+    const chunk = bytesToBase64(new Uint8Array(48 * 1024));
+    for (let i = 0; i < 64 && !released; i++) {
+      listener!({ type: 'data', bytesBase64: chunk });
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    expect(released).toBe(true);
+    await res.body?.cancel().catch(() => undefined);
+  });
+
+  it('an upstream `end` closes the viewer stream without an exit frame', async () => {
+    const upstream: WorkspaceUpstream = {
+      ...createFakeUpstream('normal'),
+      subscribeTerminalOutput: (_id, l) => {
+        l({ type: 'snapshot', bytesBase64: b64('kept') });
+        setTimeout(() => l({ type: 'end', reason: 'gone' }), 10);
+        return () => undefined;
+      },
+    };
+    const out = await readOutput(buildServer({ upstream }), 'x', () => false);
+    const { text, events } = await out.next();
+    expect(events).toEqual(['snapshot']);
+    expect(text).toBe('kept');
   });
 });

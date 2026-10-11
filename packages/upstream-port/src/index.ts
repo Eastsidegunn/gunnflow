@@ -24,6 +24,8 @@ export interface UpstreamUnsupported {
 
 export type Unsubscribe = () => void;
 
+type MaybePromise<T> = T | Promise<T>;
+
 /**
  * Thrown by `nodeDetail` when the upstream turns out not to serve the detail
  * surface at all (the direct wire answering 501). Distinct from `undefined`,
@@ -104,22 +106,27 @@ export interface WorkspaceUpstream {
   /**
    * Interactive terminals (0.2.0, optional as a set). The upstream is a dumb
    * pipe for bytes it already runs; neither it nor the BFF interprets them.
-   * Missing methods = the surface is unsupported (the BFF answers 501).
+   * Missing methods = the surface is unsupported (the BFF answers 501). An
+   * upstream that only learns at call time (the direct wire answering 404/501)
+   * returns UpstreamUnsupported instead, also answered with 501. Transport or
+   * wire failure rejects (the BFF answers a reasoned 502).
    */
-  listTerminals?(): UpstreamTerminal[] | Promise<UpstreamTerminal[]>;
-  openTerminal?(request: UpstreamTerminalOpen): UpstreamTerminalOpened | Promise<UpstreamTerminalOpened>;
+  listTerminals?(): MaybePromise<UpstreamTerminal[] | UpstreamUnsupported>;
+  openTerminal?(request: UpstreamTerminalOpen): MaybePromise<UpstreamTerminalOpened | UpstreamUnsupported>;
   /**
    * Output as byte chunks. The first event is always a `snapshot` of what the
-   * upstream retains, so a reconnecting viewer starts from it; `exit` is last.
-   * `undefined` = no such terminal (the BFF answers 404).
+   * upstream retains, so a reconnecting viewer starts from it; a later
+   * `snapshot` (the upstream reconnected underneath) restarts the screen the
+   * same way. `exit` or `end` is last. `undefined` = no such terminal (the BFF
+   * answers 404).
    */
   subscribeTerminalOutput?(
     terminalId: string,
     listener: (event: UpstreamTerminalEvent) => void,
-  ): Unsubscribe | undefined;
-  terminalInput?(terminalId: string, bytesBase64: string): UpstreamTerminalAck | Promise<UpstreamTerminalAck>;
-  terminalResize?(terminalId: string, cols: number, rows: number): UpstreamTerminalAck | Promise<UpstreamTerminalAck>;
-  closeTerminal?(terminalId: string): UpstreamTerminalAck | Promise<UpstreamTerminalAck>;
+  ): MaybePromise<Unsubscribe | undefined | UpstreamUnsupported>;
+  terminalInput?(terminalId: string, bytesBase64: string): MaybePromise<UpstreamTerminalAck | UpstreamUnsupported>;
+  terminalResize?(terminalId: string, cols: number, rows: number): MaybePromise<UpstreamTerminalAck | UpstreamUnsupported>;
+  closeTerminal?(terminalId: string): MaybePromise<UpstreamTerminalAck | UpstreamUnsupported>;
 }
 
 /**
@@ -143,10 +150,17 @@ export interface UpstreamTerminalOpen {
 
 export type UpstreamTerminalOpened = { ok: true; terminalId: string } | { ok: false; reason: string };
 
+/**
+ * `end` = the upstream stopped carrying output without an exit it knows of:
+ * the terminal is gone (`gone`), the surface turned out unsupported
+ * (`unsupported`), or this upstream client closed (`closed`). Not a fact about
+ * the process — the BFF drops the viewer's stream and the viewer re-asks.
+ */
 export type UpstreamTerminalEvent =
   | { type: 'snapshot'; bytesBase64: string }
   | { type: 'data'; bytesBase64: string }
-  | { type: 'exit'; code: number | null };
+  | { type: 'exit'; code: number | null }
+  | { type: 'end'; reason: 'gone' | 'unsupported' | 'closed' };
 
 /** `unknown` = no such terminal (404); `exited` = it no longer takes input (409). */
 export type UpstreamTerminalAck = { ok: true } | { ok: false; reason: 'unknown' | 'exited' };

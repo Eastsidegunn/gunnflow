@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { UpstreamTerminalEvent } from '@gunnflow/upstream-port';
+import type { UpstreamTerminal, UpstreamTerminalEvent } from '@gunnflow/upstream-port';
 import { base64ToBytes, bytesToBase64, createFakeUpstream } from '../src/index.js';
 
 const b64 = (s: string) => bytesToBase64(new TextEncoder().encode(s));
 const text = (events: UpstreamTerminalEvent[]) =>
-  events.map((e) => (e.type === 'exit' ? `<exit ${e.code}>` : new TextDecoder().decode(base64ToBytes(e.bytesBase64)))).join('');
+  events
+    .map((e) =>
+      e.type === 'exit' ? `<exit ${e.code}>` : e.type === 'end' ? `<end ${e.reason}>` : new TextDecoder().decode(base64ToBytes(e.bytesBase64)),
+    )
+    .join('');
 
 describe('simulator terminals (upstream-port 0.2.0)', () => {
   it('lists the attachable console bound to a node', () => {
@@ -58,6 +62,6 @@ describe('simulator terminals (upstream-port 0.2.0)', () => {
     up.subscribeTerminalOutput!('shell-1', (e) => events.push(e));
     expect(await up.closeTerminal!('shell-1')).toEqual({ ok: true });
     expect(events.at(-1)).toEqual({ type: 'exit', code: null });
-    expect((await up.listTerminals!()).map((t) => t.terminalId)).toEqual(['term-build']);
+    expect(((await up.listTerminals!()) as UpstreamTerminal[]).map((t) => t.terminalId)).toEqual(['term-build']);
   });
 });

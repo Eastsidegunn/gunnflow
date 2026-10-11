@@ -83,6 +83,13 @@ six methods are optional; leave them out and every terminal route answers 501.
 | `terminalResize(id, cols, rows)` | the viewer's size (1–1000) | `POST /api/terminals/:id/resize` |
 | `closeTerminal(id)` | end it | `DELETE /api/terminals/:id` |
 
+Any method may also answer `UpstreamUnsupported` when support is only learned at call time (the
+direct wire's `/terminals` answering 404/501): the BFF answers 501. A rejection is a reasoned 502.
+`subscribeTerminalOutput` may resolve asynchronously, may send a later `snapshot` (it reconnected
+underneath: the screen restarts), and may finish with `end { reason }` instead of `exit` — the BFF
+then closes the viewer's stream without an exit frame. The built-in direct upstream maps all six
+onto WIRE.md §터미널.
+
 Acks are `{ ok: true }` or `{ ok: false, reason: 'unknown' | 'exited' }` (404 / 409). Bytes travel
 base64; neither the BFF nor the cockpit interprets them. Until remote authentication exists the BFF
 takes the steering routes (open, input, resize, close) from loopback callers only, and refuses a

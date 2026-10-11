@@ -8,10 +8,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   DIRECT_WIRE,
+  TERMINAL_SIZE_MAX,
+  isWireBase64,
   lookupCapability,
   validateExecutionSnapshot,
   validateIntent,
   type DirectSnapshot,
+  type DirectTerminalOpen,
   type ExecutionSnapshot,
   type NodeProjection,
 } from '@gunnflow/contract';
@@ -27,6 +30,8 @@ export interface FakeDirectServer {
   restart(downMs: number, fixture?: FixtureName): Promise<void>;
   /** Test control: append N synthetic events to a task's execution stream (in-process, not wire). */
   burstExecution(taskId: string, count: number): void;
+  /** Test control: cut every open terminal output stream without an exit (a dropped connection). */
+  dropTerminalStreams(): void;
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -45,9 +50,12 @@ function json(res: ServerResponse, status: number, body: unknown) {
 }
 
 export async function startFakeDirectServer(
-  options: { port?: number; host?: string; fixture?: FixtureName } = {},
+  options: { port?: number; host?: string; fixture?: FixtureName; terminals?: boolean } = {},
 ): Promise<FakeDirectServer> {
   const upstream = createFakeUpstream(options.fixture ?? 'normal');
+  const terminalsServed = options.terminals !== false;
+  /** Open terminal output streams, for the dropTerminalStreams test control. */
+  const terminalStreams = new Set<ServerResponse>();
   const snapshot = (): DirectSnapshot => {
     const e = upstream.snapshot();
     return { revision: e.revision, nodes: (e.body as { nodes: NodeProjection[] }).nodes };
@@ -60,6 +68,85 @@ export async function startFakeDirectServer(
     const checked = validateExecutionSnapshot(toExecutionSnapshot(rich));
     if (!checked.ok) throw new Error(`fake execution snapshot fails the contract: ${checked.problems.join('; ')}`);
     return checked.snapshot;
+  };
+
+  // WIRE.md §terminals: the simulator's echo shells, bytes as base64 verbatim.
+  // `terminals: false` serves none (404 on the collection, 501 per terminal).
+  const serveTerminals = async (req: IncomingMessage, res: ServerResponse, path: string) => {
+    if (!terminalsServed) {
+      return json(res, path === DIRECT_WIRE.terminals ? 404 : 501, { reason: 'terminals are not served on this wire' });
+    }
+    const ack = (a: { ok: true } | { ok: false; reason: 'unknown' | 'exited' }) => {
+      if (a.ok) return void res.writeHead(204).end();
+      return a.reason === 'unknown' ? json(res, 404, { reason: 'no such terminal' }) : json(res, 409, { reason: 'the terminal has exited' });
+    };
+    if (path === DIRECT_WIRE.terminals) {
+      if (req.method === 'GET') return json(res, 200, await upstream.listTerminals!());
+      if (req.method === 'POST') {
+        const body = (await readJson(req)) as DirectTerminalOpen | undefined;
+        const size = (n: unknown) => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= TERMINAL_SIZE_MAX;
+        const target = body?.target as Record<string, unknown> | undefined;
+        const shell = target?.shell as { cwd?: unknown } | undefined;
+        const wellFormed =
+          body && size(body.cols) && size(body.rows) && target &&
+          ((typeof target.attach === 'string' && target.attach) || typeof shell?.cwd === 'string');
+        if (!wellFormed) return json(res, 400, { reason: 'malformed terminal request' });
+        const opened = await upstream.openTerminal!(body);
+        if ('unsupported' in opened) return json(res, 501, { reason: opened.unsupported });
+        return opened.ok ? json(res, 200, { terminalId: opened.terminalId }) : json(res, 422, { reason: opened.reason });
+      }
+      return json(res, 405, { reason: 'method not allowed' });
+    }
+    const m = /^\/terminals\/([^/]+)(\/stream|\/input|\/resize)?$/.exec(path);
+    if (!m) return json(res, 404, { reason: 'not on the direct wire' });
+    const id = decodeURIComponent(m[1]!);
+    const op = m[2];
+    if (op === '/stream' && req.method === 'GET') {
+      let open = false;
+      const early: string[] = [];
+      const E = DIRECT_WIRE.terminalEvents;
+      const unsubscribe = await upstream.subscribeTerminalOutput!(id, (e) => {
+        if (e.type === 'end') return void res.end();
+        const frame =
+          e.type === 'exit'
+            ? `event: ${E.exit}\ndata: ${JSON.stringify({ code: e.code })}\n\n`
+            : `event: ${E[e.type]}\ndata: ${e.bytesBase64}\n\n`;
+        if (open) res.write(frame);
+        else early.push(frame);
+        if (e.type === 'exit') setImmediate(() => res.end());
+      });
+      if (!unsubscribe) return json(res, 404, { reason: 'no such terminal' });
+      if (typeof unsubscribe !== 'function') return json(res, 501, { reason: unsubscribe.unsupported });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+      open = true;
+      for (const f of early) res.write(f);
+      const keepalive = setInterval(() => res.write(': keepalive\n\n'), 15_000);
+      terminalStreams.add(res);
+      req.on('close', () => {
+        terminalStreams.delete(res);
+        unsubscribe();
+        clearInterval(keepalive);
+      });
+      return;
+    }
+    if (op === '/input' && req.method === 'POST') {
+      const data = ((await readJson(req)) as { data?: unknown } | undefined)?.data;
+      if (!isWireBase64(data)) return json(res, 400, { reason: 'malformed terminal input' });
+      const a = await upstream.terminalInput!(id, data);
+      return 'unsupported' in a ? json(res, 501, { reason: a.unsupported }) : ack(a);
+    }
+    if (op === '/resize' && req.method === 'POST') {
+      const body = (await readJson(req)) as { cols?: unknown; rows?: unknown } | undefined;
+      const size = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= TERMINAL_SIZE_MAX;
+      if (!size(body?.cols) || !size(body?.rows)) return json(res, 400, { reason: 'malformed terminal size' });
+      const a = await upstream.terminalResize!(id, body.cols as number, body.rows as number);
+      return 'unsupported' in a ? json(res, 501, { reason: a.unsupported }) : ack(a);
+    }
+    if (op === undefined && req.method === 'DELETE') {
+      const a = await upstream.closeTerminal!(id);
+      return 'unsupported' in a ? json(res, 501, { reason: a.unsupported }) : ack(a);
+    }
+    return json(res, 405, { reason: 'method not allowed' });
   };
 
   const server = createServer((req, res) => {
@@ -123,6 +210,9 @@ export async function startFakeDirectServer(
         if (!snap) return json(res, 404, { reason: 'no execution for this task' });
         return json(res, 200, snap);
       }
+      if (path === DIRECT_WIRE.terminals || path.startsWith(`${DIRECT_WIRE.terminals}/`)) {
+        return await serveTerminals(req, res, path);
+      }
       const artifact = req.method === 'GET' ? /^\/artifact\/([^/]+)\/([^/]+)$/.exec(path) : null;
       if (artifact) {
         const snap = upstream.artifactSnapshot?.(decodeURIComponent(artifact[1]!), decodeURIComponent(artifact[2]!));
@@ -162,6 +252,10 @@ export async function startFakeDirectServer(
     url: `http://${host}:${port}`,
     loadFixture: (name) => upstream.loadFixture(name),
     burstExecution: (taskId, count) => upstream.burstExecution(taskId, count),
+    dropTerminalStreams() {
+      for (const r of terminalStreams) r.destroy();
+      terminalStreams.clear();
+    },
     close: () =>
       new Promise((resolve) => {
         server.closeAllConnections();

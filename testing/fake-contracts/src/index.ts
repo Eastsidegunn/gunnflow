@@ -6,6 +6,7 @@ export * from './relay.js';
 export * from './execution.js';
 export * from './terminal.js';
 export * from './shellTerminal.js';
+export * from './terminalDriver.js';
 export * from './streams.js';
 export * from './upstreamAdapter.js';
 export * from './details.js';

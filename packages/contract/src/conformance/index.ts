@@ -17,7 +17,7 @@ import {
   validateNodeDetail,
 } from '../validate.js';
 import { digestOfBody, utf8Bytes } from '../digest.js';
-import type { DirectSnapshot } from '../wire.js';
+import { directTerminalProblem, isWireBase64, type DirectSnapshot, type DirectTerminalOpen } from '../wire.js';
 
 /** A node exactly as the backend projects it. */
 export type ConformanceNode = NodeProjection;
@@ -28,6 +28,36 @@ export interface ConformanceStream {
   close(): void;
 }
 
+/** One frame of GET /terminals/:id/stream, bytes still base64. */
+export type ConformanceTerminalEvent =
+  | { type: 'snapshot' | 'data'; bytesBase64: string }
+  | { type: 'exit'; code: number | null };
+
+export interface ConformanceTerminalOutput {
+  /** Frames received so far, in arrival order. */
+  readonly events: readonly ConformanceTerminalEvent[];
+  close(): void;
+}
+
+/** 204 → 'ok', 404 → 'unknown', 409 → 'exited'. */
+export type ConformanceTerminalAck = 'ok' | 'unknown' | 'exited';
+
+export interface ConformanceTerminals {
+  list(): Promise<readonly unknown[]> | readonly unknown[];
+  /** POST /terminals: the opened id, or the backend's refusal reason (422). */
+  open(request: DirectTerminalOpen): Promise<{ terminalId: string } | { refused: string }>;
+  /** GET /terminals/:id/stream; undefined = 404. */
+  output(terminalId: string): Promise<ConformanceTerminalOutput | undefined>;
+  input(terminalId: string, bytesBase64: string): Promise<ConformanceTerminalAck>;
+  resize(terminalId: string, cols: number, rows: number): Promise<ConformanceTerminalAck>;
+  close(terminalId: string): Promise<ConformanceTerminalAck>;
+  /**
+   * A folder in which the backend opens a shell, for the shell checks. Without
+   * it the suite joins the first running attachable terminal and sends no input.
+   */
+  shellCwd?: string;
+}
+
 export interface ConformanceTarget {
   /** Contract version the backend claims to implement. */
   contractVersion: string;
@@ -35,7 +65,7 @@ export interface ConformanceTarget {
    * Features the backend claims. A claimed feature with nothing to test
    * against fails instead of being skipped.
    */
-  features?: { edit?: boolean; streams?: boolean };
+  features?: { edit?: boolean; streams?: boolean; terminals?: boolean };
   /** Nodes as the backend projects them. */
   nodes(): Promise<readonly ConformanceNode[]> | readonly ConformanceNode[];
   /**
@@ -52,6 +82,12 @@ export interface ConformanceTarget {
   detail?(nodeId: string): Promise<NodeDetail | undefined> | NodeDetail | undefined;
   /** Optional execution surface: the backend's GET /execution body for a task, undefined = no execution (404). */
   execution?(taskId: string): Promise<ExecutionSnapshot | undefined> | ExecutionSnapshot | undefined;
+  /**
+   * Optional interactive terminals (WIRE.md §terminals), driven the way the
+   * wire is: list, open, output, input, resize, close. Absent = the backend
+   * serves no terminals (404/501) and nothing is checked.
+   */
+  terminals?: ConformanceTerminals;
   streams?: {
     open(nodeId: string, streamId: string, lastSeenSeq: number | null): ConformanceStream;
     /** Test driver: have the backend emit `count` chunks. */
@@ -340,6 +376,78 @@ export function defineConformanceSuite(
       if (head!.type === 'append') expect(head!.chunks[0]!.seq).toBe(lastSeen + 1);
       expect(streamSequenceProblem(resumed.events)).toBeNull();
       resumed.close();
+    });
+
+    it('terminals: well-formed list, snapshot first on every connection, base64 bytes, honest acks for unknown and closed terminals', async (ctx) => {
+      const t = await makeTarget();
+      const term = t.terminals;
+      if (!term) {
+        expect(t.features?.terminals, 'backend claims terminals but provides no terminal driver').not.toBe(true);
+        return ctx.skip();
+      }
+      const listed = await term.list();
+      for (const [i, entry] of listed.entries()) expect(directTerminalProblem(entry), `list element ${i}`).toBeNull();
+      const ids = listed.map((e) => (e as { terminalId: string }).terminalId);
+      expect(new Set(ids).size, 'terminal ids are unique').toBe(ids.length);
+
+      const attachable = listed.find(
+        (e) => (e as { kind: string }).kind === 'attachable' && (e as { state: string }).state === 'running',
+      ) as { terminalId: string } | undefined;
+      const target: DirectTerminalOpen['target'] | null =
+        term.shellCwd !== undefined ? { shell: { cwd: term.shellCwd } } : attachable ? { attach: attachable.terminalId } : null;
+      if (!target) {
+        expect(t.features?.terminals, 'backend claims terminals but offers none to join and no shell folder').not.toBe(true);
+        return ctx.skip();
+      }
+      const opened = await term.open({ target, cols: 80, rows: 24 });
+      if ('refused' in opened) throw new Error(`open refused: ${opened.refused}`);
+      const id = opened.terminalId;
+      expect(typeof id === 'string' && id.length > 0, 'open answers a terminalId').toBe(true);
+      if ('shell' in target) {
+        const after = (await term.list()).map((e) => (e as { terminalId: string }).terminalId);
+        expect(after, 'an opened shell is listed').toContain(id);
+      }
+
+      const waitFor = async (cond: () => boolean, label: string) => {
+        const end = Date.now() + 3000;
+        while (!cond()) {
+          if (Date.now() > end) throw new Error(`timed out: ${label}`);
+          await new Promise((r) => setTimeout(r, 10));
+        }
+      };
+      const checkBytes = (events: readonly ConformanceTerminalEvent[]) => {
+        for (const e of events) if (e.type !== 'exit') expect(isWireBase64(e.bytesBase64), 'chunk is base64').toBe(true);
+      };
+
+      const first = await term.output(id);
+      expect(first, 'the opened terminal has an output stream').toBeDefined();
+      await waitFor(() => first!.events.length > 0, 'first output frame');
+      expect(first!.events[0]!.type, 'first frame of a connection').toBe('snapshot');
+      expect(await term.resize(id, 100, 30)).toBe('ok');
+      if ('shell' in target) {
+        expect(await term.input(id, 'IA==')).toBe('ok'); // one space
+      }
+      // A second connection (a reconnect) starts from the retained output again.
+      const second = await term.output(id);
+      await waitFor(() => (second?.events.length ?? 0) > 0, 'reconnect snapshot');
+      expect(second!.events[0]!.type, 'first frame of a reconnect').toBe('snapshot');
+      checkBytes(first!.events);
+      checkBytes(second!.events);
+      second!.close();
+
+      const ghost = `conformance-no-such-terminal-${key()}`;
+      expect(await term.input(ghost, 'IA=='), 'input to an unknown terminal').toBe('unknown');
+      expect(await term.resize(ghost, 80, 24), 'resize of an unknown terminal').toBe('unknown');
+      expect(await term.output(ghost), 'output of an unknown terminal').toBeUndefined();
+
+      if ('shell' in target) {
+        expect(await term.close(id)).toBe('ok');
+        await waitFor(() => first!.events.some((e) => e.type === 'exit'), 'exit after close');
+        const exitAt = first!.events.findIndex((e) => e.type === 'exit');
+        expect(exitAt, 'exit is the last frame').toBe(first!.events.length - 1);
+        expect(['unknown', 'exited'], 'input after close').toContain(await term.input(id, 'IA=='));
+      }
+      first!.close();
     });
   });
 }

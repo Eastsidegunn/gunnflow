@@ -14,6 +14,12 @@
 | `GET /detail/:nodeId` | 선택 | — | `200 application/json` `NodeDetail` / `404` / `501` |
 | `GET /execution/:taskId` | 선택 | — | `200 application/json` `ExecutionSnapshot` / `404` / `501` |
 | `GET /execution/:taskId/stream` | 선택 | `Accept: text/event-stream` | `200 text/event-stream`, `snapshot` 이벤트 / `404` / `501` |
+| `GET /terminals` | 선택(묶음) | — | `200 application/json` `DirectTerminal[]` / `404`·`501` = 미제공 |
+| `POST /terminals` | 선택(묶음) | `application/json` `DirectTerminalOpen` | `200` `{ terminalId }` / `422` `{ reason }` / `404`·`501` = 미제공 |
+| `GET /terminals/:id/stream` | 선택(묶음) | `Accept: text/event-stream` | `200 text/event-stream`, `snapshot`·`data`·`exit` / `404` / `501` |
+| `POST /terminals/:id/input` | 선택(묶음) | `application/json` `{ data: base64 }` | `204` / `404` / `409` / `501` |
+| `POST /terminals/:id/resize` | 선택(묶음) | `application/json` `{ cols, rows }` | `204` / `404` / `409` / `501` |
+| `DELETE /terminals/:id` | 선택(묶음) | — | `204` / `404` / `409` / `501` |
 
 ```ts
 interface DirectSnapshot { revision: number; nodes: NodeProjection[] }   // 계약 타입 그대로
@@ -112,6 +118,51 @@ interface ExecutionSnapshot { sessions: ExecutionSession[]; events: ExecutionEve
 - 각 `snapshot` 프레임은 `GET /execution/:taskId`와 같은 구조·한도
   (`EXECUTION_MAX_*`, 창 허용과 `truncatedBefore` 포함)를 지켜야 한다.
 - `404`/`501` 규칙은 `GET /execution/:taskId`와 동일하다.
+
+## 터미널 (선택, 여섯 경로가 한 묶음)
+
+백엔드가 **이미 돌리는** 대화형 터미널을 cockpit 패널로 잇는 표면이다. 백엔드와 BFF 모두
+바이트를 해석하지 않는다 — bytes는 표준 base64(패딩 포함, 줄바꿈 없음, `isWireBase64`)로만
+오가고, BFF는 받은 base64 문자열을 디코딩·재인코딩 없이 그대로 나른다.
+
+```ts
+interface DirectTerminal {
+  terminalId: string;                 // 비어 있지 않음, 경로에는 encodeURIComponent로
+  label: string;                      // 백엔드 어휘 그대로
+  kind: 'attachable' | 'shell';       // attachable = 이미 돌고 있어 합류 가능, shell = 요청으로 연 것
+  state: 'running' | 'exited';
+  nodeId?: string;                    // 스냅샷의 노드에 묶임
+}
+interface DirectTerminalOpen {
+  target: { attach: string } | { shell: { cwd: string } };
+  cols: number; rows: number;         // 정수 1..1000 (TERMINAL_SIZE_MAX)
+}
+```
+
+- **미제공**: `GET /terminals`·`POST /terminals`가 `404`/`501`이면, 또는 어느 터미널 경로든
+  `501`이면 그 기능은 미제공이다. BFF는 매 호출마다 묻고(래치 없음 — 재기동한 백엔드가
+  터미널을 새로 제공하면 바로 보인다) cockpit에 `501`로 **명시**한다. 나머지 wire는 그대로 동작한다.
+- `GET /terminals` → 배열. 원소는 `directTerminalProblem`을 통과해야 한다(미지 키 거부).
+  통과 못 하면 BFF는 `502` + 사유로 끊는다.
+- `POST /terminals` → `200 { terminalId }`. 열기를 거절하면(없는 attach id, 끝난 터미널,
+  허용하지 않는 폴더 등) `422 { reason }` — `reason`은 사람에게 그대로 보인다.
+- `GET /terminals/:id/stream` (SSE, `/stream`과 같은 프레이밍):
+  - `event: snapshot` — `data:`는 백엔드가 보존한 출력 전체의 base64(비었으면 빈 `data:`).
+    **연결마다 첫 프레임**이다. 재접속한 뷰어는 화면을 이것으로 다시 시작한다.
+  - `event: data` — `data:`는 새 출력 조각의 base64 그대로(JSON 아님).
+  - `event: exit` — `data:`는 JSON `{ "code": 정수 | null }`. 마지막 프레임이고, 백엔드는 이어서
+    연결을 닫는다. 이미 끝난 터미널에 붙으면 `snapshot` 다음 바로 `exit`.
+  - 다른 이벤트 이름은 무시된다. 형식이 깨진 프레임은 그 연결을 끊게 하고, 재접속의 `snapshot`이 재동기화다.
+  - 없는 터미널은 `404`. 연결은 뷰어마다 하나다(BFF는 팬아웃하지 않는다).
+- `POST /terminals/:id/input` `{ data }`, `POST /terminals/:id/resize` `{ cols, rows }`,
+  `DELETE /terminals/:id` → `204`. 없는 터미널 `404`, 끝나서 입력을 받지 않으면 `409`.
+  `DELETE`는 백엔드가 그 터미널을 끝내게 한다(열린 stream에는 `exit`).
+- **BFF 쪽 운반 규칙**: stream이 `exit` 없이 끊기면 BFF가 재접속하고, 새 연결의 첫 `snapshot`을
+  뷰어에게 그대로 넘긴다(화면 재시작). 재접속이 `404`면 터미널이 사라진 것 — BFF는 뷰어 연결을
+  `exit` 프레임 **없이** 닫는다(사라졌다는 사실을 끝남으로 꾸미지 않는다). 백프레셔: 뷰어가 1 MiB 넘게
+  못 받아가면 BFF가 그 뷰어 연결을 끊고, 뷰어는 재접속해 `snapshot`부터 다시 그린다 — 느린 화면은
+  다시 그리기로 끝나고 BFF 메모리는 한정된다.
+- 조종(열기·입력·크기·닫기)은 cockpit 쪽에서 이 기기(loopback)에서만 받는다. 백엔드는 자기 인증을 따로 가져도 된다.
 
 ## Gunnflow 쪽 연결
 
