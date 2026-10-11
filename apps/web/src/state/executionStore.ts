@@ -12,6 +12,7 @@ import type {
   SessionProjection,
 } from '../model/executionTypes.js';
 import type { IntentResult } from '../model/types.js';
+import { msg, raw, tm, type Msg } from '../i18n/index.js';
 
 /** Window retention (§17): cap the in-memory tail; identity of kept events intact. */
 export const EVENT_WINDOW = 5000;
@@ -33,7 +34,9 @@ export function createExecutionStore(post: PostSessionIntent) {
   const [connection, setConnection] = createSignal<'connecting' | 'live' | 'lost' | 'unsupported' | 'none'>('connecting');
   const [lastEventAt, setLastEventAt] = createSignal<number | null>(null);
   const [pendingControls, setPendingControls] = createSignal<readonly SessionIntent[]>([]);
-  const [controlError, setControlError] = createSignal<string | null>(null);
+  // A received rejection reason verbatim, or the engine's own statement (translated when read).
+  const [controlErrorMsg, setControlError] = createSignal<Msg | null>(null);
+  const controlError = (): string | null => tm(controlErrorMsg());
 
   const reconcilePending = (session: SessionProjection) => {
     setPendingControls((p) =>
@@ -96,14 +99,16 @@ export function createExecutionStore(post: PostSessionIntent) {
     async submitControl(intent: SessionIntent): Promise<IntentResult> {
       setPendingControls((p) => [...p, intent]);
       let result: IntentResult;
+      let failure: Msg | null = null;
       try {
         result = await post(intent);
       } catch (err) {
-        result = { accepted: false, reason: `relay unreachable: ${String(err)}` };
+        failure = msg('transport.relayUnreachable', { error: String(err) });
+        result = { accepted: false, reason: tm(failure) };
       }
       if (!result.accepted) {
         setPendingControls((p) => p.filter((x) => x !== intent));
-        setControlError(result.reason ?? 'rejected');
+        setControlError(failure ?? (result.reason !== undefined ? raw(result.reason) : msg('execution.controlRejected')));
       } else if (intent.intent === 'session.fork') {
         // Fork resolves when the child session shows up; the fake upstream is
         // fast enough that we simply clear on acceptance here.

@@ -8,6 +8,7 @@
  */
 import { createSignal } from 'solid-js';
 import { sanitizeKeys } from '../state/keybindings.js';
+import { msg, raw, tm, type Msg } from '../i18n/index.js';
 
 export interface Prefs {
   /** Wheel zoom factor per notch (1.01..2). */
@@ -40,10 +41,12 @@ export function sanitizePrefs(raw: unknown): Prefs {
 
 export function createPrefsState() {
   const [prefs, setPrefs] = createSignal<Prefs>(DEFAULT_PREFS);
-  const [saveProblem, setSaveProblem] = createSignal<string | null>(null);
+  // Kept as a message (a received reason verbatim, or the engine's own text translated when read).
+  const [problem, setSaveProblem] = createSignal<Msg | null>(null);
   return {
     prefs,
-    saveProblem,
+    /** The last save problem in the current locale; null when the last save went through. */
+    saveProblem: (): string | null => tm(problem()),
     /** Loads once at boot; a missing store or failed fetch keeps the defaults. */
     async load(): Promise<Prefs> {
       try {
@@ -68,10 +71,10 @@ export function createPrefsState() {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { reason?: unknown } | null;
-          setSaveProblem(typeof body?.reason === 'string' ? body.reason : `prefs store answered ${res.status}`);
+          setSaveProblem(typeof body?.reason === 'string' ? raw(body.reason) : msg('prefs.storeAnswered', { status: res.status }));
         }
       } catch (err) {
-        setSaveProblem(err instanceof Error ? err.message : String(err));
+        setSaveProblem(raw(err instanceof Error ? err.message : String(err)));
       }
     },
   };

@@ -64,7 +64,6 @@ export const DEFAULT_THEME = {
     color: '#f472b6',
     fill: 'rgba(244,114,182,0.13)',
     text: '#fbe4f0',
-    label: 'personal',
     fold: 14,
     boxFill: 'rgba(244,114,182,0.045)',
     chip: 'rgba(80,28,56,0.92)',

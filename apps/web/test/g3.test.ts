@@ -2,6 +2,7 @@
 // human text, and generic parts that depend on capabilities (default wiring
 // over the simulator's generic nodes).
 import { describe, expect, it } from 'vitest';
+import { tm } from '../src/i18n/index.js';
 import { createRoot } from 'solid-js';
 import {
   FakeWorkspaceStream,
@@ -59,7 +60,7 @@ describe('evidence viewing condition (bound by artifact id)', () => {
   const evidenceToken = async (p: FakeWorkspaceProjection, id: string) => {
     const ref = p.deliverables.flatMap((d) => d.artifacts ?? []).find((a) => a.id === id)!;
     const fixed = await fixBase(ref, p.artifactSnapshots![id], [ref.mediaType]);
-    if (!fixed.ok) throw new Error(fixed.reason);
+    if (!fixed.ok) throw new Error(tm(fixed.reason));
     return markRendered(fixed.pinned, { isConnected: true, textContent: fixed.text })!;
   };
 

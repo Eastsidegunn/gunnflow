@@ -3,6 +3,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { tm } from '../src/i18n/index.js';
 import { createRoot } from 'solid-js';
 import { normalFixture, projectNodes } from '@gunnflow-testing/fake-contracts';
 import { createPersonalState } from '../src/personal/personalState.js';
@@ -41,21 +42,21 @@ describe('personal document schema (v2)', () => {
     expect(personalDocProblem(emptyPersonalDoc())).toBeNull();
     const link = { id: 'l1', from: { kind: 'box', id: 'b1' }, to: { kind: 'node', id: 't-build' }, label: 'owns', updatedAt: iso };
     expect(personalDocProblem(doc({ stickies: [sticky], boxes: [box], links: [link] }))).toBeNull();
-    expect(personalDocProblem(doc({ extra: 1 }))).toContain('unknown key');
-    expect(personalDocProblem({ ...emptyPersonalDoc(), version: 3 })).toContain('version');
-    expect(personalDocProblem(doc({ notes: { a: { text: 'x' } } }))).toContain("note 'a'");
-    expect(personalDocProblem(doc({ stickies: [sticky, sticky] }))).toContain('sticky id');
-    expect(personalDocProblem(doc({ stickies: [{ ...sticky, x: Infinity }] }))).toContain('rect');
-    expect(personalDocProblem(doc({ stickies: [{ ...sticky, w: 5 }] }))).toContain('rect');
-    expect(personalDocProblem(doc({ stickies: [{ ...sticky, kind: 'excalidraw' }] }))).toContain('kind');
-    expect(personalDocProblem(doc({ stickies: [{ ...sticky, intent: 'x' }] }))).toContain('sticky must be');
-    expect(personalDocProblem(doc({ boxes: [box, { ...box, id: 'b2' }] }))).toContain('more than one box');
-    expect(personalDocProblem(doc({ boxes: [{ ...box, members: [''] }] }))).toContain('member id');
+    expect(tm(personalDocProblem(doc({ extra: 1 })))).toContain('unknown key');
+    expect(tm(personalDocProblem({ ...emptyPersonalDoc(), version: 3 }))).toContain('version');
+    expect(tm(personalDocProblem(doc({ notes: { a: { text: 'x' } } })))).toContain("note 'a'");
+    expect(tm(personalDocProblem(doc({ stickies: [sticky, sticky] })))).toContain('sticky id');
+    expect(tm(personalDocProblem(doc({ stickies: [{ ...sticky, x: Infinity }] })))).toContain('rect');
+    expect(tm(personalDocProblem(doc({ stickies: [{ ...sticky, w: 5 }] })))).toContain('rect');
+    expect(tm(personalDocProblem(doc({ stickies: [{ ...sticky, kind: 'excalidraw' }] })))).toContain('kind');
+    expect(tm(personalDocProblem(doc({ stickies: [{ ...sticky, intent: 'x' }] })))).toContain('sticky must be');
+    expect(tm(personalDocProblem(doc({ boxes: [box, { ...box, id: 'b2' }] })))).toContain('more than one box');
+    expect(tm(personalDocProblem(doc({ boxes: [{ ...box, members: [''] }] })))).toContain('member id');
     // An early v2 box without members is normalized.
     const { members: _m, ...bare } = box;
     expect(personalDocProblem(migratePersonalDoc(doc({ boxes: [bare] })))).toBeNull();
     // A personal link end must exist; a node end may be gone (drawn broken).
-    expect(personalDocProblem(doc({ links: [{ ...link, from: { kind: 'box', id: 'nope' } }], boxes: [box] }))).toContain('end');
+    expect(tm(personalDocProblem(doc({ links: [{ ...link, from: { kind: 'box', id: 'nope' } }], boxes: [box] })))).toContain('end');
     expect(personalDocProblem(doc({ links: [{ ...link, to: { kind: 'node', id: 'long-gone' } }], boxes: [box] }))).toBeNull();
   });
 

@@ -2,6 +2,8 @@
    CSS variables before first render — this file only consumes them. */
 :root {
   color-scheme: dark;
+  /* The bottom status line's height: non-modal overlays stop above it so it stays reachable. */
+  --status-strip-height: 36px;
 }
 
 * { box-sizing: border-box; }
@@ -355,7 +357,7 @@ input {
 /* Bottom strip: a status line, not a panel */
 .status-strip {
   display: flex; align-items: center; gap: 18px;
-  height: 36px; padding: 0 14px;
+  height: var(--status-strip-height); padding: 0 14px;
   border-top: 1px solid var(--border);
   font-size: 12.5px; color: var(--subtext);
 }
@@ -367,6 +369,11 @@ input {
 .status-strip .lost { color: var(--gate); }
 .status-strip .unreachable { color: var(--gate); font-weight: 600; }
 .status-strip button { background: transparent; border-color: transparent; color: var(--subtext); }
+/* Interface language switch: a quiet corner control, the active locale in the text colour. */
+.status-strip .locale-switch { display: inline-flex; align-items: center; gap: 2px; }
+.status-strip .locale-switch button { padding: 2px 6px; font-size: 12px; }
+.status-strip .locale-switch button.active { color: var(--text); font-weight: 600; }
+.status-strip .locale-sep { opacity: 0.5; }
 .activity-tray {
   border-top: 1px solid var(--border);
   padding: 12px 14px; color: var(--subtext); font-size: 13px;
@@ -673,7 +680,9 @@ img.artifact-frame { min-height: 0; max-height: 240px; object-fit: contain; }
   background: var(--gate); color: #14100a; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 0 7px;
 }
 /* Non-modal (S3): the dimmed canvas left of the drawer keeps taking pointer input; only the drawer catches it. */
-.inbox-scrim { position: fixed; inset: 0; z-index: 50; background: rgba(5, 7, 9, 0.35); pointer-events: none; }
+/* The drawer is non-modal: it and its dim stop above the status line, which stays visible and usable
+   (connection state, refresh, the language switch) while the inbox is open. */
+.inbox-scrim { position: fixed; inset: 0 0 var(--status-strip-height) 0; z-index: 50; background: rgba(5, 7, 9, 0.35); pointer-events: none; }
 .inbox-scrim[data-motion='enter'] { animation: gf-fade-in var(--duration-moderate01) var(--ease-entrance) both; }
 .inbox-scrim[data-motion='exit'] { animation: gf-fade-out var(--duration-moderate01) var(--ease-exit) both; pointer-events: none; }
 .decision-inbox {

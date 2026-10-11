@@ -2,6 +2,7 @@
 import type { WorkspaceProjection } from '../model/types.js';
 import { countsReceived, normalizeNodes, normalizeProjection } from '../model/normalize.js';
 import type { ProjectionStore } from '../state/projectionStore.js';
+import { msg, msgOf, raw, type Msg } from '../i18n/index.js';
 
 interface Envelope {
   revision: number;
@@ -37,14 +38,14 @@ export function openWorkspaceStream(store: ProjectionStore, onProjection?: (p: W
  * Manual refresh, both legs: the BFF re-opens its upstream connection and
  * re-broadcasts, then the browser re-opens its own stream. A pull — reads only.
  */
-export async function refreshWorkspace(stream: WorkspaceStream): Promise<{ refreshed: boolean; reason?: string }> {
-  let result: { refreshed: boolean; reason?: string } = { refreshed: false, reason: 'refresh request failed' };
+export async function refreshWorkspace(stream: WorkspaceStream): Promise<{ refreshed: boolean; reason?: Msg }> {
+  let result: { refreshed: boolean; reason?: Msg } = { refreshed: false, reason: msg('transport.refreshFailed') };
   try {
     const res = await fetch('/api/workspace/refresh', { method: 'POST', signal: AbortSignal.timeout(8000) });
     const body = (await res.json().catch(() => null)) as { refreshed?: unknown; reason?: unknown } | null;
-    result = { refreshed: body?.refreshed === true, ...(typeof body?.reason === 'string' ? { reason: body.reason } : {}) };
+    result = { refreshed: body?.refreshed === true, ...(typeof body?.reason === 'string' ? { reason: raw(body.reason) } : {}) };
   } catch (err) {
-    result = { refreshed: false, reason: err instanceof Error ? err.message : String(err) };
+    result = { refreshed: false, reason: msgOf(err) };
   }
   stream.reconnect();
   return result;

@@ -4,12 +4,19 @@
  * at a use site: every lookup goes through resolveKey. Pure functions so the
  * resolution and matching are testable without a DOM.
  */
+import { t, type MessageKey } from '../i18n/index.js';
 
+/** Binding names and the catalog key of each one's user-facing description. */
 export const KEYBINDINGS = [
-  { name: 'open-decision-inbox', label: '결정함 열기/닫기' },
-  { name: 'inbox-next', label: '결정함 다음 항목' },
-  { name: 'inbox-prev', label: '결정함 이전 항목' },
-] as const;
+  { name: 'open-decision-inbox', labelKey: 'keys.openDecisionInbox' },
+  { name: 'inbox-next', labelKey: 'keys.inboxNext' },
+  { name: 'inbox-prev', labelKey: 'keys.inboxPrev' },
+] as const satisfies readonly { name: string; labelKey: MessageKey }[];
+
+/** A binding's description in the current locale. */
+export function bindingLabel(b: { labelKey: MessageKey }): string {
+  return t(b.labelKey);
+}
 
 export type BindingName = (typeof KEYBINDINGS)[number]['name'];
 

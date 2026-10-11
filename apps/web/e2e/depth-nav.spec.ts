@@ -105,7 +105,7 @@ test('right-edge node: a cold click lands on IT (Enter → its ③); a plain sel
     .toBeLessThanOrEqual(0);
 });
 
-test('② stage: Enter and the 들어가기 button are the same ③ entry', async ({ page }) => {
+test('② stage: Enter and the Open button are the same ③ entry', async ({ page }) => {
   await open(page, 'normal');
   await clickNode(page, 't-build');
   const stage = page.getByTestId('node-stage');

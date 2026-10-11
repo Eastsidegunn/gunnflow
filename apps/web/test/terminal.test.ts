@@ -2,6 +2,7 @@
 // PendingIntentState (local echo ≠ authoritative), unconfirmed inputs, kill
 // flow, audit attribution — against the TEST-ONLY fake PTY stream and feed.
 import { describe, expect, it } from 'vitest';
+import { tm } from '../src/i18n/index.js';
 import { createRoot } from 'solid-js';
 import {
   FakePtyStream,
@@ -12,7 +13,7 @@ import {
   normalFixture,
   type FakeTerminalIntent,
 } from '@gunnflow-testing/fake-contracts';
-import { GUARD_LABEL, stdinGuard } from '../src/state/terminalLogic.js';
+import { stdinGuard } from '../src/state/terminalLogic.js';
 import { createTerminalStore } from '../src/state/terminalStore.js';
 import { createPendingIntentState } from '../src/state/pendingIntents.js';
 import { fakeIntentAdapter } from '../src/state/fakeIntentAdapter.js';
@@ -107,7 +108,7 @@ describe('stdin through PendingIntentState (C)', () => {
     const sending = h.terminal.submitStdin('pnpm build');
     h.terminal.markLost();
     const [entry] = h.pending.inFlight();
-    expect(entry?.unconfirmed).toBe('connection lost');
+    expect(tm(entry?.unconfirmed)).toBe('connection lost');
     await sending;
     expect(h.pending.entries()).toHaveLength(0);
     h.dispose();

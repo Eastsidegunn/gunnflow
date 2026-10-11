@@ -13,6 +13,7 @@ import { editorSendState, fixBase, type DisplayToken } from '../state/editorLogi
 import { onRendered } from './renderedToken.js';
 import { isUndecided, type Draft, type PendingEntry } from '../state/pendingIntents.js';
 import { isSessionIntent } from '../model/types.js';
+import { t, tm, tn } from '../i18n/index.js';
 
 function intentOf(e: PendingEntry): Draft {
   return e.phase === 'composing' ? e.draft : e.intent;
@@ -94,22 +95,22 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
   return (
     <Show when={capEnabled() || entry() !== undefined}>
         <section class="editor-part" data-testid="editor-part">
-          <h3>Edit {edit()?.artifactId ?? (edit() ? 'new body' : 'artifact')}</h3>
+          <h3>{t('editor.title', { target: edit()?.artifactId ?? (edit() ? t('editor.newBody') : t('editor.artifact')) })}</h3>
           <Show when={!capEnabled()}>
             <p class="hint" data-testid="editor-capability-lost">
-              Edit capability is not enabled — existing entries stay readable; new edits and send are blocked.
+              {t('editor.capabilityLost')}
             </p>
           </Show>
           <Show when={edit()?.artifactId === null}>
-            <p class="hint" data-testid="editor-unsupported">New-body editing is not supported.</p>
+            <p class="hint" data-testid="editor-unsupported">{t('editor.unsupported')}</p>
           </Show>
           <Show when={edit()?.artifactId && base() === undefined}>
-            <p class="hint">Checking base…</p>
+            <p class="hint">{t('editor.checkingBase')}</p>
           </Show>
           <Show when={unpinnedReason()}>
             {(reason) => (
               <p class="hint" data-testid="editor-unpinnable">
-                Base cannot be pinned — {reason()}
+                {t('editor.unpinnable', { reason: reason() })}
               </p>
             )}
           </Show>
@@ -128,11 +129,11 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                 )}
               </Show>
               <Show when={saved()}>
-                <p class="hint" data-testid="editor-saved">Saved</p>
+                <p class="hint" data-testid="editor-saved">{t('editor.saved')}</p>
               </Show>
               <Show when={capEnabled() && edit()?.artifactId && fixed()}>
                 <button data-testid="editor-start" disabled={!writable() || !baseShown()} onClick={startEditing}>
-                  Edit
+                  {t('editor.edit')}
                 </button>
               </Show>
             </Match>
@@ -155,18 +156,18 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                     <Show when={composing().priorRejection}>
                       {(r) => (
                         <p class="hint" data-testid="editor-prior-rejection">
-                          Previously rejected — {r().reason ?? <span class="toast-chrome">No reason given</span>}
+                          {t('editor.previouslyRejected')} — {r().reason ?? <span class="toast-chrome">{t('editor.noReason')}</span>}
                         </p>
                       )}
                     </Show>
                     <Show when={composing().priorUnconfirmed}>
-                      <p class="hint">Previous send unconfirmed — it may have reached upstream.</p>
+                      <p class="hint">{t('editor.priorUnconfirmed')}</p>
                     </Show>
                     <Show when={state().baseMoved}>
                       <div data-testid="editor-base-moved">
-                        <p class="hint">Base changed since you started editing.</p>
+                        <p class="hint">{t('editor.baseMoved')}</p>
                         <button data-testid="editor-view-new-base" onClick={() => setViewingNewBase((v) => !v)}>
-                          {viewingNewBase() ? 'Hide new base' : 'View new base'}
+                          {viewingNewBase() ? t('editor.hideNewBase') : t('editor.viewNewBase')}
                         </button>
                         <Show when={viewingNewBase() ? fixed() : null} keyed>
                           {(b) => (
@@ -189,7 +190,7 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                                   setNewBaseShown(undefined);
                                 }}
                               >
-                                Switch to new base
+                                {t('editor.switchBase')}
                               </button>
                             </>
                           )}
@@ -205,21 +206,21 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                       }
                     />
                     <p class="hint" data-testid="editor-bytes" classList={{ over: state().overLimit }}>
-                      {state().bytes} / {state().maxBytes} bytes · not sent
+                      {tn('editor.bytes', state().maxBytes, { bytes: state().bytes })}
                     </p>
                     <Show when={state().undisplayed}>
-                      <p class="hint" data-testid="editor-undisplayed">Base was never displayed — cannot send.</p>
+                      <p class="hint" data-testid="editor-undisplayed">{t('editor.undisplayed')}</p>
                     </Show>
                     <Show when={state().encodingProblem}>
-                      {(problem) => <p class="hint" data-testid="editor-encoding">{problem()}</p>}
+                      {(problem) => <p class="hint" data-testid="editor-encoding">{tm(problem())}</p>}
                     </Show>
                     <Show when={state().lineEndingsConverted}>
                       <p class="hint" data-testid="editor-line-endings">
-                        Line endings converted (base used CRLF; the buffer now has LF).
+                        {t('editor.lineEndings')}
                       </p>
                     </Show>
                     <Show when={composing().invalid}>
-                      <p class="hint" data-testid="editor-invalid">Not sent — {composing().invalid}</p>
+                      <p class="hint" data-testid="editor-invalid">{t('editor.notSent', { reason: composing().invalid ?? '' })}</p>
                     </Show>
                     <div class="actions">
                       <button
@@ -227,10 +228,10 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                         disabled={!state().canSend}
                         onClick={() => void pendingIntents.send(composing().localId)}
                       >
-                        Send
+                        {t('editor.send')}
                       </button>
                       <button data-testid="editor-discard" onClick={() => pendingIntents.discard(composing().localId)}>
-                        Discard
+                        {t('editor.discard')}
                       </button>
                     </div>
                   </>
@@ -245,13 +246,13 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                   <div data-testid="editor-in-flight">
                     <Show
                       when={inFlight().unconfirmed}
-                      fallback={<p class="hint">Sending…</p>}
+                      fallback={<p class="hint">{t('editor.sending')}</p>}
                     >
                       <p class="hint">
-                        Delivery unconfirmed (may have reached upstream) — {inFlight().unconfirmed}
+                        {t('editor.unconfirmed', { reason: inFlight().unconfirmed ?? '' })}
                       </p>
                       <button data-testid="editor-restore" onClick={() => pendingIntents.reopen(inFlight().localId)}>
-                        Restore
+                        {t('editor.restore')}
                       </button>
                     </Show>
                   </div>
@@ -265,13 +266,13 @@ export function FakeEditorPart(props: { stores: WorkspaceStores; taskId: string 
                 return (
                   <div data-testid="editor-rejected">
                     <p class="hint">
-                      Rejected — {rejected().reason ?? <span class="toast-chrome">No reason given</span>}
+                      {t('editor.rejected')} — {rejected().reason ?? <span class="toast-chrome">{t('editor.noReason')}</span>}
                     </p>
                     <button data-testid="editor-restore" onClick={() => pendingIntents.reopen(rejected().localId)}>
-                      Restore
+                      {t('editor.restore')}
                     </button>
                     <button data-testid="editor-discard" onClick={() => pendingIntents.discard(rejected().localId)}>
-                      Discard
+                      {t('editor.discard')}
                     </button>
                   </div>
                 );

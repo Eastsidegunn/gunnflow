@@ -23,10 +23,18 @@ import { missionName, taskById } from '../model/selectors.js';
 import { postIntent } from '../transport/relayClient.js';
 import type { ExecutionEvent, SessionIntent } from '../model/executionTypes.js';
 import type { Intent } from '../model/types.js';
+import { t, tn, type MessageKey } from '../i18n/index.js';
 
 const TABS = ['timeline', 'messages', 'tools', 'files', 'policy'] as const;
 type Tab = (typeof TABS)[number];
 const ROW_HEIGHT = 30;
+const TAB_LABEL: Record<Tab, MessageKey> = {
+  timeline: 'execution.tab.timeline',
+  messages: 'execution.tab.messages',
+  tools: 'execution.tab.tools',
+  files: 'execution.tab.files',
+  policy: 'execution.tab.policy',
+};
 
 export function ExecutionSurface(props: {
   stores: WorkspaceStores;
@@ -113,17 +121,17 @@ export function ExecutionSurface(props: {
               <span class="session-state" data-testid="session-state" data-state={s().state}>
                 {s().state.toUpperCase()}
                 <Show when={execution.hasPending(s().id, 'session.pause')}>
-                  <em class="pending-chip" data-testid="session-pending">Pausing…</em>
+                  <em class="pending-chip" data-testid="session-pending">{t('session.pausing')}</em>
                 </Show>
                 <Show when={execution.hasPending(s().id, 'session.resume')}>
-                  <em class="pending-chip">Resuming…</em>
+                  <em class="pending-chip">{t('session.resuming')}</em>
                 </Show>
               </span>
               <span class="session-meta">
                 {s().agentLabel}
                 <Show when={s().model}> · {s().model}</Show>
                 <Show when={s().parentSessionId}>
-                  <span data-testid="fork-marker"> · fork of {s().parentSessionId}</span>
+                  <span data-testid="fork-marker"> · {t('session.forkOf', { id: s().parentSessionId! })}</span>
                 </Show>
               </span>
             </div>
@@ -134,11 +142,11 @@ export function ExecutionSurface(props: {
           when={live()}
           fallback={
             <Show when={!ended()}>
-              <span class="lost" data-testid="execution-lost">CONNECTION LOST</span>
+              <span class="lost" data-testid="execution-lost">{t('session.connectionLost')}</span>
             </Show>
           }
         >
-          <span class="live" data-testid="execution-live">● LIVE</span>
+          <span class="live" data-testid="execution-live">{t('session.live')}</span>
         </Show>
         <Show when={session()}>
           <div class="actions">
@@ -148,7 +156,7 @@ export function ExecutionSurface(props: {
                 disabled={affordance('pause') !== 'enabled' || execution.hasPending(session()!.id)}
                 onClick={() => control('session.pause')}
               >
-                Pause
+                {t('session.pause')}
               </button>
             </Show>
             <Show when={affordance('resume') !== 'hidden' && session()!.state === 'paused'}>
@@ -157,7 +165,7 @@ export function ExecutionSurface(props: {
                 disabled={affordance('resume') !== 'enabled' || execution.hasPending(session()!.id)}
                 onClick={() => control('session.resume')}
               >
-                Resume
+                {t('session.resume')}
               </button>
             </Show>
             <Show when={affordance('fork') !== 'hidden'}>
@@ -166,7 +174,7 @@ export function ExecutionSurface(props: {
                 disabled={affordance('fork') !== 'enabled'}
                 onClick={() => control('session.fork')}
               >
-                Fork
+                {t('session.fork')}
               </button>
             </Show>
             <Show when={affordance('kill') !== 'hidden'}>
@@ -176,7 +184,7 @@ export function ExecutionSurface(props: {
                 disabled={affordance('kill') !== 'enabled'}
                 onClick={() => props.onEnterSurface('privileged:kill', session()!.id)}
               >
-                Kill…
+                {t('session.kill')}
               </button>
             </Show>
           </div>
@@ -186,17 +194,17 @@ export function ExecutionSurface(props: {
       <Show when={ended()}>
         <p class="gate-banner stale-banner" data-testid="execution-ended">
           {execution.connection() === 'unsupported'
-            ? '이 백엔드는 execution 표면을 제공하지 않음'
-            : '이 task의 execution 없음'}
+            ? t('execution.ended.unsupported')
+            : t('execution.ended.none')}
         </p>
       </Show>
       <Show when={!live() && !ended()}>
         <p class="gate-banner stale-banner" data-testid="execution-stale">
-          Showing events through{' '}
-          {execution.lastEventAt()
-            ? new Date(execution.lastEventAt()!).toLocaleTimeString()
-            : 'unknown'}
-          . Live session state is unknown — not inferred.
+          {t('execution.stale', {
+            time: execution.lastEventAt()
+              ? new Date(execution.lastEventAt()!).toLocaleTimeString()
+              : t('execution.stale.unknownTime'),
+          })}
         </p>
       </Show>
       <Show when={execution.controlError()}>
@@ -208,19 +216,19 @@ export function ExecutionSurface(props: {
 
       <Show when={execution.connection() === 'live' && execution.sessions().length === 0}>
         <p class="hint" style={{ padding: '8px 14px', margin: '0' }} data-testid="no-sessions">
-          No sessions reported by upstream for this task.
+          {t('execution.noSessions')}
         </p>
       </Show>
 
-      <nav class="inspector-tabs" aria-label="Execution tabs">
+      <nav class="inspector-tabs" aria-label={t('execution.tabs')}>
         <For each={TABS}>
-          {(t) => (
+          {(id) => (
             <button
-              data-testid={`exec-tab-${t}`}
-              classList={{ active: tab() === t }}
-              onClick={() => setTab(t)}
+              data-testid={`exec-tab-${id}`}
+              classList={{ active: tab() === id }}
+              onClick={() => setTab(id)}
             >
-              {t[0]!.toUpperCase() + t.slice(1)}
+              {t(TAB_LABEL[id])}
             </button>
           )}
         </For>
@@ -307,7 +315,7 @@ export function ExecutionSurface(props: {
             data-testid="filter-failed"
             onClick={() => setFailedOnly(!failedOnly())}
           >
-            failed only
+            {t('execution.filter.failedOnly')}
           </button>
           <For each={['tool.call', 'file.change', 'egress', 'human', 'message'] as const}>
             {(kind) => (
@@ -322,14 +330,13 @@ export function ExecutionSurface(props: {
           </For>
           <Show when={execution.truncated() > 0}>
             <span class="hint" data-testid="truncated-note">
-              {execution.truncated()} older events beyond the {EVENT_WINDOW}-event window — full
-              history stays upstream
+              {tn('execution.truncated', execution.truncated(), { window: EVENT_WINDOW })}
             </span>
           </Show>
           <Show when={execution.upstreamTruncatedBefore() !== null}>
             {/* Upstream-declared cut (contract truncatedBefore) — stated, never counted locally. */}
             <span class="hint" data-testid="upstream-truncated-note">
-              seq {execution.upstreamTruncatedBefore()} 이전 이벤트는 이 창에 없음 — 전체 이력은 상류에
+              {t('execution.upstreamTruncated', { seq: execution.upstreamTruncatedBefore()! })}
             </span>
           </Show>
         </div>
@@ -360,7 +367,7 @@ export function ExecutionSurface(props: {
         </div>
         <Show when={unseen() > 0}>
           <button class="new-events" data-testid="new-events" onClick={jumpToLatest}>
-            {unseen()} new events ↓
+            {tn('execution.newEvents', unseen())}
           </button>
         </Show>
       </div>
@@ -371,7 +378,7 @@ export function ExecutionSurface(props: {
   function PayloadEmpty() {
     return (
       <p class="hint" data-testid="payload-empty">
-        이 연결에서 운반되지 않았거나 없음
+        {t('execution.payloadEmpty')}
       </p>
     );
   }
@@ -445,7 +452,7 @@ export function ExecutionSurface(props: {
             )}
           </For>
         </ul>
-        <p class="hint">Read-only view. Edits require a governed intervention (later surface).</p>
+        <p class="hint">{t('execution.files.readOnly')}</p>
       </div>
     );
   }
@@ -458,20 +465,20 @@ export function ExecutionSurface(props: {
           {(p) => (
             <>
               <section>
-                <h3>Constraints</h3>
+                <h3>{t('execution.policy.constraints')}</h3>
                 <Show when={p().ceiling}><p>{p().ceiling}</p></Show>
                 <Show when={p().missionNarrowing}><p>{p().missionNarrowing}</p></Show>
                 <Show when={p().sessionNarrowing}><p>{p().sessionNarrowing}</p></Show>
               </section>
               <Show when={p().activePolicies?.length}>
                 <section>
-                  <h3>Active policies</h3>
+                  <h3>{t('execution.policy.active')}</h3>
                   <For each={p().activePolicies}>{(name) => <p>{name}</p>}</For>
                 </section>
               </Show>
               <Show when={p().decisions?.length}>
                 <section>
-                  <h3>Decisions</h3>
+                  <h3>{t('execution.policy.decisions')}</h3>
                   <For each={p().decisions}>
                     {(d) => (
                       <p data-testid={`policy-${d.outcome}`}>
@@ -484,7 +491,7 @@ export function ExecutionSurface(props: {
               </Show>
               <Show when={p().remainingBudget}>
                 <section>
-                  <h3>Budget</h3>
+                  <h3>{t('execution.policy.budget')}</h3>
                   <p>{p().remainingBudget}</p>
                 </section>
               </Show>
@@ -501,7 +508,7 @@ export function ExecutionSurface(props: {
       <aside class="detail-pane" data-testid="detail-pane">
         <header>
           <h3>{row().label}</h3>
-          <button aria-label="Close detail" onClick={() => setSelectedSeq(null)}>✕</button>
+          <button aria-label={t('execution.detail.close')} onClick={() => setSelectedSeq(null)}>✕</button>
         </header>
         <p class="hint">
           {row().time} · {row().kind}
@@ -509,7 +516,7 @@ export function ExecutionSurface(props: {
         </p>
         <Show when={p.event.tool}>
           <section>
-            <h3>Tool</h3>
+            <h3>{t('execution.detail.tool')}</h3>
             <p>{p.event.tool!.name}</p>
             <pre>{p.event.tool!.args}</pre>
             <Show when={p.event.tool!.result}><pre>{p.event.tool!.result}</pre></Show>
@@ -517,13 +524,13 @@ export function ExecutionSurface(props: {
         </Show>
         <Show when={p.event.file?.diff}>
           <section>
-            <h3>Diff (read-only)</h3>
+            <h3>{t('execution.detail.diff')}</h3>
             <pre data-testid="file-diff">{p.event.file!.diff}</pre>
           </section>
         </Show>
         <Show when={p.event.egress}>
           <section>
-            <h3>Egress</h3>
+            <h3>{t('execution.detail.egress')}</h3>
             <p>
               {p.event.egress!.destination} · <strong>{p.event.egress!.outcome}</strong>
             </p>
@@ -532,15 +539,15 @@ export function ExecutionSurface(props: {
                 data-testid="detail-open-gate"
                 onClick={() => props.onEnterSurface('approval', p.event.egress!.gateId!)}
               >
-                Open gate →
+                {t('execution.detail.openGate')}
               </button>
             </Show>
           </section>
         </Show>
         <section>
-          <h3>Raw event</h3>
+          <h3>{t('execution.detail.raw')}</h3>
           <pre data-testid="raw-event">{JSON.stringify(p.event, null, 2)}</pre>
-          <p class="hint">Full raw explorer (L3) is a later surface.</p>
+          <p class="hint">{t('execution.detail.rawLater')}</p>
         </section>
       </aside>
     );
@@ -577,7 +584,7 @@ export function ExecutionSurface(props: {
             data-testid="open-terminal"
             onClick={() => props.onEnterSurface('terminal', session()?.id ?? props.taskId)}
           >
-            Open live terminal →
+            {t('execution.openTerminal')}
           </button>
         </footer>
       </Show>

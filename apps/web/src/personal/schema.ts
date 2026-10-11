@@ -9,6 +9,8 @@
  * Containment on the board is visual only (coordinates); no parent is stored
  * and none is claimed.
  */
+import { msg, type Msg } from '../i18n/index.js';
+
 export const PERSONAL_VERSION = 2;
 export const PERSONAL_LIMITS = {
   noteChars: 20_000,
@@ -110,53 +112,63 @@ export function migratePersonalDoc(raw: unknown): unknown {
   return { version: 2, notes: raw.notes, stickies, boxes: [], links: [] };
 }
 
+type SchemaItem = 'note' | 'sticky' | 'box' | 'link';
+const itemName = (item: SchemaItem): Msg => msg(`personal.schema.item.${item}`);
+/** "<item> '<id>' <field>": the field is a schema token, kept as written. */
+const field = (item: SchemaItem, id: string, name: string): Msg => msg('personal.schema.field', { item: itemName(item), id, field: name });
+const shape = (item: SchemaItem, form: string, id?: string): Msg =>
+  id === undefined ? msg('personal.schema.shape', { item: itemName(item), shape: form }) : msg('personal.schema.shapeOf', { item: itemName(item), id, shape: form });
+const badId = (item: SchemaItem): Msg => msg('personal.schema.id', { item: itemName(item) });
+const mustBeArray = (list: string): Msg => msg('personal.schema.array', { list });
+const tooMany = (list: string, max: number): Msg => msg('personal.schema.tooMany', { list, max });
+
 /** Validates a (current-version) document; the first problem, or null. */
-export function personalDocProblem(raw: unknown): string | null {
-  if (!isRecord(raw)) return 'not an object';
+export function personalDocProblem(raw: unknown): Msg | null {
+  if (!isRecord(raw)) return msg('personal.schema.notObject');
   const extra = closed(raw, ['version', 'notes', 'stickies', 'boxes', 'links']);
-  if (extra) return `unknown key '${extra}'`;
-  if (raw.version !== PERSONAL_VERSION) return `unsupported version ${String(raw.version)}`;
-  if (!isRecord(raw.notes)) return 'notes must be an object';
+  if (extra) return msg('personal.schema.unknownKey', { key: extra });
+  if (raw.version !== PERSONAL_VERSION) return msg('personal.schema.version', { version: String(raw.version) });
+  if (!isRecord(raw.notes)) return msg('personal.schema.notesObject');
   const noteIds = Object.keys(raw.notes);
-  if (noteIds.length > PERSONAL_LIMITS.notes) return `more than ${PERSONAL_LIMITS.notes} notes`;
+  if (noteIds.length > PERSONAL_LIMITS.notes) return tooMany('notes', PERSONAL_LIMITS.notes);
   for (const id of noteIds) {
     const n = raw.notes[id];
-    if (id.length === 0 || id.length > PERSONAL_LIMITS.idChars) return 'note id length';
-    if (!isRecord(n) || closed(n, ['text', 'updatedAt'])) return `note '${id}' must be { text, updatedAt }`;
-    if (typeof n.text !== 'string' || n.text.length > PERSONAL_LIMITS.noteChars) return `note '${id}' text`;
-    if (!isIso(n.updatedAt)) return `note '${id}' updatedAt`;
+    if (id.length === 0 || id.length > PERSONAL_LIMITS.idChars) return msg('personal.schema.noteIdLength');
+    if (!isRecord(n) || closed(n, ['text', 'updatedAt'])) return shape('note', '{ text, updatedAt }', id);
+    if (typeof n.text !== 'string' || n.text.length > PERSONAL_LIMITS.noteChars) return field('note', id, 'text');
+    if (!isIso(n.updatedAt)) return field('note', id, 'updatedAt');
   }
   const ids = { sticky: new Set<string>(), box: new Set<string>() };
   const memberOf = new Set<string>();
-  if (!Array.isArray(raw.stickies)) return 'stickies must be an array';
-  if (raw.stickies.length > PERSONAL_LIMITS.stickies) return `more than ${PERSONAL_LIMITS.stickies} stickies`;
+  if (!Array.isArray(raw.stickies)) return mustBeArray('stickies');
+  if (raw.stickies.length > PERSONAL_LIMITS.stickies) return tooMany('stickies', PERSONAL_LIMITS.stickies);
   for (const s of raw.stickies) {
-    if (!isRecord(s) || closed(s, ['id', 'kind', 'text', 'x', 'y', 'w', 'h', 'updatedAt'])) return 'sticky must be { id, kind, text, x, y, w, h, updatedAt }';
-    if (typeof s.id !== 'string' || !ID.test(s.id) || ids.sticky.has(s.id)) return 'sticky id';
+    if (!isRecord(s) || closed(s, ['id', 'kind', 'text', 'x', 'y', 'w', 'h', 'updatedAt'])) return shape('sticky', '{ id, kind, text, x, y, w, h, updatedAt }');
+    if (typeof s.id !== 'string' || !ID.test(s.id) || ids.sticky.has(s.id)) return badId('sticky');
     ids.sticky.add(s.id);
-    if (s.kind !== 'text' && s.kind !== 'mermaid') return `sticky '${s.id}' kind`;
-    if (typeof s.text !== 'string' || s.text.length > PERSONAL_LIMITS.stickyChars) return `sticky '${s.id}' text`;
-    if (!finite(s.x, s.y) || !sized(s.w, s.h)) return `sticky '${s.id}' rect`;
-    if (!isIso(s.updatedAt)) return `sticky '${s.id}' updatedAt`;
+    if (s.kind !== 'text' && s.kind !== 'mermaid') return field('sticky', s.id, 'kind');
+    if (typeof s.text !== 'string' || s.text.length > PERSONAL_LIMITS.stickyChars) return field('sticky', s.id, 'text');
+    if (!finite(s.x, s.y) || !sized(s.w, s.h)) return field('sticky', s.id, 'rect');
+    if (!isIso(s.updatedAt)) return field('sticky', s.id, 'updatedAt');
   }
-  if (!Array.isArray(raw.boxes)) return 'boxes must be an array';
-  if (raw.boxes.length > PERSONAL_LIMITS.boxes) return `more than ${PERSONAL_LIMITS.boxes} boxes`;
+  if (!Array.isArray(raw.boxes)) return mustBeArray('boxes');
+  if (raw.boxes.length > PERSONAL_LIMITS.boxes) return tooMany('boxes', PERSONAL_LIMITS.boxes);
   for (const b of raw.boxes) {
-    if (!isRecord(b) || closed(b, ['id', 'label', 'x', 'y', 'w', 'h', 'members', 'updatedAt'])) return 'box must be { id, label, x, y, w, h, members, updatedAt }';
-    if (typeof b.id !== 'string' || !ID.test(b.id) || ids.box.has(b.id)) return 'box id';
+    if (!isRecord(b) || closed(b, ['id', 'label', 'x', 'y', 'w', 'h', 'members', 'updatedAt'])) return shape('box', '{ id, label, x, y, w, h, members, updatedAt }');
+    if (typeof b.id !== 'string' || !ID.test(b.id) || ids.box.has(b.id)) return badId('box');
     ids.box.add(b.id);
-    if (typeof b.label !== 'string' || b.label.length > PERSONAL_LIMITS.labelChars) return `box '${b.id}' label`;
-    if (!finite(b.x, b.y) || !sized(b.w, b.h)) return `box '${b.id}' rect`;
-    if (!isIso(b.updatedAt)) return `box '${b.id}' updatedAt`;
-    if (!Array.isArray(b.members) || b.members.length > PERSONAL_LIMITS.membersPerBox) return `box '${b.id}' members`;
+    if (typeof b.label !== 'string' || b.label.length > PERSONAL_LIMITS.labelChars) return field('box', b.id, 'label');
+    if (!finite(b.x, b.y) || !sized(b.w, b.h)) return field('box', b.id, 'rect');
+    if (!isIso(b.updatedAt)) return field('box', b.id, 'updatedAt');
+    if (!Array.isArray(b.members) || b.members.length > PERSONAL_LIMITS.membersPerBox) return field('box', b.id, 'members');
     for (const m of b.members) {
-      if (typeof m !== 'string' || m.length === 0 || m.length > PERSONAL_LIMITS.idChars) return `box '${b.id}' member id`;
-      if (memberOf.has(m)) return `node '${m}' is in more than one box`;
+      if (typeof m !== 'string' || m.length === 0 || m.length > PERSONAL_LIMITS.idChars) return field('box', b.id, 'member id');
+      if (memberOf.has(m)) return msg('personal.schema.multiBox', { id: m });
       memberOf.add(m);
     }
   }
-  if (!Array.isArray(raw.links)) return 'links must be an array';
-  if (raw.links.length > PERSONAL_LIMITS.links) return `more than ${PERSONAL_LIMITS.links} links`;
+  if (!Array.isArray(raw.links)) return mustBeArray('links');
+  if (raw.links.length > PERSONAL_LIMITS.links) return tooMany('links', PERSONAL_LIMITS.links);
   const linkIds = new Set<string>();
   const endOk = (e: unknown) => {
     if (!isRecord(e) || closed(e, ['kind', 'id']) || typeof e.id !== 'string') return false;
@@ -166,12 +178,12 @@ export function personalDocProblem(raw: unknown): string | null {
     return e.kind === 'node' && e.id.length > 0 && e.id.length <= PERSONAL_LIMITS.idChars;
   };
   for (const l of raw.links) {
-    if (!isRecord(l) || closed(l, ['id', 'from', 'to', 'label', 'updatedAt'])) return 'link must be { id, from, to, label?, updatedAt }';
-    if (typeof l.id !== 'string' || !ID.test(l.id) || linkIds.has(l.id)) return 'link id';
+    if (!isRecord(l) || closed(l, ['id', 'from', 'to', 'label', 'updatedAt'])) return shape('link', '{ id, from, to, label?, updatedAt }');
+    if (typeof l.id !== 'string' || !ID.test(l.id) || linkIds.has(l.id)) return badId('link');
     linkIds.add(l.id);
-    if (!endOk(l.from) || !endOk(l.to)) return `link '${l.id}' end`;
-    if (l.label !== undefined && (typeof l.label !== 'string' || l.label.length > PERSONAL_LIMITS.labelChars)) return `link '${l.id}' label`;
-    if (!isIso(l.updatedAt)) return `link '${l.id}' updatedAt`;
+    if (!endOk(l.from) || !endOk(l.to)) return field('link', l.id, 'end');
+    if (l.label !== undefined && (typeof l.label !== 'string' || l.label.length > PERSONAL_LIMITS.labelChars)) return field('link', l.id, 'label');
+    if (!isIso(l.updatedAt)) return field('link', l.id, 'updatedAt');
   }
   return null;
 }

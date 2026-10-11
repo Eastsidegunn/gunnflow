@@ -4,6 +4,7 @@ import type { ArtifactRef } from '@gunnflow/contract';
 import { viewerPlan } from '../src/state/viewerPlan.js';
 import { displayRecord, markRendered, markServedAfterLoad, pinServed } from '../src/state/editorLogic.js';
 import { isolationProblem, previewArtifactUrl, previewDownloadUrl, previewExcalidrawUrl, previewMermaidUrl } from '../src/transport/previewOrigin.js';
+import { tm } from '../src/i18n/index.js';
 import { DEFAULT_WIRING } from '../src/wiring/defaultWiring.js';
 import { EMPTY_WIRING } from '../src/wiring/loadWiring.js';
 
@@ -93,9 +94,9 @@ describe('isolated display token', () => {
 describe('origin isolation check (F3)', () => {
   it('refuses a preview origin equal to the page origin, or one that is not a URL', () => {
     expect(isolationProblem('http://127.0.0.1:8788', 'http://127.0.0.1:5173')).toBeUndefined();
-    expect(isolationProblem('http://127.0.0.1:5173', 'http://127.0.0.1:5173')).toContain('own origin');
-    expect(isolationProblem('http://127.0.0.1:5173/sub/', 'http://127.0.0.1:5173')).toContain('own origin');
-    expect(isolationProblem('', 'http://127.0.0.1:5173')).toContain('not a URL');
-    expect(isolationProblem('/preview', 'http://127.0.0.1:5173')).toContain('not a URL');
+    expect(tm(isolationProblem('http://127.0.0.1:5173', 'http://127.0.0.1:5173'))).toContain('own origin');
+    expect(tm(isolationProblem('http://127.0.0.1:5173/sub/', 'http://127.0.0.1:5173'))).toContain('own origin');
+    expect(tm(isolationProblem('', 'http://127.0.0.1:5173'))).toContain('not a URL');
+    expect(tm(isolationProblem('/preview', 'http://127.0.0.1:5173'))).toContain('not a URL');
   });
 });

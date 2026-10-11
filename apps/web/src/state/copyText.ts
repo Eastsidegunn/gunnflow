@@ -6,6 +6,7 @@
  * box shows and what the copy button writes are the same string. Making a
  * character visible is display fidelity — never a verdict on the text.
  */
+import { msg, msgN, tm, type Msg } from '../i18n/index.js';
 
 export type CopyMarkClass = 'eol' | 'tab' | 'zero-width' | 'bidi' | 'control' | 'trailing-space';
 
@@ -122,7 +123,12 @@ export function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).length;
 }
 
-/** The copy statement: what this screen copied, computed from the very string it wrote. */
+/** The copy statement as a message: counted once from the very string written, worded when shown. */
+export function copiedMessage(text: string): Msg {
+  return msg('copy.statement', { lines: msgN('copy.lines', lineCount(text)), bytes: msgN('copy.bytes', utf8Bytes(text)) });
+}
+
+/** The copy statement in the current locale. */
 export function copiedStatement(text: string): string {
-  return `✓ 복사됨 · ${lineCount(text)}줄 · ${utf8Bytes(text)}바이트`;
+  return tm(copiedMessage(text));
 }

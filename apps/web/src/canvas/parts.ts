@@ -9,6 +9,7 @@
  */
 import type { Capability, NodeProjection } from '@gunnflow/contract';
 import { kindParts, type PartDecl, type WiringConfig } from '@gunnflow/contract/wiring';
+import { t } from '../i18n/index.js';
 
 export type ResolvedDisplay =
   | { partId: string; part: 'glyph' }
@@ -57,10 +58,10 @@ function binds(part: PartDecl, cap: Capability): boolean {
 
 /** A decision the default (label-only) control cannot collect. */
 function needsUi(cap: Capability): string | undefined {
-  if (cap.decision?.options?.length) return 'needs a choice among options';
-  if (cap.decision?.input?.required) return 'needs text input';
-  if (cap.decision?.evidence?.length) return 'needs evidence to be viewed first';
-  if (cap.edit) return 'needs an editor';
+  if (cap.decision?.options?.length) return t('parts.needs.choice');
+  if (cap.decision?.input?.required) return t('parts.needs.text');
+  if (cap.decision?.evidence?.length) return t('parts.needs.evidence');
+  if (cap.edit) return t('parts.needs.editor');
   return undefined;
 }
 
@@ -110,7 +111,7 @@ export function resolveParts(node: NodeProjection, config: WiringConfig): Resolv
       level: cap.level as 'enabled' | 'disabled',
       inputs,
       evidence: cap.decision?.evidence ?? [],
-      ...(unbindable ? { blocked: `requires '${unbindable}', which this node's capability does not declare a slot for` } : {}),
+      ...(unbindable ? { blocked: t('parts.blocked.unbindable', { part: unbindable }) } : {}),
     });
   }
 

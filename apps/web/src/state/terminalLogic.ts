@@ -6,6 +6,7 @@
 import type { SessionProjection } from '../model/executionTypes.js';
 import type { TerminalConnection } from './terminalStore.js';
 import { writeAffordance } from './capabilities.js';
+import { t, type MessageKey } from '../i18n/index.js';
 
 export interface StdinGuard {
   allowed: boolean;
@@ -27,9 +28,14 @@ export function stdinGuard(
   return { allowed: true };
 }
 
-export const GUARD_LABEL: Record<NonNullable<StdinGuard['reason']>, string> = {
-  'no-authority': 'No stdin authority for this session.',
-  'authority-disabled': 'Stdin authority is disabled by upstream policy.',
-  'not-live': 'Not live — input cannot be confirmed. Reconnect first.',
-  'session-not-running': 'Session is not running — stdin is not accepted.',
+const GUARD_LABEL: Record<NonNullable<StdinGuard['reason']>, MessageKey> = {
+  'no-authority': 'terminal.guard.noAuthority',
+  'authority-disabled': 'terminal.guard.authorityDisabled',
+  'not-live': 'terminal.guard.notLive',
+  'session-not-running': 'terminal.guard.sessionNotRunning',
 };
+
+/** The guard's label in the current locale (resolved at render time). */
+export function guardLabel(reason: NonNullable<StdinGuard['reason']>): string {
+  return t(GUARD_LABEL[reason]);
+}

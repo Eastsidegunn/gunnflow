@@ -14,9 +14,10 @@
  */
 import { createSignal } from 'solid-js';
 import type { Intent, IntentResult, WireIntent, WorkspaceProjection } from '../model/types.js';
-import { checkIntent, type IntentChecks, type RefusedIntent } from './intentValidator.js';
+import { checkIntent, isRefused, refusedIntent, relayResult, type IntentChecks, type RefusedIntent, type RelayResult } from './intentValidator.js';
 import { sha256Hex, utf8Bytes } from './digest.js';
 import { checkEditSend, displayRecord, type DisplayToken, type EditContext } from './editorLogic.js';
+import { msg, raw, tm, type Msg } from '../i18n/index.js';
 import type { StreamChunk } from '../model/streamTypes.js';
 import type { SessionProjection } from '../model/executionTypes.js';
 
@@ -72,12 +73,13 @@ export interface ComposingEntry {
   evidence?: EvidenceViews;
   openedAt: number;
   /** Relay-boundary validation failure; the draft was not sent. */
-  invalid?: string;
+  /** Why the last send was refused here (engine text translated when read; contract problems verbatim). */
+  invalid?: Msg;
   invalidAt?: number;
   /** The rejection this draft was reopened from; reason verbatim, absent if upstream gave none. */
   priorRejection?: { reason?: string; at: number };
   /** Reopened from an unconfirmed send: the earlier attempt may have landed. */
-  priorUnconfirmed?: { reason: string; at: number };
+  priorUnconfirmed?: { reason: Msg; at: number };
 }
 
 export interface InFlightEntry {
@@ -91,7 +93,7 @@ export interface InFlightEntry {
   /** sha256 of the sent `edit.body` UTF-8 bytes; set before the post leaves. */
   editDigest?: string;
   /** Transport diagnostic when the relay result never arrived. Not a rejection. */
-  unconfirmed?: string;
+  unconfirmed?: Msg;
   unconfirmedAt?: number;
 }
 
@@ -117,18 +119,27 @@ export interface EntryError {
   action?: string;
   localId: string;
   kind: 'rejected' | 'invalid' | 'unconfirmed';
-  /** Upstream text for 'rejected', local diagnostic otherwise; absent = none given. */
+  /** Upstream text for 'rejected', local diagnostic otherwise (in the current locale; read inside a tracked scope); absent = none given. */
   reason?: string;
   at: number;
   afterReconcile?: true;
 }
 
-export type PostIntent = (intent: WireIntent) => Promise<IntentResult | RefusedIntent>;
+/** A post answers with the relay's (normalized) result, or with a local refusal — never anything in between. */
+export type PostIntent = (intent: WireIntent) => Promise<RelayResult | RefusedIntent>;
 
+/** The upstream's own rejection: its reason verbatim (absent when it gave none). Only the relay's answer has this shape. */
+export type UpstreamRejection = { accepted: false; reason?: string; upstream: true };
+
+/**
+ * A send's outcome. Every refusal made locally carries its message (`why`):
+ * a bare `{ accepted: false, reason }` does not type-check as an outcome.
+ */
 export type SendOutcome =
-  | IntentResult
+  | { accepted: true }
+  | UpstreamRejection
   | RefusedIntent
-  | { accepted: false; reason: string; unconfirmed: true };
+  | { accepted: false; reason: string; why: Msg; unconfirmed: true };
 
 /** Contract-shape knowledge the store must not own. */
 export interface PendingIntentAdapter extends IntentChecks {
@@ -180,8 +191,8 @@ function materialize(
   const baseRecord = buffer ? displayRecord(buffer.display) : undefined;
   const records = [
     ...(baseRecord ? [baseRecord] : []),
-    ...(evidence?.displays ?? []).flatMap((t) => {
-      const r = displayRecord(t);
+    ...(evidence?.displays ?? []).flatMap((d) => {
+      const r = displayRecord(d);
       return r && required.includes(r.artifactId) ? [r] : [];
     }),
   ].filter((r, i, all) => all.findIndex((x) => x.artifactId === r.artifactId) === i);
@@ -196,10 +207,6 @@ function materialize(
         }
       : {}),
   } as Intent;
-}
-
-function isRefused(r: IntentResult | RefusedIntent): r is RefusedIntent {
-  return 'invalid' in r && r.invalid === true;
 }
 
 export function createPendingIntentState(
@@ -244,9 +251,9 @@ export function createPendingIntentState(
   };
 
 
-  const refuse = (entry: ComposingEntry, reason: string): SendOutcome => {
+  const refuse = (entry: ComposingEntry, reason: Msg): SendOutcome => {
     replace(entry.localId, 'composing', () => ({ ...entry, invalid: reason, invalidAt: Date.now() }));
-    return { accepted: false, reason, invalid: true };
+    return refusedIntent(reason);
   };
 
   /** Evidence the addressed capability requires, read from the current projection. */
@@ -255,7 +262,7 @@ export function createPendingIntentState(
     return 'capability' in lookup ? (lookup.capability?.decision?.evidence ?? []) : [];
   };
 
-  const editProblem = (entry: ComposingEntry): string | null => {
+  const editProblem = (entry: ComposingEntry): Msg | null => {
     if (isUndecided(entry.draft)) return null;
     const problem = evidenceProblem(entry.evidence, requiredEvidence(entry.draft));
     if (problem) return problem;
@@ -269,13 +276,13 @@ export function createPendingIntentState(
    * version that was rendered. An artifact whose current digest cannot be read
    * is refused: a past view cannot stand in for it.
    */
-  const evidenceProblem = (evidence: EvidenceViews | undefined, required: readonly string[]): string | null => {
+  const evidenceProblem = (evidence: EvidenceViews | undefined, required: readonly string[]): Msg | null => {
     for (const id of required) {
-      const record = (evidence?.displays ?? []).map((t) => displayRecord(t)).find((r) => r?.artifactId === id);
-      if (!record) return `evidence '${id}' has not been viewed`;
+      const record = (evidence?.displays ?? []).map((d) => displayRecord(d)).find((r) => r?.artifactId === id);
+      if (!record) return msg('intent.evidenceNotViewed', { id });
       const current = adapter.artifactDigest?.(id, projection());
-      if (current === undefined) return `evidence '${id}': its current version cannot be confirmed`;
-      if (current !== record.digest) return `evidence '${id}' changed since it was viewed`;
+      if (current === undefined) return msg('intent.evidenceUnconfirmable', { id });
+      if (current !== record.digest) return msg('intent.evidenceChanged', { id });
     }
     return null;
   };
@@ -288,9 +295,9 @@ export function createPendingIntentState(
   async function send(localId: string): Promise<SendOutcome> {
     const first = find(localId);
     if (!first || first.phase !== 'composing') {
-      return { accepted: false, reason: `no composing entry '${localId}'`, invalid: true };
+      return refusedIntent(msg('intent.noComposingEntry', { id: localId }));
     }
-    if (isUndecided(first.draft)) return refuse(first, 'choose an action before sending');
+    if (isUndecided(first.draft)) return refuse(first, msg('intent.chooseAction'));
     let editDigest: string | undefined;
     if (first.editBuffer) {
       const early = editProblem(first);
@@ -298,20 +305,20 @@ export function createPendingIntentState(
       try {
         editDigest = await sha256Hex(utf8Bytes(first.editBuffer.body));
       } catch (err) {
-        return refuse(first, `digest unavailable: ${String(err)}`);
+        return refuse(first, msg('intent.digestUnavailable', { error: String(err) }));
       }
     }
 
     // ---- synchronous from here until post() is called ----
     const entry = find(localId);
     if (!entry || entry.phase !== 'composing') {
-      return { accepted: false, reason: 'entry left composing while sending', invalid: true };
+      return refusedIntent(msg('intent.leftComposing'));
     }
     if (entry.draft !== first.draft || entry.editBuffer !== first.editBuffer) {
-      return refuse(entry, 'draft changed while sending — send again');
+      return refuse(entry, msg('intent.draftChanged'));
     }
     const draft = entry.draft;
-    if (isUndecided(draft)) return refuse(entry, 'choose an action before sending');
+    if (isUndecided(draft)) return refuse(entry, msg('intent.chooseAction'));
     const late = editProblem(entry);
     if (late) return refuse(entry, late);
     // Validated, stored and posted object are one frozen copy, carrying its idempotency key.
@@ -337,16 +344,18 @@ export function createPendingIntentState(
     const posting = (async () => post(intent))();
     // ---- end of synchronous section ----
 
-    let result: IntentResult | RefusedIntent;
+    let result: RelayResult | RefusedIntent;
     try {
-      result = await posting;
+      const answer = await posting;
+      // A local refusal is recognized only by its tag and message; anything else is the relay's answer, re-normalized.
+      result = isRefused(answer) ? answer : relayResult(answer);
     } catch (err) {
-      const reason = `relay unreachable: ${String(err)}`;
+      const reason = msg('intent.relayUnreachable', { error: String(err) });
       replace(localId, 'in-flight', (e) => ({ ...e, unconfirmed: reason, unconfirmedAt: Date.now() }) as InFlightEntry);
-      return { accepted: false, reason, unconfirmed: true };
+      return { accepted: false, reason: tm(reason), why: reason, unconfirmed: true };
     }
     if (isRefused(result)) {
-      replace(localId, 'in-flight', () => ({ ...entry, invalid: result.reason, invalidAt: Date.now() }));
+      replace(localId, 'in-flight', () => ({ ...entry, invalid: result.why, invalidAt: Date.now() }));
       return result;
     }
     if (!result.accepted) {
@@ -365,8 +374,9 @@ export function createPendingIntentState(
       } else {
         setEntries((list) => [...list, { ...rejected, afterReconcile: true }]);
       }
+      return { accepted: false, ...(result.reason !== undefined ? { reason: result.reason } : {}), upstream: true };
     }
-    return result;
+    return { accepted: true };
   }
 
   return {
@@ -387,10 +397,10 @@ export function createPendingIntentState(
           return [{ localId: e.localId, kind: 'rejected', reason: e.reason, at: e.at, ...addr(e.intent), ...(e.afterReconcile ? { afterReconcile: true as const } : {}) }];
         }
         if (e.phase === 'composing' && e.invalid !== undefined) {
-          return [{ localId: e.localId, kind: 'invalid', reason: e.invalid, at: e.invalidAt ?? e.openedAt, ...addr(e.draft) }];
+          return [{ localId: e.localId, kind: 'invalid', reason: tm(e.invalid), at: e.invalidAt ?? e.openedAt, ...addr(e.draft) }];
         }
         if (e.phase === 'in-flight' && e.unconfirmed !== undefined) {
-          return [{ localId: e.localId, kind: 'unconfirmed', reason: e.unconfirmed, at: e.unconfirmedAt ?? e.sentAt, ...addr(e.intent) }];
+          return [{ localId: e.localId, kind: 'unconfirmed', reason: tm(e.unconfirmed), at: e.unconfirmedAt ?? e.sentAt, ...addr(e.intent) }];
         }
         return [];
       }),
@@ -490,7 +500,7 @@ export function createPendingIntentState(
      * The channel that would confirm these in-flight entries was lost: they
      * stay in-flight (they may have landed) but are marked unconfirmed.
      */
-    markUnconfirmed(which: (entry: InFlightEntry) => boolean, reason: string) {
+    markUnconfirmed(which: (entry: InFlightEntry) => boolean, reason: Msg) {
       const at = Date.now();
       setEntries((list) =>
         list.map((e) =>

@@ -11,6 +11,7 @@ import { WORKSPACE_ROOT_KIND } from '@gunnflow/contract';
 import { configLenses } from '@gunnflow/contract/wiring';
 import type { WorkspaceStores } from '../state/stores.js';
 import { lensMatcher, type LensFacts } from '../state/lens.js';
+import { t } from '../i18n/index.js';
 
 export function WorkspaceSidebar(props: { stores: WorkspaceStores; onOpenSettings?: () => void }) {
   const { lensState, projectionStore, wiring } = props.stores;
@@ -22,17 +23,17 @@ export function WorkspaceSidebar(props: { stores: WorkspaceStores; onOpenSetting
   const entries = createMemo(() => {
     const fs = facts();
     return [
-      { id: 'all', label: 'Workspace', count: null as number | null },
+      { id: 'all', label: t('sidebar.lensAll'), count: null as number | null },
       ...configLenses(wiring.config).map((l) => ({
         id: l.id,
         label: l.label,
         count: fs.filter(lensMatcher(l.match, fs)).length,
       })),
-      { id: 'plan', label: 'Plan', count: null as number | null },
+      { id: 'plan', label: t('sidebar.lensPlan'), count: null as number | null },
     ];
   });
   return (
-    <nav class="sidebar" aria-label="Workspace lenses">
+    <nav class="sidebar" aria-label={t('sidebar.lenses')}>
       <ul>
         <For each={entries()}>
           {(item) => (
@@ -51,10 +52,10 @@ export function WorkspaceSidebar(props: { stores: WorkspaceStores; onOpenSetting
       </ul>
       <div class="sidebar-footer">
         {/* Route placeholders only — later canonical surfaces. */}
-        <button disabled title="Later surface (History / Replay)">History</button>
-        <button disabled title="Later surface (Governance)">Governance</button>
-        <button data-testid="settings-open" class="settings-entry" title="How states, relations, attention and file types are shown (your wiring file)" onClick={() => props.onOpenSettings?.()}>
-          Settings
+        <button disabled title={t('sidebar.historyTitle')}>{t('sidebar.history')}</button>
+        <button disabled title={t('sidebar.governanceTitle')}>{t('sidebar.governance')}</button>
+        <button data-testid="settings-open" class="settings-entry" title={t('sidebar.settingsTitle')} onClick={() => props.onOpenSettings?.()}>
+          {t('sidebar.settings')}
         </button>
       </div>
     </nav>

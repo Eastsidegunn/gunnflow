@@ -1,5 +1,6 @@
 /** The personal layer's own transport: /api/personal and its mermaid rendering. It knows no other route. */
 import type { PersonalDoc } from './schema.js';
+import { MsgError, msg, msgOf, raw, type Msg } from '../i18n/index.js';
 
 export interface PersonalStore {
   load(): Promise<{ doc: unknown | null }>;
@@ -7,7 +8,7 @@ export interface PersonalStore {
 }
 
 /** A personal mermaid source rendered on the isolated origin: the SVG's path there, or why not. */
-export type PersonalRender = { ok: true; hash: string; svgPath: string } | { ok: false; reason: string };
+export type PersonalRender = { ok: true; hash: string; svgPath: string } | { ok: false; reason: Msg };
 
 export async function renderPersonalMermaid(source: string): Promise<PersonalRender> {
   try {
@@ -18,21 +19,21 @@ export async function renderPersonalMermaid(source: string): Promise<PersonalRen
     });
     const body = (await res.json().catch(() => null)) as { hash?: unknown; svgPath?: unknown; reason?: unknown } | null;
     if (res.ok && typeof body?.hash === 'string' && typeof body.svgPath === 'string') return { ok: true, hash: body.hash, svgPath: body.svgPath };
-    return { ok: false, reason: typeof body?.reason === 'string' ? body.reason : `renderer answered ${res.status}` };
+    return { ok: false, reason: typeof body?.reason === 'string' ? raw(body.reason) : msg('personal.renderer.answered', { status: res.status }) };
   } catch (err) {
-    return { ok: false, reason: `renderer unreachable: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, reason: msg('personal.renderer.unreachable', { error: msgOf(err) }) };
   }
 }
 
-async function reasonOf(res: Response): Promise<string> {
+async function reasonOf(res: Response): Promise<Msg> {
   const body = (await res.json().catch(() => null)) as { reason?: unknown } | null;
-  return typeof body?.reason === 'string' ? body.reason : `personal store answered ${res.status}`;
+  return typeof body?.reason === 'string' ? raw(body.reason) : msg('personal.store.answered', { status: res.status });
 }
 
 export const httpPersonalStore: PersonalStore = {
   async load() {
     const res = await fetch('/api/personal', { cache: 'no-store' });
-    if (!res.ok) throw new Error(await reasonOf(res));
+    if (!res.ok) throw new MsgError(await reasonOf(res));
     return (await res.json()) as { doc: unknown | null };
   },
   async save(doc) {
@@ -41,6 +42,6 @@ export const httpPersonalStore: PersonalStore = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(doc),
     });
-    if (!res.ok) throw new Error(await reasonOf(res));
+    if (!res.ok) throw new MsgError(await reasonOf(res));
   },
 };

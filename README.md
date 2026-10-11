@@ -146,6 +146,13 @@ another host name, set `GUNNFLOW_WEB_ORIGIN` and `GUNNFLOW_PREVIEW_ORIGIN` (or `
 `VITE_PREVIEW_ORIGIN`) to the addresses the browser uses. The preview origin must stay a different
 origin from the web app.
 
+**Language.** The interface is in English by default and also comes in Korean. Switch it with the
+`EN · 한국어` control at the right of the status line, or under Settings → Preferences. The choice is
+kept in this browser (localStorage) and applies at once — no reload, nothing is sent anywhere.
+Without a stored choice, a browser set to Korean starts in Korean. Only the cockpit's own text is
+translated: node labels, kinds, states, relations, actions, attention causes and wiring labels
+are shown exactly as the backend and your wiring files send them.
+
 ## Build and test
 
 ```sh

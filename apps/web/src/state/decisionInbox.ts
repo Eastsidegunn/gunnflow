@@ -11,6 +11,7 @@
  */
 import type { NodeProjection } from '@gunnflow/contract';
 import { attentionMechanism, type AttentionMechanism, type WiringConfig } from '@gunnflow/contract/wiring';
+import { t } from '../i18n/index.js';
 
 export interface InboxRow {
   id: string;
@@ -128,22 +129,25 @@ function sinceOf(attention: NodeProjection['attention']): { since?: string } {
 
 /**
  * Relative waiting time for a received `since` (view status: a difference of
- * two clocks, nothing more). Future or sub-minute → "방금"; unparseable → null.
+ * two clocks, nothing more), in the current locale. Future or sub-minute →
+ * "just now"; unparseable → null.
  */
 export function relativeSince(since: string | undefined, now: number): string | null {
   if (since === undefined) return null;
   const at = Date.parse(since);
   if (Number.isNaN(at)) return null;
   const minutes = Math.floor((now - at) / 60_000);
-  if (minutes < 1) return '방금';
-  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 1) return t('time.justNow');
+  if (minutes < 60) return t('time.minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  return `${Math.floor(hours / 24)}일 전`;
+  if (hours < 24) return t('time.hoursAgo', { count: hours });
+  return t('time.daysAgo', { count: Math.floor(hours / 24) });
 }
 
-/** The default group's chrome name: for rows whose causes match no grouped rule. */
-export const DEFAULT_GROUP_NAME = '그 밖';
+/** The default group's chrome name (current locale): for rows whose causes match no grouped rule. */
+export function defaultGroupName(): string {
+  return t('inbox.defaultGroup');
+}
 
 export interface InboxGroupDecl {
   /** Config group name (verbatim literal); null for the default group. */
@@ -212,7 +216,7 @@ export function groupRows(rows: readonly InboxRow[], config: WiringConfig): Inbo
 
 /** A group's display name: its config literal, or the neutral chrome name for the default group. */
 export function groupName(group: InboxGroupDecl): string {
-  return group.name ?? DEFAULT_GROUP_NAME;
+  return group.name ?? defaultGroupName();
 }
 
 /** Stable key for a group's fold state (the default group cannot collide with a config name). */

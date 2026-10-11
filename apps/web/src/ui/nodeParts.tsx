@@ -11,7 +11,7 @@ import type { WorkspaceStores } from '../state/stores.js';
 import type { Intent } from '../model/types.js';
 import type { ResolvedAction, ResolvedParts } from '../canvas/parts.js';
 import { actionGate, hiddenDraft, needsDraftRecovery, openGate, shownDecision, textModeFor, type TextMode } from '../state/genericActions.js';
-import { copiedStatement, tokenizeCopyText } from '../state/copyText.js';
+import { copiedMessage, tokenizeCopyText } from '../state/copyText.js';
 import type { DisplayToken } from '../state/editorLogic.js';
 import { isUndecided, type ComposingEntry, type Draft } from '../state/pendingIntents.js';
 import { isSessionIntent } from '../model/types.js';
@@ -19,6 +19,7 @@ import { EvidenceView } from './EvidenceView.jsx';
 import { ArtifactViewer } from './ArtifactViewer.jsx';
 import { FakeEditorPart } from './FakeEditorPart.jsx';
 import { fetchNodeDetail, type NodeDetailView } from '../state/nodeDetail.js';
+import { t, tm, type Msg } from '../i18n/index.js';
 
 function addresses(draft: Draft, node: NodeProjection, action: string): boolean {
   return !isUndecided(draft) && !isSessionIntent(draft) && draft.action === action && draft.nodeId === node.id;
@@ -45,19 +46,19 @@ export function DetailSection(props: { stores: WorkspaceStores; nodeId: string }
   return (
     <>
       <Show when={view.loading}>
-        <p class="hint" data-testid="node-detail-loading">loading details…</p>
+        <p class="hint" data-testid="node-detail-loading">{t('node.detailLoading')}</p>
       </Show>
       <Show when={when('unsupported')}>
-        <p class="hint" data-testid="node-detail-unsupported">details: not served by this backend</p>
+        <p class="hint" data-testid="node-detail-unsupported">{t('node.detailUnsupported')}</p>
       </Show>
       <Show when={when('unavailable')}>
-        {(u) => <p class="hint" data-testid="node-detail-unavailable">details unavailable — {u().reason}</p>}
+        {(u) => <p class="hint" data-testid="node-detail-unavailable">{t('node.detailUnavailable', { reason: u().reason })}</p>}
       </Show>
       <Show when={when('items')}>
         {(d) => (
           <section class="node-detail" data-testid="node-detail-section">
             <h3>
-              Details <span class="hint">· as of revision {d().detail.revision}</span>
+              {t('node.details')} <span class="hint">· {t('node.asOfRevision', { revision: d().detail.revision })}</span>
             </h3>
             {/* Everything inside is agent-written content: one claim stripe along its left. */}
             <div class="node-detail-claim" data-grade="claim" data-testid="node-detail-claim">
@@ -126,7 +127,7 @@ export function DetailSection(props: { stores: WorkspaceStores; nodeId: string }
  */
 export function CopyBox(props: { text: string; testId: string }) {
   const lines = createMemo(() => tokenizeCopyText(props.text));
-  const [status, setStatus] = createSignal<{ kind: 'copied'; statement: string } | { kind: 'failed' } | null>(null);
+  const [status, setStatus] = createSignal<{ kind: 'copied'; statement: Msg } | { kind: 'failed' } | null>(null);
   let code: HTMLElement | undefined;
   const selectBox = () => {
     const sel = window.getSelection();
@@ -146,7 +147,7 @@ export function CopyBox(props: { text: string; testId: string }) {
     try {
       const writing = navigator.clipboard?.writeText(value);
       if (!writing) return failed();
-      writing.then(() => setStatus({ kind: 'copied', statement: copiedStatement(value) }), failed);
+      writing.then(() => setStatus({ kind: 'copied', statement: copiedMessage(value) }), failed);
     } catch {
       failed();
     }
@@ -162,7 +163,7 @@ export function CopyBox(props: { text: string; testId: string }) {
         >
           {(() => {
             const s = status();
-            return s?.kind === 'copied' ? s.statement : '복사';
+            return s?.kind === 'copied' ? tm(s.statement) : t('node.copy');
           })()}
         </button>
       </div>
@@ -174,12 +175,12 @@ export function CopyBox(props: { text: string; testId: string }) {
           <For each={lines()}>
             {(l) => (
               <For each={l.tokens}>
-                {(t) =>
-                  t.kind === 'text' ? (
-                    t.raw
+                {(tok) =>
+                  tok.kind === 'text' ? (
+                    tok.raw
                   ) : (
-                    <span class="copy-mark" data-cls={t.cls} data-mark={t.mark} data-testid={`${props.testId}-mark`}>
-                      <span class="copy-raw">{t.raw}</span>
+                    <span class="copy-mark" data-cls={tok.cls} data-mark={tok.mark} data-testid={`${props.testId}-mark`}>
+                      <span class="copy-raw">{tok.raw}</span>
                     </span>
                   )
                 }
@@ -190,10 +191,10 @@ export function CopyBox(props: { text: string; testId: string }) {
       </div>
       <Show when={status()?.kind === 'failed'}>
         <p class="copy-failed" role="alert" data-testid={`${props.testId}-failed`}>
-          복사 실패 — 직접 선택해 복사하세요
+          {t('node.copyFailed')}
         </p>
       </Show>
-      <p class="hint copy-note">Gunnflow는 명령을 실행하지 않습니다 — 터미널에서 실행하세요</p>
+      <p class="hint copy-note">{t('node.copyNote')}</p>
     </div>
   );
 }
@@ -240,7 +241,7 @@ export function NodeActions(props: {
       when={actionNames().length > 0}
       fallback={
         <p class="no-actions" data-testid="no-actions">
-          이 항목에 상류가 선언한 행동이 없습니다
+          {t('node.noActions')}
         </p>
       }
     >
@@ -302,6 +303,7 @@ export function NodeActions(props: {
     };
     const gate = () => actionGate(a(), preconditions());
     const reason = () => (gate().runnable ? null : (gate() as { reason: string }).reason);
+    const reasonCode = () => { const g = gate(); return g.runnable ? null : g.code; };
 
     /** A typed text this control is not showing: its direct send is blocked until the person keeps (opens) or discards it. */
     const hidden = () => hiddenDraft(decision(), textMode(), isExpanded());
@@ -344,9 +346,9 @@ export function NodeActions(props: {
     };
     // The bar hides the "fill in" reason while a required field is still closed (the click opens it).
     const showReason = () => {
-      const r = reason();
-      if (r === null || r === 'read-only — switch to Intervene') return false;
-      return !(textMode() === 'expand' && !isExpanded() && r === 'fill in what this action requires');
+      const r = reasonCode();
+      if (r === null) return false;
+      return !(textMode() === 'expand' && !isExpanded() && r === 'needsInput');
     };
 
     return (
@@ -376,19 +378,19 @@ export function NodeActions(props: {
               value={decision().option ?? ''}
               onChange={(e) => setDecision({ option: e.currentTarget.value || undefined })}
             >
-              <option value="">choose…</option>
+              <option value="">{t('node.choose')}</option>
               <For each={options()}>{(o) => <option value={o}>{o}</option>}</For>
             </select>
           )}
         </Show>
         <Show when={textMode() === 'field'}>
           <label class="field-label" for={`text-${a().action}`}>
-            {label()}{requiredText() ? ' (required)' : ''}
+            {requiredText() ? t('node.fieldRequired', { label: label() }) : label()}
           </label>
           <input
             id={`text-${a().action}`}
             data-testid={`generic-text-${a().action}`}
-            placeholder={requiredText() ? 'required' : 'optional'}
+            placeholder={requiredText() ? t('node.required') : t('node.optional')}
             value={decision().text ?? ''}
             onInput={(e) => setDecision({ text: e.currentTarget.value })}
           />
@@ -397,8 +399,8 @@ export function NodeActions(props: {
           <input
             class="bar-inline-text"
             data-testid={`generic-text-${a().action}`}
-            aria-label={`${label()} 메모 (선택)`}
-            placeholder={`${label()} 메모 (선택)`}
+            aria-label={t('node.inlineNote', { label: label() })}
+            placeholder={t('node.inlineNote', { label: label() })}
             value={decision().text ?? ''}
             onInput={(e) => setDecision({ text: e.currentTarget.value })}
           />
@@ -408,8 +410,8 @@ export function NodeActions(props: {
             <textarea
               rows={3}
               data-testid={`generic-text-${a().action}`}
-              aria-label={`${label()} 사유${requiredText() ? "" : " (선택)"}`}
-              placeholder={`${label()} 사유${requiredText() ? "" : " (선택)"}`}
+              aria-label={requiredText() ? t('node.reason', { label: label() }) : t('node.reasonOptional', { label: label() })}
+              placeholder={requiredText() ? t('node.reason', { label: label() }) : t('node.reasonOptional', { label: label() })}
               value={decision().text ?? ''}
               onInput={(e) => setDecision({ text: e.currentTarget.value })}
               ref={(el) => queueMicrotask(() => el.focus())}
@@ -422,11 +424,11 @@ export function NodeActions(props: {
                 title={gate().runnable ? a().action : (reason() ?? undefined)}
                 onClick={send}
               >
-                보내기
+                {t('node.send')}
               </button>
               {/* Closing keeps what was typed (the composing entry stays); nothing is discarded here. */}
               <button data-testid={`generic-cancel-${a().action}`} onClick={() => setExpanded(null)}>
-                취소
+                {t('node.cancel')}
               </button>
             </div>
           </div>
@@ -438,12 +440,12 @@ export function NodeActions(props: {
             <div class="hidden-draft bar-wide" data-testid={`hidden-draft-${a().action}`}>
               <p class="hint">
                 {textMode() === 'none'
-                  ? '이 행동에는 지금 입력란이 없지만, 전에 쓴 초안이 남아 있습니다. 버려야 보낼 수 있습니다.'
-                  : '이 행동에 쓴 초안이 남아 있지만 지금은 열거나 보낼 수 없습니다. 초안은 그대로 둡니다 — 필요 없으면 버리세요.'}
+                  ? t('node.hiddenDraftNoField')
+                  : t('node.hiddenDraftCannotOpen')}
               </p>
               <pre class="detail-text">{text()}</pre>
               <button data-testid={`hidden-draft-discard-${a().action}`} onClick={discardHidden}>
-                초안 버리기
+                {t('node.discardDraft')}
               </button>
             </div>
           )}
@@ -474,13 +476,13 @@ export function NodeActions(props: {
             {label()}
             {/* A kept draft waits behind the opener: opening shows it before anything can be sent. */}
             <Show when={hidden() !== null}>
-              <span class="draft-mark" data-testid={`hidden-draft-mark-${a().action}`}> · 초안</span>
+              <span class="draft-mark" data-testid={`hidden-draft-mark-${a().action}`}> · {t('node.draftMark')}</span>
             </Show>
           </button>
         </Show>
         <Show when={evidence().length > 0}>
           <span class="hint bar-note" data-testid={`evidence-count-${a().action}`}>
-            Evidence viewed {evidence().filter((id) => views().has(id)).length}/{evidence().length}
+            {t('node.evidenceViewed', { viewed: evidence().filter((id) => views().has(id)).length, total: evidence().length })}
           </span>
         </Show>
         <Show when={showReason()}>
@@ -514,27 +516,27 @@ export function NodeActions(props: {
       return (
         <>
           <Show when={inFlight()}>
-            <span class="send-receipt bar-note" data-state="sending" data-testid={`receipt-${a().action}`}>Sending…</span>
+            <span class="send-receipt bar-note" data-state="sending" data-testid={`receipt-${a().action}`}>{t('node.sending')}</span>
           </Show>
           <Show when={!inFlight() && errFor()}>
             {(err) => (
               <span class="send-receipt bar-note" data-state="failed" data-testid={`receipt-${a().action}`}>
-                Not confirmed — {err().reason ?? 'no reason given'}{' '}
+                {t('node.notConfirmed', { reason: err().reason ?? t('node.noReason') })}{' '}
                 <Show when={err().kind !== 'invalid'}>
                   <button class="linklike" data-testid={`receipt-restore-${a().action}`} onClick={() => pendingIntents.reopen(err().localId)}>
-                    Restore
+                    {t('node.restore')}
                   </button>
                 </Show>{' '}
                 <Show when={err().kind === 'rejected'}>
                   <button class="linklike" data-testid={`receipt-discard-${a().action}`} onClick={() => pendingIntents.discard(err().localId)}>
-                    Discard
+                    {t('node.discard')}
                   </button>
                 </Show>
               </span>
             )}
           </Show>
           <Show when={!inFlight() && !errFor() && confirmedAt()}>
-            <span class="send-receipt bar-note" data-state="confirmed" data-testid={`receipt-${a().action}`}>Confirmed</span>
+            <span class="send-receipt bar-note" data-state="confirmed" data-testid={`receipt-${a().action}`}>{t('node.confirmed')}</span>
           </Show>
         </>
       );

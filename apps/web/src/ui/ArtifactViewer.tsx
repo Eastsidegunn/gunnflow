@@ -17,6 +17,7 @@ import {
   previewMermaidUrl,
 } from '../transport/previewOrigin.js';
 import { onRendered } from './renderedToken.js';
+import { msg, raw, t, type Msg } from '../i18n/index.js';
 
 /** Asks the isolated origin about a digest address; only a verified 200 names a digest. */
 async function servedDigest(src: string): Promise<string | null> {
@@ -38,10 +39,10 @@ export function ArtifactViewer(props: {
   onViewed?: (token: DisplayToken) => void;
   testIdPrefix: string;
 }) {
-  const viewed = (t: DisplayToken | undefined) => t && props.onViewed?.(t);
+  const viewed = (token: DisplayToken | undefined) => token && props.onViewed?.(token);
   const tid = (part: string) => `${props.testIdPrefix}-${part}-${props.artifactId}`;
   return (
-    <Show when={props.artifact} fallback={<p class="hint">Artifact {props.artifactId} is not in the projection.</p>}>
+    <Show when={props.artifact} fallback={<p class="hint">{t('viewer.notInProjection', { id: props.artifactId })}</p>}>
       {(ref) => {
         const plan = viewerPlan(ref(), props.config);
         return (
@@ -63,11 +64,11 @@ export function ArtifactViewer(props: {
             </Match>
             <Match when={plan === 'fallback'}>
               <p class="hint" data-testid={tid('fallback')}>
-                No viewer for {ref().mediaType}.{' '}
-                <Show when={!pageIsolationProblem() && ref().digest} fallback="Nothing to download without a declared digest on an isolated origin.">
+                {t('viewer.noViewer', { mediaType: ref().mediaType })}{' '}
+                <Show when={!pageIsolationProblem() && ref().digest} fallback={t('viewer.nothingToDownload')}>
                   {(d) => (
                     <a href={previewDownloadUrl(ref().id, d() as string)} target="_blank" rel="noopener noreferrer" download="">
-                      Download the verified bytes
+                      {t('viewer.download')}
                     </a>
                   )}
                 </Show>
@@ -91,7 +92,7 @@ function PlainView(p: { artifact: ArtifactRef; b64: string | undefined; tid: str
             {fixed.text}
           </pre>
         ) : (
-          <p class="hint">Artifact cannot be pinned — {fixed.reason}</p>
+          <p class="hint">{t('viewer.unpinnable', { reason: fixed.reason })}</p>
         );
       }}
     </Show>
@@ -111,13 +112,14 @@ function IsolatedView(p: {
   onViewed: (t: DisplayToken | undefined) => void;
 }) {
   const problem = pageIsolationProblem();
-  if (problem) return <p class="hint" data-testid={`${p.tid}-refused`}>Isolated viewer refused — {problem}</p>;
+  if (problem) return <p class="hint" data-testid={`${p.tid}-refused`}>{t('viewer.isolatedRefused', { reason: problem })}</p>;
   const digest = p.artifact.digest;
-  if (!digest) return <p class="hint">No declared digest — the isolated viewer shows nothing.</p>;
+  if (!digest) return <p class="hint">{t('viewer.noDigest')}</p>;
   const src = p.src(p.artifact.id, digest);
   const pinned = pinServed(p.artifact, src);
   const [status, setStatus] = createSignal<'loading' | 'confirmed' | 'unconfirmed'>('loading');
-  const [failure, setFailure] = createSignal<string | null>(null);
+  // The viewer's own reason verbatim, or the engine's statement (translated when shown).
+  const [failure, setFailure] = createSignal<Msg | null>(null);
   let frame: HTMLIFrameElement | undefined;
   // The scene viewer reports whether it drew the scene (its page has an opaque origin; the source is the frame itself).
   const drawn =
@@ -128,7 +130,7 @@ function IsolatedView(p: {
             const d = e.data as { gunnflowViewer?: string; digest?: string; reason?: string } | null;
             if (d?.gunnflowViewer === 'rendered' && d.digest === digest) finish(true);
             else if (d?.gunnflowViewer === 'failed') {
-              setFailure(typeof d.reason === 'string' ? d.reason : 'the viewer could not draw the scene');
+              setFailure(typeof d.reason === 'string' ? raw(d.reason) : msg('viewer.sceneFailed'));
               finish(false);
             }
           };
@@ -164,7 +166,7 @@ function IsolatedView(p: {
           data-testid={p.tid}
           src={src}
           sandbox="allow-scripts"
-          title={`Artifact ${p.artifact.id} (isolated scene viewer)`}
+          title={t('viewer.sceneTitle', { id: p.artifact.id })}
           onLoad={(e) => loaded(e.currentTarget)}
         />
       ) : (
@@ -175,13 +177,13 @@ function IsolatedView(p: {
           data-testid={p.tid}
           src={src}
           sandbox=""
-          title={`Artifact ${p.artifact.id} (isolated)`}
+          title={t('viewer.frameTitle', { id: p.artifact.id })}
           onLoad={(e) => loaded(e.currentTarget)}
         />
       )}
       <Show when={status() === 'unconfirmed'}>
         <p class="hint" data-testid={`${p.tid}-unconfirmed`}>
-          {failure() ?? 'The isolated origin did not confirm these bytes'} — not counted as viewed.
+          {t('viewer.unconfirmed', { reason: failure() ?? msg('viewer.originDidNotConfirm') })}
         </p>
       </Show>
     </>
@@ -189,14 +191,14 @@ function IsolatedView(p: {
 }
 
 /** What the isolated renderer says about a mermaid source version: rendered, or unavailable with its reason. */
-async function renderStatus(src: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+async function renderStatus(src: string): Promise<{ ok: true } | { ok: false; reason: Msg }> {
   try {
     const res = await fetch(src, { method: 'HEAD', cache: 'no-store' });
     if (res.ok) return { ok: true };
     const header = res.headers.get('x-gunnflow-render-error');
-    return { ok: false, reason: header ? decodeURIComponent(header) : `renderer answered ${res.status}` };
+    return { ok: false, reason: header ? raw(decodeURIComponent(header)) : msg('viewer.rendererAnswered', { status: res.status }) };
   } catch (err) {
-    return { ok: false, reason: `renderer unreachable: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, reason: msg('viewer.rendererUnreachable', { error: err instanceof Error ? err.message : String(err) }) };
   }
 }
 
@@ -207,9 +209,9 @@ async function renderStatus(src: string): Promise<{ ok: true } | { ok: false; re
  */
 function MermaidView(p: { artifact: ArtifactRef; b64: string | undefined; tid: string; onViewed: (t: DisplayToken | undefined) => void }) {
   const problem = pageIsolationProblem();
-  if (problem) return <p class="hint" data-testid={`${p.tid}-refused`}>Isolated viewer refused — {problem}</p>;
+  if (problem) return <p class="hint" data-testid={`${p.tid}-refused`}>{t('viewer.isolatedRefused', { reason: problem })}</p>;
   const digest = p.artifact.digest;
-  if (!digest) return <p class="hint">No declared digest — the isolated viewer shows nothing.</p>;
+  if (!digest) return <p class="hint">{t('viewer.noDigest')}</p>;
   const [status] = createResource(() => renderStatus(previewMermaidUrl(p.artifact.id, digest)));
   // Source text for the fallback: the projection's snapshot, else the verified bytes from the isolated origin.
   const [b64] = createResource(
@@ -224,7 +226,7 @@ function MermaidView(p: { artifact: ArtifactRef; b64: string | undefined; tid: s
           <IsolatedView artifact={p.artifact} embed="img" src={previewMermaidUrl} tid={p.tid} onViewed={p.onViewed} />
         ) : (
           <div data-testid={`${p.tid}-unavailable`}>
-            <p class="hint">Renderer unavailable — {st.reason}. Showing the diagram source.</p>
+            <p class="hint">{t('viewer.rendererUnavailable', { reason: st.reason })}</p>
             <Show when={b64() !== undefined}>
               <PlainView artifact={p.artifact} b64={b64() ?? undefined} tid={`${p.tid}-source`} onViewed={p.onViewed} />
             </Show>
@@ -252,9 +254,9 @@ function PortalView(p: { url: string; tid: string }) {
   const [open, setOpen] = createSignal(false);
   return (
     <div class="artifact-portal" data-grade="portal" data-testid={p.tid}>
-      <p class="grade-label">portal · live remote content · no guarantee · cannot be attested</p>
-      <Show when={open()} fallback={<button data-testid={`${p.tid}-open`} onClick={() => setOpen(true)}>Open</button>}>
-        <iframe class="artifact-frame" src={p.url} sandbox="" title="Live portal" referrerPolicy="no-referrer" />
+      <p class="grade-label">{t('viewer.portalGrade')}</p>
+      <Show when={open()} fallback={<button data-testid={`${p.tid}-open`} onClick={() => setOpen(true)}>{t('viewer.open')}</button>}>
+        <iframe class="artifact-frame" src={p.url} sandbox="" title={t('viewer.portalTitle')} referrerPolicy="no-referrer" />
       </Show>
     </div>
   );

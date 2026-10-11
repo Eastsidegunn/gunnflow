@@ -6,6 +6,7 @@
  */
 import { createSignal } from 'solid-js';
 import type { PersonalStore } from './client.js';
+import { msg, msgOf, t, tm, type Msg } from '../i18n/index.js';
 import {
   PERSONAL_LIMITS,
   STICKY_DEFAULT,
@@ -35,7 +36,9 @@ export function createPersonalState(store: PersonalStore, options: { debounceMs?
   const debounceMs = options.debounceMs ?? 400;
   const [doc, setDoc] = createSignal<PersonalDoc>(emptyPersonalDoc());
   const [status, setStatus] = createSignal<PersonalStatus>('loading');
-  const [problem, setProblem] = createSignal<string | null>(null);
+  /** Why the layer is read-only or unsaved: a catalog message (shown in the current language) or a verbatim error. */
+  const [why, setProblem] = createSignal<Msg | null>(null);
+  const problem = (): string | null => tm(why());
   const [open, setOpen] = createSignal<PersonalOpen>(null);
   /** Link mode: the next item clicked becomes the link's other end. */
   const [connectFrom, setConnectFrom] = createSignal<LinkEnd | null>(null);
@@ -60,7 +63,7 @@ export function createPersonalState(store: PersonalStore, options: { debounceMs?
         },
         (err: unknown) => {
           setStatus('unavailable');
-          setProblem(`not saved: ${err instanceof Error ? err.message : String(err)}`);
+          setProblem(msg('personal.problem.notSaved', { detail: msgOf(err) }));
         },
       ),
     );
@@ -100,7 +103,7 @@ export function createPersonalState(store: PersonalStore, options: { debounceMs?
           const p = personalDocProblem(raw);
           if (p) {
             setStatus('unavailable');
-            setProblem(`stored personal notes are invalid (${p}); editing is off so they are not overwritten`);
+            setProblem(msg('personal.problem.invalid', { detail: p }));
             return;
           }
           setDoc(raw as PersonalDoc);
@@ -114,7 +117,7 @@ export function createPersonalState(store: PersonalStore, options: { debounceMs?
         setStatus('ready');
       } catch (err) {
         setStatus('unavailable');
-        setProblem(err instanceof Error ? err.message : String(err));
+        setProblem(msgOf(err));
       }
     },
     flush,
@@ -167,7 +170,8 @@ export function createPersonalState(store: PersonalStore, options: { debounceMs?
     },
 
     /* ---- boxes ---- */
-    addBox(x: number, y: number, label = 'Goal', w = 520, h = 320): string | null {
+    // The default label is written in the creation locale on purpose: once created it is the person's own data, never re-translated.
+    addBox(x: number, y: number, label = t('personal.box.defaultLabel'), w = 520, h = 320): string | null {
       if (doc().boxes.length >= PERSONAL_LIMITS.boxes) return null;
       const box: PersonalBox = { id: newId('b'), label: label.slice(0, PERSONAL_LIMITS.labelChars), x, y, w: clampSize(w), h: clampSize(h), members: [], updatedAt: now() };
       return edit({ ...doc(), boxes: [...doc().boxes, box] }) ? box.id : null;

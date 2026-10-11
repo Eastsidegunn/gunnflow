@@ -19,9 +19,15 @@ test('toggle → count → emphasized recommendation → approve → auto-advanc
   await page.getByTestId('decision-inbox-toggle').click();
   const inbox = page.getByTestId('decision-inbox');
   await expect(inbox).toBeVisible();
-  await expect(page.getByTestId('inbox-pending-count')).toHaveText('미결 2');
+  await expect(page.getByTestId('inbox-pending-count')).toHaveText('2 pending');
   // Canvas stays visible behind the drawer (wide drawer, not a full overlay).
   await expect(page.getByTestId('canvas-host')).toBeVisible();
+  // The drawer stops above the status line: once it has settled, the strip's controls still take clicks.
+  await page.waitForTimeout(400);
+  const drawerBox = await inbox.boundingBox();
+  const stripBox = await page.locator('.status-strip').boundingBox();
+  expect(drawerBox!.y + drawerBox!.height).toBeLessThanOrEqual(stripBox!.y + 0.5);
+  await page.getByTestId('activity-toggle').click({ trial: true, timeout: 2000 });
 
   // Interrupt-mapped before ambient-mapped; rows carry state + cause verbatim.
   const gateRow = page.getByTestId('inbox-row-g-publish');
@@ -47,9 +53,9 @@ test('toggle → count → emphasized recommendation → approve → auto-advanc
 
   // Auto-advance to the next pending item; the decided one folds — never removed.
   await expect(page.getByTestId('inbox-row-t-test')).toHaveAttribute('data-selected', 'yes');
-  await expect(page.getByTestId('inbox-pending-count')).toHaveText('미결 1');
+  await expect(page.getByTestId('inbox-pending-count')).toHaveText('1 pending');
   const decidedToggle = page.getByTestId('inbox-decided-toggle');
-  await expect(decidedToggle).toContainText('결정됨 1');
+  await expect(decidedToggle).toContainText('Decided 1');
   await decidedToggle.click();
   await expect(page.getByTestId('inbox-decided-list').getByTestId('inbox-row-g-publish')).toBeVisible();
 
@@ -58,7 +64,7 @@ test('toggle → count → emphasized recommendation → approve → auto-advanc
   await page.getByTestId('inbox-close').click();
   await expect(page.getByTestId('decision-inbox')).toBeHidden();
   await page.getByTestId('decision-inbox-toggle').click();
-  await expect(page.getByTestId('inbox-pending-count')).toHaveText('미결 1');
+  await expect(page.getByTestId('inbox-pending-count')).toHaveText('1 pending');
   await expect(page.getByTestId('decision-inbox').getByTestId('inbox-decided-toggle')).toHaveCount(0);
   await expect(page.getByTestId('decision-inbox').getByTestId('inbox-row-g-publish')).toHaveCount(0);
 });

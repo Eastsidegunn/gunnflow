@@ -9,6 +9,7 @@ import type { ArtifactRef } from '@gunnflow/contract';
 import type { WiringConfig } from '@gunnflow/contract/wiring';
 import type { DisplayToken } from '../state/editorLogic.js';
 import { ArtifactViewer } from './ArtifactViewer.jsx';
+import { t } from '../i18n/index.js';
 
 export function EvidenceView(props: {
   artifactId: string;
@@ -25,7 +26,7 @@ export function EvidenceView(props: {
   return (
     <div class="generic-evidence" data-testid={`${props.testIdPrefix}-${props.artifactId}`} data-viewed={props.viewed ? 'yes' : 'no'}>
       <button data-testid={`${props.testIdPrefix}-open-${props.artifactId}`} onClick={() => setOpen(true)} disabled={open()}>
-        {props.viewed ? '✓ viewed' : 'view evidence'} · {props.artifactId}
+        {props.viewed ? t('evidence.viewed') : t('evidence.view')} · {props.artifactId}
       </button>
       <Show when={open()}>
         <ArtifactViewer

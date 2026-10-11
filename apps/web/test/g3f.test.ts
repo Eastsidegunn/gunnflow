@@ -2,6 +2,7 @@
 // re-read from the current capability; unconfirmable digests are refused;
 // the workspace root must be unique; only decision.text carries human text.
 import { describe, expect, it } from 'vitest';
+import { tm } from '../src/i18n/index.js';
 import { createRoot, createSignal } from 'solid-js';
 import {
   FakeWorkspaceStream,
@@ -38,7 +39,7 @@ function harness(initial: FakeWorkspaceProjection = normalFixture(), nodesOf = p
 async function evidenceToken(p: FakeWorkspaceProjection, id: string) {
   const ref = p.deliverables.flatMap((d) => d.artifacts ?? []).find((a) => a.id === id)!;
   const fixed = await fixBase(ref, p.artifactSnapshots![id], [ref.mediaType]);
-  if (!fixed.ok) throw new Error(fixed.reason);
+  if (!fixed.ok) throw new Error(tm(fixed.reason));
   return markRendered(fixed.pinned, { isConnected: true, textContent: fixed.text })!;
 }
 
@@ -79,7 +80,7 @@ describe('F2/F3: evidence is re-read from the current capability at send', () =>
       const p = normalFixture();
       const ref = p.tasks.find((t) => t.id === 't-draft')!.artifacts![0]!;
       const fixed = await fixBase(ref, p.artifactSnapshots![ref.id], [ref.mediaType]);
-      if (!fixed.ok) throw new Error(fixed.reason);
+      if (!fixed.ok) throw new Error(tm(fixed.reason));
       return markRendered(fixed.pinned, { isConnected: true, textContent: fixed.text })!;
     })();
     const id = h.state.compose({ nodeId: h.node('g-publish').id, action: 'gate.approve' }, undefined, { displays: [unrelated] });

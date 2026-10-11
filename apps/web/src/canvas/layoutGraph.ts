@@ -13,6 +13,7 @@
 import { isBand, leafBaseSize } from './shapes.js';
 import { WORKSPACE_ROOT_KIND, type NodeProjection } from '@gunnflow/contract';
 import { relationArrangeFor, relationDirectionFor, type WiringConfig } from '@gunnflow/contract/wiring';
+import { msg, type Msg } from '../i18n/index.js';
 
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
 
@@ -923,13 +924,13 @@ export function interimLayout(graph: LayoutGraph, fallback: Positions, prevGraph
 }
 
 /** Why a layered result cannot be used, or null: every leaf, nothing else, finite coordinates. */
-export function positionsProblem(graph: LayoutGraph, positions: Positions): string | null {
+export function positionsProblem(graph: LayoutGraph, positions: Positions): Msg | null {
   const leaves = leafIds(graph);
-  if (positions.size !== leaves.length) return `expected ${leaves.length} leaf positions, got ${positions.size}`;
+  if (positions.size !== leaves.length) return msg('layout.problem.count', { expected: leaves.length, got: positions.size });
   for (const id of leaves) {
     const p = positions.get(id);
-    if (!p) return `no position for '${id}'`;
-    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return `non-finite position for '${id}'`;
+    if (!p) return msg('layout.problem.missing', { id });
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return msg('layout.problem.nonFinite', { id });
   }
   return null;
 }

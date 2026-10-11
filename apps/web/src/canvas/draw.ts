@@ -13,6 +13,7 @@ import type { InFlightEntry } from '../state/pendingIntents.js';
 import { endpointBox, nestedChipRect, type GenericScene, type GroupBox, type SceneNode } from './genericScene.js';
 import { ATTENTION_COLOR, CONFIG_EDGE_DASH, GROUP_STYLE, PENDING_DASH } from './tokens.js';
 import { DEFAULT_THEME } from '../theme/defaultTheme.js';
+import { t as tr } from '../i18n/index.js';
 import { detailOn, type Tier } from '../state/relevance.js';
 
 /** What both render paths share: geometry, view, lens, selection, pending. */
@@ -92,7 +93,7 @@ function drawPendingEdges(ctx: CanvasRenderingContext2D, input: Frame): void {
     ctx.font = DEFAULT_THEME.fonts.pendingLabel;
     const mx = (from.x + from.w + to.x) / 2;
     const my = (centre(from).y + centre(to).y) / 2 - 8;
-    ctx.fillText('pending…', mx - 24, my);
+    ctx.fillText(tr('canvas.pending'), mx - 24, my);
   }
 }
 

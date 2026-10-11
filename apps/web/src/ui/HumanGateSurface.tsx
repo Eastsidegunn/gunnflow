@@ -27,6 +27,7 @@ import { elapsedLabel } from '../canvas/displayModel.js';
 import { pageIsolationProblem, previewUrl } from '../transport/previewOrigin.js';
 import { EvidenceView } from './EvidenceView.jsx';
 import type { DisplayToken } from '../state/editorLogic.js';
+import { t } from '../i18n/index.js';
 
 export function HumanGateSurface(props: {
   stores: WorkspaceStores;
@@ -130,11 +131,11 @@ export function HumanGateSurface(props: {
             <p class="breadcrumb">
               {missionName(projection(), g().missionId) ?? g().missionId}
               <For each={relations().tasks}>
-                {(t) => (
+                {(task) => (
                   <>
                     {' / '}
-                    <button class="crumb-link" onClick={() => p.onOpenTask(t.id)}>
-                      {t.name}
+                    <button class="crumb-link" onClick={() => p.onOpenTask(task.id)}>
+                      {task.name}
                     </button>
                   </>
                 )}
@@ -144,32 +145,32 @@ export function HumanGateSurface(props: {
             <p class="gate-state-line" data-testid="gate-state" data-state={g().state}>
               {g().state.toUpperCase()}
               <Show when={g().urgency === 'high'}>
-                <span class="urgency">urgent</span>
+                <span class="urgency">{t('gate.urgent')}</span>
               </Show>
               <Show when={privileged()}>
-                <span class="risk-badge" data-testid="gate-risk">privileged</span>
+                <span class="risk-badge" data-testid="gate-risk">{t('gate.privileged')}</span>
               </Show>
             </p>
           </div>
-          <button data-testid="gate-close" aria-label="Close gate" onClick={p.onClose}>✕</button>
+          <button data-testid="gate-close" aria-label={t('gate.close')} onClick={p.onClose}>✕</button>
         </header>
 
         <Show when={stale()}>
           <p class="gate-banner stale-banner" data-testid="gate-stale">
-            Stale · showing state from{' '}
-            {projectionStore.lastSeenAt()
-              ? new Date(projectionStore.lastSeenAt()!).toLocaleTimeString()
-              : 'unknown'}
-            . Reconnect before approving — the outcome of any decision would not be confirmed.
+            {t('gate.stale', {
+              time: projectionStore.lastSeenAt()
+                ? new Date(projectionStore.lastSeenAt()!).toLocaleTimeString()
+                : t('gate.staleUnknown'),
+            })}
           </p>
         </Show>
 
         <Show when={g().state === 'superseded' || g().state === 'expired' || g().state === 'canceled'}>
           <div class="gate-banner inactive-banner" data-testid="gate-inactive">
-            <p>This request is no longer active.</p>
+            <p>{t('gate.inactive')}</p>
             <Show when={g().supersededBy}>
               <button data-testid="open-latest-gate" onClick={() => p.onOpenGate(g().supersededBy!)}>
-                Open latest request →
+                {t('gate.openLatest')}
               </button>
             </Show>
           </div>
@@ -177,27 +178,27 @@ export function HumanGateSurface(props: {
 
         <div class="gate-body">
           <section>
-            <h3>What is being requested</h3>
+            <h3>{t('gate.requested')}</h3>
             <p data-testid="gate-requested-action">{g().requestedAction}</p>
             <dl class="gate-facts">
               <Show when={g().request?.target}>
-                <dt>Target</dt>
+                <dt>{t('gate.target')}</dt>
                 <dd>{g().request!.target}</dd>
               </Show>
               <Show when={g().request?.destination}>
-                <dt>Destination</dt>
+                <dt>{t('gate.destination')}</dt>
                 <dd data-testid="gate-destination">{g().request!.destination}</dd>
               </Show>
               <Show when={g().request?.scope}>
-                <dt>Scope</dt>
+                <dt>{t('gate.scope')}</dt>
                 <dd>{g().request!.scope}</dd>
               </Show>
               <Show when={g().request?.requestedBy}>
-                <dt>Requested by</dt>
+                <dt>{t('gate.requestedBy')}</dt>
                 <dd data-testid="gate-requested-by">{g().request!.requestedBy}</dd>
               </Show>
               <Show when={g().request?.requestedAt}>
-                <dt>Waiting</dt>
+                <dt>{t('gate.waiting')}</dt>
                 <dd>{elapsedLabel(g().request!.requestedAt, undefined, Date.now())}</dd>
               </Show>
             </dl>
@@ -205,18 +206,18 @@ export function HumanGateSurface(props: {
 
           <Show when={g().request?.reason}>
             <section>
-              <h3>Why this needs you</h3>
+              <h3>{t('gate.why')}</h3>
               <p data-testid="gate-reason">{g().request!.reason}</p>
             </section>
           </Show>
 
           <Show when={g().request?.impact}>
             <section>
-              <h3>Impact</h3>
+              <h3>{t('gate.impact')}</h3>
               <p data-testid="gate-impact">
                 {g().request!.impact}
                 <Show when={g().request?.externalEffect}>
-                  <span class="external-marker"> · external effect</span>
+                  <span class="external-marker"> · {t('gate.externalEffect')}</span>
                 </Show>
               </p>
             </section>
@@ -224,7 +225,7 @@ export function HumanGateSurface(props: {
 
           <Show when={evidenceIds().length > 0}>
             <section data-testid="gate-attested-evidence">
-              <h3>Evidence</h3>
+              <h3>{t('gate.evidence')}</h3>
               <For each={evidenceIds()}>
                 {(id) => (
                   <EvidenceView
@@ -233,7 +234,7 @@ export function HumanGateSurface(props: {
                     snapshotBase64={projectionStore.projection().artifactSnapshots?.[id]}
                     config={wiring.config}
                     viewed={evidenceViews().has(id)}
-                    onViewed={(t) => setEvidenceViews((m) => new Map([...m, [id, t]]))}
+                    onViewed={(token) => setEvidenceViews((m) => new Map([...m, [id, token]]))}
                     autoOpen
                     testIdPrefix="gate-evidence-artifact"
                   />
@@ -245,45 +246,45 @@ export function HumanGateSurface(props: {
           <Show when={relations().deliverable}>
             {(d) => (
               <section data-testid="gate-evidence">
-                <h3>Preview</h3>
+                <h3>{t('gate.preview')}</h3>
                 {/* Evidence lives inside the decision context (brief §9); the
                     content itself loads ONLY from the isolated preview origin,
                     sandboxed (charter §25 / acceptance H). */}
                 <Show
                   when={!pageIsolationProblem()}
-                  fallback={<p class="hint" data-testid="gate-preview-refused">Preview refused — {pageIsolationProblem()}</p>}
+                  fallback={<p class="hint" data-testid="gate-preview-refused">{t('gate.previewRefused', { reason: pageIsolationProblem() ?? '' })}</p>}
                 >
                   <iframe
                     data-testid="gate-preview-frame"
                     src={previewUrl(d().id)}
                     sandbox=""
-                    title={`Preview of ${d().title}`}
+                    title={t('gate.previewOf', { title: d().title })}
                   />
                 </Show>
-                <p class="hint">▤ {d().title}{d().state ? ` · ${d().state}` : ''} · isolated origin</p>
+                <p class="hint">▤ {d().title}{d().state ? ` · ${d().state}` : ''} · {t('gate.isolatedOrigin')}</p>
               </section>
             )}
           </Show>
 
           <Show when={g().policy}>
             <section data-testid="gate-policy">
-              <h3>Policy context</h3>
+              <h3>{t('gate.policy')}</h3>
               <Show when={g().policy?.policyLabel}>
                 <p>{g().policy!.policyLabel}</p>
               </Show>
               <dl class="gate-facts">
                 <Show when={g().policy?.requiredAuthority}>
-                  <dt>Requires</dt>
+                  <dt>{t('gate.requires')}</dt>
                   <dd>{g().policy!.requiredAuthority}</dd>
                 </Show>
                 <Show when={g().policy?.credentialLabel}>
                   {/* Credential METADATA only — no reveal/copy affordance exists. */}
-                  <dt>Credential</dt>
+                  <dt>{t('gate.credential')}</dt>
                   <dd data-testid="gate-credential">
                     {g().policy!.credentialLabel}
                     <Show when={g().policy?.credentialScope}> · {g().policy!.credentialScope}</Show>
                     <Show when={g().policy?.credentialExpiresIn}>
-                      {' '}· expires {g().policy!.credentialExpiresIn}
+                      {' '}· {t('gate.expires', { in: g().policy!.credentialExpiresIn! })}
                     </Show>
                   </dd>
                 </Show>
@@ -293,20 +294,23 @@ export function HumanGateSurface(props: {
 
           <Show when={g().decision}>
             <section data-testid="gate-decision">
-              <h3>Approval</h3>
+              <h3>{t('gate.approval')}</h3>
               <p>
-                {g().decision!.choice} by {g().decision!.by} ·{' '}
-                {new Date(g().decision!.at).toLocaleTimeString()}
+                {t('gate.decidedBy', {
+                  choice: g().decision!.choice,
+                  by: g().decision!.by,
+                  time: new Date(g().decision!.at).toLocaleTimeString(),
+                })}
               </p>
               <Show when={g().decision!.reason}>
-                <p class="hint">Reason: {g().decision!.reason}</p>
+                <p class="hint">{t('gate.decisionReason', { reason: g().decision!.reason! })}</p>
               </Show>
             </section>
           </Show>
 
           <Show when={effects().length > 0}>
             <section data-testid="gate-effects">
-              <h3>Effect</h3>
+              <h3>{t('gate.effect')}</h3>
               <For each={effects()}>
                 {(e) => (
                   <p data-testid={`effect-${e.state}`}>
@@ -323,13 +327,13 @@ export function HumanGateSurface(props: {
           <Show when={gateActiveForActions()}>
             <section class="gate-actions-area">
               <p class="audit-notice" data-testid="audit-notice">
-                Your decision will be recorded in the audit chain.
+                {t('gate.auditNotice')}
               </p>
               <Show when={affordances().disabledReason && affordances().approve === 'disabled'}>
                 <p class="hint" data-testid="gate-disabled-reason">{affordances().disabledReason}</p>
               </Show>
               <Show when={pendingDecision()}>
-                <p class="pending-chip" data-testid="gate-pending">Submitting decision…</p>
+                <p class="pending-chip" data-testid="gate-pending">{t('gate.submitting')}</p>
               </Show>
 
               <div class="actions gate-actions">
@@ -339,7 +343,7 @@ export function HumanGateSurface(props: {
                     disabled={affordances().reject !== 'enabled'}
                     onClick={() => decide('gate.reject')}
                   >
-                    Reject
+                    {t('gate.reject')}
                   </button>
                 </Show>
                 <Show when={affordances().requestChanges !== 'hidden'}>
@@ -348,7 +352,7 @@ export function HumanGateSurface(props: {
                     disabled={affordances().requestChanges !== 'enabled'}
                     onClick={() => setChangesOpen(!changesOpen())}
                   >
-                    Request changes
+                    {t('gate.requestChanges')}
                   </button>
                 </Show>
                 <Show when={affordances().approve !== 'hidden'}>
@@ -361,7 +365,7 @@ export function HumanGateSurface(props: {
                         disabled={affordances().approve !== 'enabled'}
                         onClick={submitApprove}
                       >
-                        Approve
+                        {t('gate.approve')}
                       </button>
                     }
                   >
@@ -371,7 +375,7 @@ export function HumanGateSurface(props: {
                       disabled={affordances().approve !== 'enabled'}
                       onClick={() => setConfirming(true)}
                     >
-                      Approve…
+                      {t('gate.approveEllipsis')}
                     </button>
                   </Show>
                 </Show>
@@ -380,22 +384,22 @@ export function HumanGateSurface(props: {
               {/* 🔴 friction: impact + reason (when upstream requires) + confirm. */}
               <Show when={confirming()}>
                 <div class="privileged-confirm" data-testid="privileged-confirm">
-                  <p>{g().request?.impact ?? 'This is a privileged action.'}</p>
+                  <p>{g().request?.impact ?? t('gate.privilegedAction')}</p>
                   <Show when={g().reasonRequired}>
-                    <label for="gate-reason">Reason (required)</label>
+                    <label for="gate-reason">{t('gate.reasonRequired')}</label>
                   </Show>
                   <Show when={g().reasonRequired}>
                     <input
                       id="gate-reason"
                       data-testid="gate-reason-input"
-                      placeholder="Why are you approving this?"
+                      placeholder={t('gate.reasonPlaceholder')}
                       value={reason()}
                       onInput={(e) => setReason(e.currentTarget.value)}
                     />
                   </Show>
                   <div class="actions">
                     <button data-testid="confirm-cancel" onClick={() => setConfirming(false)}>
-                      Cancel
+                      {t('gate.cancel')}
                     </button>
                     <button
                       class="approve"
@@ -403,7 +407,7 @@ export function HumanGateSurface(props: {
                       disabled={Boolean(g().reasonRequired) && !reason().trim()}
                       onClick={submitApprove}
                     >
-                      Confirm approval
+                      {t('gate.confirmApproval')}
                     </button>
                   </div>
                 </div>
@@ -425,7 +429,7 @@ export function HumanGateSurface(props: {
                   <textarea
                     data-testid="gate-changes-input"
                     rows="2"
-                    placeholder="What should change before this can be approved?"
+                    placeholder={t('gate.changesPlaceholder')}
                     value={instruction()}
                     onInput={(e) => setInstruction(e.currentTarget.value)}
                   />
@@ -434,7 +438,7 @@ export function HumanGateSurface(props: {
                     data-testid="gate-changes-send"
                     disabled={affordances().requestChanges !== 'enabled' || !instruction().trim()}
                   >
-                    Send
+                    {t('gate.send')}
                   </button>
                 </form>
               </Show>

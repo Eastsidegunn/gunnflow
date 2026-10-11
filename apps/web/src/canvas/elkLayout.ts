@@ -7,6 +7,7 @@
  */
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk-api.js';
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
+import { MsgError, msg } from '../i18n/index.js';
 import { LAYOUT, childrenOf, packLayout, type LayoutGraph, type LayoutProvider, type Point, type Positions } from './layoutGraph.js';
 
 /** A layered pass that takes longer is abandoned (and its worker replaced). */
@@ -129,7 +130,7 @@ export function createElkWorkerProvider(timeoutMs = LAYERED_TIMEOUT_MS): LayoutP
       return await Promise.race([
         current.layout(graph),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`layered pass timed out after ${timeoutMs} ms`)), timeoutMs);
+          timer = setTimeout(() => reject(new MsgError(msg('layout.problem.timeout', { ms: timeoutMs }))), timeoutMs);
         }),
       ]);
     } catch (err) {
